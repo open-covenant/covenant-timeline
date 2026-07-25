@@ -108,7 +108,7 @@ function run(executable, args, options) {
     ...options,
     encoding: "utf8",
     env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
-    shell: process.platform === "win32",
+    shell: process.platform === "win32" && executable.endsWith(".cmd"),
   });
   if (result.status !== 0) {
     throw new Error(

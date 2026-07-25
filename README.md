@@ -103,7 +103,8 @@ Implemented:
 - run verification;
 - JSON Schemas and successful, rejected, incomplete, corrected, and malformed
   conformance runs;
-- TypeScript and Python agreement on the upstream canonicalization fixtures.
+- TypeScript and Python agreement on the upstream canonicalization fixtures;
+- a landed Covenant reference adapter with an offline-verifiable M3 run.
 
 Not implemented:
 

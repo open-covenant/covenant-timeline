@@ -41,7 +41,7 @@ Exit criteria:
 
 ## M2: Canonical bytes and CLI
 
-Status: implementation complete; cross-platform CI confirmation pending
+Status: complete
 
 - RFC 8785 canonicalization using a reviewed implementation.
 - SHA-256 content identity.
@@ -55,9 +55,19 @@ Exit criteria:
 - Locale and time-zone changes do not affect output.
 - Historical fixtures remain verifiable after a CLI upgrade.
 
+Completion evidence:
+
+- TypeScript and Python produce the same canonical bytes for the RFC 8785
+  corpus.
+- The full verification suite passes on Ubuntu, macOS, and Windows with the
+  Node.js versions in the CI matrix.
+- The conformance harness compares canonical CLI replay output across distinct
+  locale and time-zone environments.
+- Run fixtures pin state digests as the compatibility baseline for upgrades.
+
 ## M3: Covenant reference integration
 
-Status: reference adapter candidate complete; landing pending
+Status: complete
 
 - Map Covenant audit and provenance envelopes to evidence events.
 - Map Timeline commands to explicit Covenant capability requests.
@@ -69,6 +79,16 @@ Exit criteria:
 - Covenant depends on a versioned Timeline package or commit.
 - Covenant contains adapter code only, not a fork of the reducer.
 - A complete run can be exported and verified without Covenant running.
+
+Completion evidence:
+
+- Covenant pins the M1-M3 Timeline implementation revision from its adapter
+  metadata.
+- The landed adapter maps provenance and audit records to payload-free
+  evidence, maps commands to typed capability requests, and maps typed
+  responses to receipts.
+- The pause, resume, review, and release run verifies offline with its state
+  digest pinned.
 
 ## M4: Independent adoption
 

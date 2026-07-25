@@ -43,7 +43,14 @@ blocker until observed.
   SBOM, reproducible tarball bytes, actionlint, and no known full dependency
   audit findings.
 - GitHub control-plane audit on 2026-07-25:
-  - no `main` branch protection, repository ruleset, or environment existed;
+  - `main` initially had no branch protection, repository ruleset, or
+    environment;
+  - `main` now requires a pull request, the seven observed CI and CodeQL checks
+    from the GitHub Actions app, an up-to-date branch, and resolved
+    conversations; the rule applies to administrators and blocks force pushes
+    and deletion;
+  - the active `Protect timeline release tags` ruleset prevents updates and
+    deletion of `timeline-v*` tags without a bypass actor;
   - Dependabot security updates, secret scanning, and push protection were
     enabled during this audit;
   - immutable Actions SHA enforcement was enabled during this audit;
@@ -66,9 +73,9 @@ blocker until observed.
       an ID mismatch, byte mismatch, or missing binding without changing
       portable state digests.
 - [x] **Prevent repeated effect eligibility.** Re-evaluating an already accepted
-      checkpoint emits a new command and idempotency key. Make acceptance final
-      within a run and require an explicit new run or future branch protocol for
-      correction.
+      checkpoint previously emitted a new command and idempotency key.
+      Acceptance is now final within a run and correction requires an explicit
+      new run or future branch protocol.
 - [x] **Make replay linear and bounded.** Immutable whole-map copies make replay
       quadratic. Use one private mutable accumulator during replay while
       preserving immutable single-event reduction, then enforce documented
@@ -82,13 +89,14 @@ blocker until observed.
 - [x] **Create a fail-closed release workflow.** Releases need tag/version
       agreement, a clean rebuild, tests, artifact inspection, checksums, SBOM,
       provenance, and an approval-protected npm environment.
-- [ ] **Protect `main` and release tags.** Apply rules using the check names
-      observed on this pull request; no protection or repository ruleset existed
-      at audit time.
+- [x] **Protect `main` and release tags.** `main` now requires the seven observed
+      first-party checks and pull-request flow with administrator enforcement;
+      force pushes and deletion are disabled. `timeline-v*` tags cannot be
+      updated or deleted under the active no-bypass ruleset.
 - [ ] **Resolve external release authority.** The npm package does not exist or
       is not visible to the current registry identity. Scope ownership, trusted
-      publisher configuration, protected environment reviewers, and tag
-      protection cannot be proven from this checkout.
+      publisher configuration, and protected environment reviewers remain
+      unverified.
 
 ## High Priority (P1 - Fix Before Launch)
 

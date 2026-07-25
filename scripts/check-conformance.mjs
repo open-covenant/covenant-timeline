@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
@@ -12,6 +13,7 @@ const schemaDirectory = "schemas/v0alpha1";
 const casesPath = "conformance/v0alpha1/cases.json";
 const runCasesPath = "conformance/v0alpha1/run-cases.json";
 const canonicalCasesPath = "conformance/rfc8785/cases.json";
+const cliPath = "packages/prototype/dist/cli.js";
 const ajv = new Ajv2020({
   allErrors: true,
   strict: true,
@@ -137,6 +139,32 @@ for (const testCase of runCases) {
   }
 }
 
+const environmentOutputs = [
+  { LANG: "C", LC_ALL: "C", TZ: "UTC" },
+  { LANG: "tr_TR.UTF-8", LC_ALL: "tr_TR.UTF-8", TZ: "Pacific/Auckland" },
+].map((environment) => {
+  const result = spawnSync(
+    process.execPath,
+    [cliPath, "replay", "conformance/v0alpha1/runs/successful.json", "--json"],
+    {
+      encoding: "utf8",
+      env: { ...process.env, ...environment },
+    },
+  );
+  if (result.status !== 0) {
+    failures.push(
+      `cross-environment replay failed: ${(result.stderr || result.stdout).trim()}`,
+    );
+  }
+  return result.stdout;
+});
+if (
+  environmentOutputs.length === 2 &&
+  environmentOutputs[0] !== environmentOutputs[1]
+) {
+  failures.push("locale or time zone changed canonical replay output");
+}
+
 if (cases.length < 15) failures.push("expected at least 15 conformance cases");
 if (runCases.length < 5) failures.push("expected at least 5 run fixtures");
 if (canonicalCases.length < 5) {
@@ -159,7 +187,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `conformance passed (${cases.length} documents, ${runCases.length} runs, ${canonicalCases.length} canonical fixtures, ${schemas.length} schemas)`,
+  `conformance passed (${cases.length} documents, ${runCases.length} runs, ${canonicalCases.length} canonical fixtures, ${schemas.length} schemas, 2 environments)`,
 );
 
 function semanticError(check, document) {

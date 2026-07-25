@@ -4,9 +4,10 @@ const manifest = JSON.parse(
   await readFile("packages/prototype/package.json", "utf8"),
 );
 const changelog = await readFile("CHANGELOG.md", "utf8");
+const refName = process.env.GITHUB_REF_NAME;
 const tag =
   process.argv.find((argument) => argument.startsWith("timeline-v")) ??
-  process.env.GITHUB_REF_NAME;
+  (refName?.startsWith("timeline-v") ? refName : undefined);
 const expectedTag = `timeline-v${manifest.version}`;
 const errors = [];
 

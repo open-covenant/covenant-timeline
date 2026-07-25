@@ -5,7 +5,7 @@ promises.
 
 ## M0: Narrow the product
 
-Status: active
+Status: complete
 
 - Define Timeline as a temporal-contract verifier, not a workflow runtime.
 - Make software and long-running agent work the first profile.
@@ -21,6 +21,8 @@ Exit criteria:
 - `pnpm verify` passes.
 
 ## M1: Minimal portable core
+
+Status: complete
 
 - Contract validation.
 - Ordered event ingestion.
@@ -39,6 +41,8 @@ Exit criteria:
 
 ## M2: Canonical bytes and CLI
 
+Status: implementation complete; cross-platform CI confirmation pending
+
 - RFC 8785 canonicalization using a reviewed implementation.
 - SHA-256 content identity.
 - Byte-level conformance fixtures.
@@ -52,6 +56,8 @@ Exit criteria:
 - Historical fixtures remain verifiable after a CLI upgrade.
 
 ## M3: Covenant reference integration
+
+Status: reference adapter candidate complete; landing pending
 
 - Map Covenant audit and provenance envelopes to evidence events.
 - Map Timeline commands to explicit Covenant capability requests.

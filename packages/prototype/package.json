@@ -1,12 +1,14 @@
 {
   "name": "@covenant-org/timeline",
-  "version": "0.0.0-alpha.0",
-  "private": true,
+  "version": "0.0.0-alpha.1",
   "description": "Temporal contract reducer and verifier for long-running work.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "timeline": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,8 +16,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
@@ -25,11 +31,15 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.5"
   },
   "engines": {
     "node": ">=22"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "dependencies": {
+    "canonicalize": "3.0.0"
+  }
 }

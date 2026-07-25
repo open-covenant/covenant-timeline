@@ -71,8 +71,10 @@ export interface Finding {
   code:
     | "timeline.checkpoint.unknown"
     | "timeline.command.unknown"
+    | "timeline.event.duplicate"
     | "timeline.evidence.duplicate"
-    | "timeline.evidence.unknown";
+    | "timeline.evidence.unknown"
+    | "timeline.receipt.duplicate";
   eventId: string;
   detail: string;
 }
@@ -81,6 +83,7 @@ export interface RunState {
   contractId: string;
   runId: string;
   nextSequence: number;
+  eventIds: Readonly<Record<string, number>>;
   checkpoints: Readonly<Record<string, CheckpointState>>;
   evidence: Readonly<Record<string, Evidence>>;
   commands: Readonly<Record<string, Command>>;
@@ -103,15 +106,36 @@ export interface VerifyRunResult {
   findings: readonly Finding[];
 }
 
+export type TimelineInputErrorCode =
+  | "timeline.event.sequence"
+  | "timeline.run.contract_mismatch"
+  | "timeline.run.id";
+
+export class TimelineInputError extends RangeError {
+  constructor(
+    readonly code: TimelineInputErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "TimelineInputError";
+  }
+}
+
 export function createRun(contract: TimelineContract, runId: string): RunState {
   const issues = validateContract(contract);
   if (issues.length > 0) throw new TimelineContractError(issues);
-  if (!runId) throw new RangeError("runId must not be empty");
+  if (!/^[a-z0-9][a-z0-9._:/-]{0,127}$/.test(runId)) {
+    throw new TimelineInputError(
+      "timeline.run.id",
+      "runId must be a lowercase portable identifier",
+    );
+  }
 
   return {
     contractId: contract.id,
     runId,
     nextSequence: 0,
+    eventIds: {},
     checkpoints: Object.fromEntries(
       contract.checkpoints.map(({ id }) => [id, { status: "pending" }]),
     ),
@@ -128,15 +152,26 @@ export function reduceRun(
   event: RunEvent,
 ): TimelineReduced {
   if (prior.contractId !== contract.id) {
-    throw new RangeError("run state does not belong to this contract");
+    throw new TimelineInputError(
+      "timeline.run.contract_mismatch",
+      "run state does not belong to this contract",
+    );
   }
   if (event.sequence !== prior.nextSequence) {
-    throw new RangeError(
+    throw new TimelineInputError(
+      "timeline.event.sequence",
       `event sequence ${event.sequence} does not match ${prior.nextSequence}`,
     );
   }
 
-  const state = advance(prior);
+  const state = advance(prior, event);
+  if (prior.eventIds[event.id] !== undefined) {
+    return withFinding(state, {
+      code: "timeline.event.duplicate",
+      eventId: event.id,
+      detail: event.id,
+    });
+  }
   if (event.type === "evidence.recorded") {
     return recordEvidence(state, event);
   }
@@ -191,10 +226,11 @@ export function verifyRun(state: RunState): VerifyRunResult {
   };
 }
 
-function advance(prior: RunState): RunState {
+function advance(prior: RunState, event: RunEvent): RunState {
   return {
     ...prior,
     nextSequence: prior.nextSequence + 1,
+    eventIds: { ...prior.eventIds, [event.id]: event.sequence },
     checkpoints: { ...prior.checkpoints },
     evidence: { ...prior.evidence },
     commands: { ...prior.commands },
@@ -309,6 +345,13 @@ function recordReceipt(
   if (!state.commands[event.receipt.commandId]) {
     return withFinding(state, {
       code: "timeline.command.unknown",
+      eventId: event.id,
+      detail: event.receipt.commandId,
+    });
+  }
+  if (state.receipts[event.receipt.commandId]) {
+    return withFinding(state, {
+      code: "timeline.receipt.duplicate",
       eventId: event.id,
       detail: event.receipt.commandId,
     });

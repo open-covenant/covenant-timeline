@@ -1,0 +1,80 @@
+{
+  "schema": "covenant.timeline.run.v0alpha1",
+  "runId": "run.corrected",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha1",
+    "id": "software.release.v0",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "checkpoints": [
+      {
+        "id": "release-ready",
+        "requirements": ["ci.tests.pass", "review.approved"],
+        "onAccept": {
+          "kind": "covenant.capability.request",
+          "payloadRef": "release.deploy"
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "ci",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-actions"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42"],
+      "policyRef": "software.release.v0"
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-2",
+      "sequence": 2,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "review-42",
+        "kind": "review",
+        "claims": ["review.approved"],
+        "payloadDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "producer": "maintainer"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-3",
+      "sequence": 3,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42", "review-42"],
+      "policyRef": "software.release.v0"
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-4",
+      "sequence": 4,
+      "type": "receipt.recorded",
+      "receipt": {
+        "id": "receipt-42",
+        "commandId": "run.corrected:release-ready:3",
+        "status": "succeeded",
+        "effectDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  ]
+}

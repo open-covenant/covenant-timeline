@@ -14,8 +14,9 @@ contract fields outside the extension namespace (`CTL-CORE-002`).
 
 ## Run
 
-A run applies an ordered event stream to one pinned contract. The run state is a
-projection and can be rebuilt from the contract and accepted events.
+A portable run document pins a run ID, one contract, and its ordered event
+stream (`CTL-RUN-001`). The run state is a projection and can be rebuilt from
+that document.
 
 ## Core objects
 

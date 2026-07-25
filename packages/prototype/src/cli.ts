@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
-import { realpathSync } from "node:fs";
+import { createReadStream, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { stdin } from "node:process";
+import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { TimelineDocumentError, validatePortableDocument } from "./document.js";
 import { canonicalJson, type JsonValue } from "./identity.js";
+import { parseJson, TimelineJsonError } from "./json.js";
 import { evaluateRunDocument, type TimelineRunReport } from "./report.js";
 
 interface CliIo {
@@ -17,13 +20,19 @@ const defaultIo: CliIo = {
   stderr: (value) => process.stderr.write(value),
 };
 
-const USAGE = `Usage: timeline <command> <file> [--json]
+export const DEFAULT_MAX_INPUT_BYTES = 16 * 1024 * 1024;
+
+const USAGE = `Usage: timeline <command> <file|-> [--json]
 
 Commands:
-  validate  Validate a contract, event, or portable run
+  validate  Validate a contract, event, command, decision, or portable run
   replay    Replay a portable run without executing effects
   inspect   Show checkpoints, evidence, commands, and receipts
-  verify    Replay and verify a portable run
+  verify    Replay and structurally verify a portable run
+
+Options:
+  --json     Emit canonical JSON
+  --version  Print the package version
 `;
 
 export async function runCli(
@@ -34,12 +43,19 @@ export async function runCli(
     io.stdout(USAGE);
     return 0;
   }
+  if (argv.includes("--version")) {
+    io.stdout(`${await packageVersion()}\n`);
+    return 0;
+  }
 
   const json = argv.includes("--json");
   const unknownFlags = argv.filter(
-    (argument) => argument.startsWith("-") && argument !== "--json",
+    (argument) =>
+      argument.startsWith("-") && argument !== "--json" && argument !== "-",
   );
-  const positional = argv.filter((argument) => !argument.startsWith("-"));
+  const positional = argv.filter(
+    (argument) => !argument.startsWith("-") || argument === "-",
+  );
   if (unknownFlags.length > 0 || positional.length !== 2) {
     io.stderr(USAGE);
     return 2;
@@ -58,19 +74,20 @@ export async function runCli(
 
   let input: unknown;
   try {
-    input = JSON.parse(await readFile(file!, "utf8"));
+    input = parseJson(await readInput(file!));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const result = inputError(error);
     writeResult(
       io,
       json,
       {
         ok: false,
-        code: "timeline.input.invalid_json",
+        code: result.code,
         file,
-        message,
+        message: result.message,
+        ...(result.issues ? { issues: result.issues } : {}),
       },
-      `INVALID ${file}\n${message}`,
+      `INVALID ${file}\n${result.message}`,
       true,
     );
     return 1;
@@ -132,6 +149,7 @@ function renderReplay(report: TimelineRunReport): string {
     `  events   ${report.eventsDigest}`,
     `  state    ${report.stateDigest}`,
     `  next sequence ${report.state.nextSequence}`,
+    "  evidence authority external",
     "  no effects executed",
   ].join("\n");
 }
@@ -171,8 +189,10 @@ function renderInspect(report: TimelineRunReport): string {
 function renderVerify(report: TimelineRunReport): string {
   const { verification } = report;
   const lines = [
-    `${verification.ok ? "VERIFIED" : "FAILED"} ${report.runId}`,
+    `${verification.ok ? "STRUCTURALLY VERIFIED" : "STRUCTURAL VERIFICATION FAILED"} ${report.runId}`,
     `  state ${report.stateDigest}`,
+    "  evidence authority external",
+    "  effect authority external",
   ];
 
   appendList(lines, "pending checkpoints", verification.pendingCheckpoints);
@@ -185,6 +205,89 @@ function renderVerify(report: TimelineRunReport): string {
     );
   }
   return lines.join("\n");
+}
+
+class CliInputError extends Error {
+  constructor(
+    readonly code: "timeline.input.read_failed" | "timeline.input.too_large",
+    message: string,
+  ) {
+    super(message);
+    this.name = "CliInputError";
+  }
+}
+
+async function readInput(file: string): Promise<string> {
+  const stream = file === "-" ? stdin : createReadStream(file);
+  return readBounded(stream);
+}
+
+async function readBounded(stream: Readable): Promise<string> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const value of stream) {
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      total += chunk.length;
+      if (total > DEFAULT_MAX_INPUT_BYTES) {
+        stream.destroy();
+        throw new CliInputError(
+          "timeline.input.too_large",
+          `input exceeds ${DEFAULT_MAX_INPUT_BYTES} bytes`,
+        );
+      }
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    if (error instanceof CliInputError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliInputError("timeline.input.read_failed", message);
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      Buffer.concat(chunks, total),
+    );
+  } catch {
+    throw new TimelineJsonError([
+      {
+        code: "syntax",
+        offset: 0,
+        line: 0,
+        column: 0,
+        detail: "input is not valid UTF-8",
+      },
+    ]);
+  }
+}
+
+function inputError(error: unknown): {
+  code:
+    | "timeline.input.invalid_json"
+    | "timeline.input.read_failed"
+    | "timeline.input.too_large";
+  message: string;
+  issues?: TimelineJsonError["issues"];
+} {
+  if (error instanceof TimelineJsonError) {
+    return { code: error.code, message: error.message, issues: error.issues };
+  }
+  if (error instanceof CliInputError) {
+    return { code: error.code, message: error.message };
+  }
+  return {
+    code: "timeline.input.read_failed",
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
+async function packageVersion(): Promise<string> {
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version?: unknown };
+  if (typeof packageJson.version !== "string") {
+    throw new Error("package version is missing");
+  }
+  return packageJson.version;
 }
 
 function appendList(
@@ -220,5 +323,17 @@ export function isCliEntry(
 }
 
 if (isCliEntry()) {
-  process.exitCode = await runCli();
+  try {
+    process.exitCode = await runCli();
+  } catch {
+    const json = process.argv.includes("--json");
+    writeResult(
+      defaultIo,
+      json,
+      { ok: false, code: "timeline.internal" },
+      "INTERNAL ERROR",
+      true,
+    );
+    process.exitCode = 70;
+  }
 }

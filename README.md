@@ -47,7 +47,7 @@ pnpm demo
 
 The demo replays a software-release contract with CI and review evidence,
 evaluates its release checkpoint, emits a Covenant capability request, joins
-the resulting receipt, and verifies the final run.
+the resulting receipt, and structurally verifies the final run.
 
 The API is intentionally small:
 
@@ -90,14 +90,18 @@ events. Replay never calls an adapter.
 
 ## Current status
 
-This repository is pre-alpha.
+This repository is a production-hardened alpha release candidate. That means
+the implementation defends its stated boundary; it does not mean the protocol
+has independent production adoption.
 
 Implemented:
 
 - runtime validation for contracts, events, and portable runs;
-- an immutable reducer for evidence, checkpoint decisions, commands, and
-  receipts;
+- immutable single-event reduction and linear full replay for evidence,
+  checkpoint decisions, commands, and receipts;
+- exact contract-byte binding and final accepted checkpoints;
 - RFC 8785 canonical JSON and SHA-256 content identities;
+- strict duplicate-key JSON parsing and bounded untrusted input;
 - deterministic replay with stable state digests;
 - human-readable and JSON CLI output;
 - run verification;
@@ -113,8 +117,17 @@ Not implemented:
 - production SDK compatibility guarantees;
 - an independent conforming implementation.
 
-The package is versioned but not yet published to npm. Cross-language agreement
-currently covers canonical bytes, not an independent reducer.
+The package is versioned but not yet published to npm. Its release workflow,
+installed-tarball test, SPDX SBOM, checksum, and provenance path are prepared,
+but npm scope ownership and trusted-publisher configuration require external
+verification. Cross-language agreement currently covers canonical bytes, not
+an independent reducer.
+
+`verification.ok` means the pinned run is structurally complete under its
+declared claims. It does not verify evidence authority, payload possession,
+producer signatures, or real external effects. See the
+[threat model](./docs/threat-model.md) and
+[production operations guide](./docs/operations.md).
 
 ## Relationship to Covenant
 
@@ -157,6 +170,8 @@ They are not part of the first release.
 - [`rfcs`](./rfcs): design decisions and unresolved questions
 - [`ROADMAP.md`](./ROADMAP.md): adoption-gated delivery sequence
 - [`PROGRAM.md`](./PROGRAM.md): scope, staffing, and success criteria
+- [`docs/production-audit-timeline.md`](./docs/production-audit-timeline.md):
+  production audit and remaining external gates
 
 ## Verify
 

@@ -13,7 +13,7 @@ pnpm demo
 ```
 
 The demo replays a complete software-release run, checks its receipt, and exits
-successfully only when the run verifies.
+successfully only when the run structurally verifies.
 
 ## Use the CLI
 
@@ -25,6 +25,8 @@ pnpm timeline validate conformance/v0alpha1/runs/successful.json
 pnpm timeline replay conformance/v0alpha1/runs/successful.json
 pnpm timeline inspect conformance/v0alpha1/runs/corrected.json
 pnpm timeline verify conformance/v0alpha1/runs/rejected.json
+cat conformance/v0alpha1/runs/successful.json | pnpm timeline verify -
+pnpm timeline --version
 ```
 
 Human-readable output is the default. Add `--json` for canonical output with
@@ -50,4 +52,5 @@ console.log(report.stateDigest, report.verification);
 
 An adopter executes newly emitted commands outside Timeline and appends the
 result as a later receipt event. Replaying the exported run never calls that
-adapter.
+adapter. `verification.ok` establishes structural completeness only; evidence
+authority and external effect truth remain adopter responsibilities.

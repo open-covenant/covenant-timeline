@@ -37,8 +37,11 @@ scoring, authorization enforcement, or a distributed runtime.
 
 ## Conformance
 
-The bootstrap conformance corpus validates schemas and selected semantics. It
-does not yet test the complete reducer or RFC 8785 edge cases across languages.
+The bootstrap conformance corpus validates schemas, runtime-validator
+agreement, successful and failure replay projections, pinned state digests, and
+the upstream RFC 8785 fixture subset in TypeScript and Python. Adversarial
+reducer behavior is also covered by the reference implementation tests.
 
-An implementation MUST NOT claim full Core v0alpha1 conformance until those
-surfaces are covered by a published conformance release.
+No versioned conformance release or independent reducer result exists yet. An
+implementation MUST NOT claim independent Core v0alpha1 interoperability until
+those surfaces are published and observed.

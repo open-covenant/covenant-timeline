@@ -13,5 +13,10 @@ Before beta:
 - migration tools are preferred over silent coercion;
 - no SemVer stability claim applies to the prototype package.
 
+The bootstrap state-binding hardening does not change projected state or pinned
+state digests. Exact contract and receipt-ID indexes are private reducer
+metadata. They are intentionally not portable snapshots; a process boundary
+reconstructs them by replaying the pinned contract and event stream.
+
 Stable compatibility begins only after two implementations agree on canonical
 fixtures and real Covenant and external runs complete an upgrade.

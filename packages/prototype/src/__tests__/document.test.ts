@@ -70,4 +70,16 @@ describe("portable run document", () => {
   it("produces byte-stable replay reports", () => {
     expect(evaluateRunDocument(run)).toEqual(evaluateRunDocument(run));
   });
+
+  it("enforces configurable implementation limits", () => {
+    const issues = validateRunDocument(
+      { ...run, events: [run.events[0]!, { ...run.events[0]!, sequence: 1 }] },
+      { maxEvents: 1 },
+    );
+
+    expect(issues).toContainEqual({
+      path: "events",
+      message: "event count must not exceed 1",
+    });
+  });
 });

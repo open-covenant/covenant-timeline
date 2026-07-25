@@ -6,6 +6,12 @@ import addFormats from "ajv-formats";
 import {
   canonicalJson,
   evaluateRunDocument,
+  validateCommand,
+  validateContract,
+  validateDecision,
+  validateEvidence,
+  validateEvent,
+  validateReceipt,
   validateRunDocument,
 } from "../packages/prototype/dist/index.js";
 
@@ -37,6 +43,15 @@ const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 const ids = new Set();
 const coveredRequirements = new Set();
 const failures = [];
+const runtimeValidators = new Map([
+  ["contract.schema.json", validateContract],
+  ["event.schema.json", validateEvent],
+  ["evidence.schema.json", validateEvidence],
+  ["receipt.schema.json", validateReceipt],
+  ["command.schema.json", validateCommand],
+  ["decision.schema.json", validateDecision],
+  ["run.schema.json", validateRunDocument],
+]);
 
 for (const testCase of cases) {
   if (!caseValidator(testCase)) {
@@ -78,6 +93,16 @@ for (const testCase of cases) {
     failures.push(
       `${testCase.id}: expected ${testCase.expect.errorCode}, received ${errorCode}`,
     );
+  }
+  const schemaName = testCase.targetSchema.split("/").at(-1);
+  const runtimeValidator = runtimeValidators.get(schemaName);
+  if (runtimeValidator) {
+    const runtimeValid = runtimeValidator(testCase.document).length === 0;
+    if (runtimeValid !== testCase.expect.valid) {
+      failures.push(
+        `${testCase.id}: runtime validator received valid=${runtimeValid}`,
+      );
+    }
   }
 
   if (valid && testCase.canonicalExpected !== undefined) {

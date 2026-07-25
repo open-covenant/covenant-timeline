@@ -3,12 +3,19 @@ import {
   validateContract,
   type TimelineContract,
 } from "./contract.js";
+import { TimelineDocumentError, validateEvent } from "./document.js";
+import { contentDigest, type JsonValue } from "./identity.js";
+import {
+  resolveTimelineLimits,
+  type TimelineLimitOptions,
+  type TimelineLimits,
+} from "./limits.js";
 
 export interface Evidence {
   id: string;
   kind: string;
   claims: readonly string[];
-  payloadDigest: string;
+  payloadDigest: `sha256:${string}`;
   producer: string;
 }
 
@@ -16,7 +23,7 @@ export interface Receipt {
   id: string;
   commandId: string;
   status: "succeeded" | "failed" | "indeterminate";
-  effectDigest: string;
+  effectDigest: `sha256:${string}`;
 }
 
 interface EventBase {
@@ -69,12 +76,14 @@ export interface CheckpointState {
 
 export interface Finding {
   code:
+    | "timeline.checkpoint.finalized"
     | "timeline.checkpoint.unknown"
     | "timeline.command.unknown"
     | "timeline.event.duplicate"
     | "timeline.evidence.duplicate"
     | "timeline.evidence.unknown"
-    | "timeline.receipt.duplicate";
+    | "timeline.receipt.duplicate"
+    | "timeline.receipt.id_duplicate";
   eventId: string;
   detail: string;
 }
@@ -98,6 +107,9 @@ export interface TimelineReduced {
 }
 
 export interface VerifyRunResult {
+  scope: "structural";
+  evidenceAuthority: "external";
+  effectAuthority: "external";
   ok: boolean;
   pendingCheckpoints: readonly string[];
   rejectedCheckpoints: readonly string[];
@@ -109,7 +121,8 @@ export interface VerifyRunResult {
 export type TimelineInputErrorCode =
   | "timeline.event.sequence"
   | "timeline.run.contract_mismatch"
-  | "timeline.run.id";
+  | "timeline.run.id"
+  | "timeline.run.limit";
 
 export class TimelineInputError extends RangeError {
   constructor(
@@ -121,8 +134,32 @@ export class TimelineInputError extends RangeError {
   }
 }
 
-export function createRun(contract: TimelineContract, runId: string): RunState {
-  const issues = validateContract(contract);
+interface MutableRunState {
+  contractId: string;
+  runId: string;
+  nextSequence: number;
+  eventIds: Record<string, number>;
+  checkpoints: Record<string, CheckpointState>;
+  evidence: Record<string, Evidence>;
+  commands: Record<string, Command>;
+  receipts: Record<string, Receipt>;
+  findings: Finding[];
+}
+
+interface StateMetadata {
+  contractDigest: `sha256:${string}`;
+  receiptIds: Record<string, string>;
+}
+
+const stateMetadata = new WeakMap<RunState, StateMetadata>();
+
+export function createRun(
+  contract: TimelineContract,
+  runId: string,
+  options: TimelineLimitOptions = {},
+): RunState {
+  const limits = resolveTimelineLimits(options);
+  const issues = validateContract(contract, limits);
   if (issues.length > 0) throw new TimelineContractError(issues);
   if (!/^[a-z0-9][a-z0-9._:/-]{0,127}$/.test(runId)) {
     throw new TimelineInputError(
@@ -131,7 +168,7 @@ export function createRun(contract: TimelineContract, runId: string): RunState {
     );
   }
 
-  return {
+  const state: MutableRunState = {
     contractId: contract.id,
     runId,
     nextSequence: 0,
@@ -144,52 +181,55 @@ export function createRun(contract: TimelineContract, runId: string): RunState {
     receipts: {},
     findings: [],
   };
+  stateMetadata.set(state, {
+    contractDigest: digestContract(contract, limits),
+    receiptIds: {},
+  });
+  return state;
 }
 
 export function reduceRun(
   contract: TimelineContract,
   prior: RunState,
   event: RunEvent,
+  options: TimelineLimitOptions = {},
 ): TimelineReduced {
-  if (prior.contractId !== contract.id) {
-    throw new TimelineInputError(
-      "timeline.run.contract_mismatch",
-      "run state does not belong to this contract",
-    );
+  const limits = resolveTimelineLimits(options);
+  const contractIssues = validateContract(contract, limits);
+  if (contractIssues.length > 0) {
+    throw new TimelineContractError(contractIssues);
   }
-  if (event.sequence !== prior.nextSequence) {
-    throw new TimelineInputError(
-      "timeline.event.sequence",
-      `event sequence ${event.sequence} does not match ${prior.nextSequence}`,
-    );
-  }
+  const eventIssues = validateEvent(event, limits);
+  if (eventIssues.length > 0) throw new TimelineDocumentError(eventIssues);
+  const metadata = stateMetadata.get(prior);
+  assertContract(contract, prior, metadata, limits);
 
-  const state = advance(prior, event);
-  if (prior.eventIds[event.id] !== undefined) {
-    return withFinding(state, {
-      code: "timeline.event.duplicate",
-      eventId: event.id,
-      detail: event.id,
-    });
-  }
-  if (event.type === "evidence.recorded") {
-    return recordEvidence(state, event);
-  }
-  if (event.type === "checkpoint.evaluated") {
-    return evaluateCheckpoint(contract, state, event);
-  }
-  return recordReceipt(state, event);
+  const cloned = cloneState(prior, metadata!);
+  return applyEvent(contract, cloned.state, cloned.metadata, event);
 }
 
 export function replay(
   contract: TimelineContract,
   runId: string,
   events: readonly RunEvent[],
+  options: TimelineLimitOptions = {},
 ): RunState {
-  return events.reduce(
-    (state, event) => reduceRun(contract, state, event).state,
-    createRun(contract, runId),
-  );
+  const limits = resolveTimelineLimits(options);
+  if (events.length > limits.maxEvents) {
+    throw new TimelineInputError(
+      "timeline.run.limit",
+      `run exceeds ${limits.maxEvents} events`,
+    );
+  }
+
+  const state = createRun(contract, runId, limits) as MutableRunState;
+  const metadata = stateMetadata.get(state)!;
+  for (const event of events) {
+    const issues = validateEvent(event, limits);
+    if (issues.length > 0) throw new TimelineDocumentError(issues);
+    applyEvent(contract, state, metadata, event);
+  }
+  return state;
 }
 
 export function verifyRun(state: RunState): VerifyRunResult {
@@ -204,14 +244,17 @@ export function verifyRun(state: RunState): VerifyRunResult {
   }
   for (const id of Object.keys(state.commands)) {
     const receipt = state.receipts[id];
-    if (!receipt) {
+    if (!hasOwn(state.receipts, id)) {
       unresolvedCommands.push(id);
-    } else if (receipt.status !== "succeeded") {
+    } else if (receipt?.status !== "succeeded") {
       failedCommands.push(id);
     }
   }
 
   return {
+    scope: "structural",
+    evidenceAuthority: "external",
+    effectAuthority: "external",
     ok:
       pendingCheckpoints.length === 0 &&
       rejectedCheckpoints.length === 0 &&
@@ -226,51 +269,75 @@ export function verifyRun(state: RunState): VerifyRunResult {
   };
 }
 
-function advance(prior: RunState, event: RunEvent): RunState {
-  return {
-    ...prior,
-    nextSequence: prior.nextSequence + 1,
-    eventIds: { ...prior.eventIds, [event.id]: event.sequence },
-    checkpoints: { ...prior.checkpoints },
-    evidence: { ...prior.evidence },
-    commands: { ...prior.commands },
-    receipts: { ...prior.receipts },
-    findings: [...prior.findings],
-  };
+function applyEvent(
+  contract: TimelineContract,
+  state: MutableRunState,
+  metadata: StateMetadata,
+  event: RunEvent,
+): TimelineReduced {
+  if (event.sequence !== state.nextSequence) {
+    throw new TimelineInputError(
+      "timeline.event.sequence",
+      `event sequence ${event.sequence} does not match ${state.nextSequence}`,
+    );
+  }
+
+  const duplicate = hasOwn(state.eventIds, event.id);
+  state.nextSequence += 1;
+  state.eventIds[event.id] = event.sequence;
+  if (duplicate) {
+    return addFinding(state, {
+      code: "timeline.event.duplicate",
+      eventId: event.id,
+      detail: event.id,
+    });
+  }
+  if (event.type === "evidence.recorded") {
+    return recordEvidence(state, event);
+  }
+  if (event.type === "checkpoint.evaluated") {
+    return evaluateCheckpoint(contract, state, event);
+  }
+  return recordReceipt(state, metadata, event);
 }
 
 function recordEvidence(
-  state: RunState,
+  state: MutableRunState,
   event: EvidenceRecorded,
 ): TimelineReduced {
-  if (state.evidence[event.evidence.id]) {
-    return withFinding(state, {
+  if (hasOwn(state.evidence, event.evidence.id)) {
+    return addFinding(state, {
       code: "timeline.evidence.duplicate",
       eventId: event.id,
       detail: event.evidence.id,
     });
   }
 
-  return {
-    state: {
-      ...state,
-      evidence: { ...state.evidence, [event.evidence.id]: event.evidence },
-    },
-    commands: [],
+  state.evidence[event.evidence.id] = {
+    ...event.evidence,
+    claims: [...event.evidence.claims],
   };
+  return { state, commands: [] };
 }
 
 function evaluateCheckpoint(
   contract: TimelineContract,
-  state: RunState,
+  state: MutableRunState,
   event: CheckpointEvaluated,
 ): TimelineReduced {
   const checkpoint = contract.checkpoints.find(
     ({ id }) => id === event.checkpointId,
   );
   if (!checkpoint) {
-    return withFinding(state, {
+    return addFinding(state, {
       code: "timeline.checkpoint.unknown",
+      eventId: event.id,
+      detail: event.checkpointId,
+    });
+  }
+  if (state.checkpoints[checkpoint.id]?.status === "accepted") {
+    return addFinding(state, {
+      code: "timeline.checkpoint.finalized",
       eventId: event.id,
       detail: event.checkpointId,
     });
@@ -278,20 +345,19 @@ function evaluateCheckpoint(
 
   const claims = new Set<string>();
   const unknownEvidence = event.evidenceRefs.filter((id) => {
-    const evidence = state.evidence[id];
-    evidence?.claims.forEach((claim) => claims.add(claim));
-    return !evidence;
+    if (!hasOwn(state.evidence, id)) return true;
+    state.evidence[id]!.claims.forEach((claim) => claims.add(claim));
+    return false;
   });
   if (unknownEvidence.length > 0) {
-    const findings = unknownEvidence.map<Finding>((id) => ({
-      code: "timeline.evidence.unknown",
-      eventId: event.id,
-      detail: id,
-    }));
-    return {
-      state: { ...state, findings: [...state.findings, ...findings] },
-      commands: [],
-    };
+    for (const id of unknownEvidence) {
+      state.findings.push({
+        code: "timeline.evidence.unknown",
+        eventId: event.id,
+        detail: id,
+      });
+    }
+    return { state, commands: [] };
   }
 
   const missingRequirements = checkpoint.requirements.filter(
@@ -305,17 +371,13 @@ function evaluateCheckpoint(
     evidenceRefs: [...event.evidenceRefs],
     missingRequirements,
   };
-  const checkpoints = {
-    ...state.checkpoints,
-    [checkpoint.id]: { status: decision.outcome, decision },
+  state.checkpoints[checkpoint.id] = {
+    status: decision.outcome,
+    decision,
   };
 
   if (decision.outcome === "rejected" || !checkpoint.onAccept) {
-    return {
-      state: { ...state, checkpoints },
-      decision,
-      commands: [],
-    };
+    return { state, decision, commands: [] };
   }
 
   const command: Command = {
@@ -326,52 +388,94 @@ function evaluateCheckpoint(
     idempotencyKey: `${state.runId}/${checkpoint.id}/${event.sequence}`,
     replayPolicy: "forbid",
   };
-
-  return {
-    state: {
-      ...state,
-      checkpoints,
-      commands: { ...state.commands, [command.id]: command },
-    },
-    decision,
-    commands: [command],
-  };
+  state.commands[command.id] = command;
+  return { state, decision, commands: [command] };
 }
 
 function recordReceipt(
-  state: RunState,
+  state: MutableRunState,
+  metadata: StateMetadata,
   event: ReceiptRecorded,
 ): TimelineReduced {
-  if (!state.commands[event.receipt.commandId]) {
-    return withFinding(state, {
+  if (!hasOwn(state.commands, event.receipt.commandId)) {
+    return addFinding(state, {
       code: "timeline.command.unknown",
       eventId: event.id,
       detail: event.receipt.commandId,
     });
   }
-  if (state.receipts[event.receipt.commandId]) {
-    return withFinding(state, {
+  if (hasOwn(state.receipts, event.receipt.commandId)) {
+    return addFinding(state, {
       code: "timeline.receipt.duplicate",
       eventId: event.id,
       detail: event.receipt.commandId,
     });
   }
+  if (hasOwn(metadata.receiptIds, event.receipt.id)) {
+    return addFinding(state, {
+      code: "timeline.receipt.id_duplicate",
+      eventId: event.id,
+      detail: event.receipt.id,
+    });
+  }
 
-  return {
-    state: {
-      ...state,
-      receipts: {
-        ...state.receipts,
-        [event.receipt.commandId]: event.receipt,
-      },
-    },
-    commands: [],
-  };
+  state.receipts[event.receipt.commandId] = { ...event.receipt };
+  metadata.receiptIds[event.receipt.id] = event.receipt.commandId;
+  return { state, commands: [] };
 }
 
-function withFinding(state: RunState, finding: Finding): TimelineReduced {
-  return {
-    state: { ...state, findings: [...state.findings, finding] },
-    commands: [],
+function addFinding(state: MutableRunState, finding: Finding): TimelineReduced {
+  state.findings.push(finding);
+  return { state, commands: [] };
+}
+
+function assertContract(
+  contract: TimelineContract,
+  state: RunState,
+  metadata: StateMetadata | undefined,
+  limits: TimelineLimits,
+): void {
+  const digest = digestContract(contract, limits);
+  if (
+    state.contractId !== contract.id ||
+    !metadata ||
+    metadata.contractDigest !== digest
+  ) {
+    throw new TimelineInputError(
+      "timeline.run.contract_mismatch",
+      "run state does not belong to these exact contract bytes",
+    );
+  }
+}
+
+function digestContract(
+  contract: TimelineContract,
+  limits: TimelineLimits,
+): `sha256:${string}` {
+  return contentDigest(contract as unknown as JsonValue, limits);
+}
+
+function cloneState(
+  state: RunState,
+  metadata: StateMetadata,
+): { state: MutableRunState; metadata: StateMetadata } {
+  const cloned: MutableRunState = {
+    ...state,
+    eventIds: { ...state.eventIds },
+    checkpoints: { ...state.checkpoints },
+    evidence: { ...state.evidence },
+    commands: { ...state.commands },
+    receipts: { ...state.receipts },
+    findings: [...state.findings],
   };
+  const clonedMetadata = {
+    contractDigest: metadata.contractDigest,
+    receiptIds: { ...metadata.receiptIds },
+  };
+  stateMetadata.set(cloned, clonedMetadata);
+  return { state: cloned, metadata: clonedMetadata };
+}
+
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha1/receipt.schema.json",
+  "title": "Timeline effect receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "commandId",
+    "idempotencyKey",
+    "status",
+    "recordedAt",
+    "effectDigest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.receipt.v0alpha1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "commandId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 512
+    },
+    "status": {
+      "enum": ["accepted", "succeeded", "failed", "indeterminate", "reconciled"]
+    },
+    "recordedAt": {
+      "$ref": "common.schema.json#/$defs/instant"
+    },
+    "effectDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  }
+}

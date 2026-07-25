@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha1/event.schema.json",
+  "title": "Timeline event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "digest",
+    "runId",
+    "streamId",
+    "sequence",
+    "expectedPriorVersion",
+    "type",
+    "contractDigest",
+    "occurredAt",
+    "observedAt",
+    "recordedAt",
+    "effectiveAt",
+    "payloadDigest",
+    "finality"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.event.v0alpha1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "digest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "runId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "streamId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expectedPriorVersion": {
+      "type": "integer",
+      "minimum": -1
+    },
+    "type": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "contractDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "occurredAt": {
+      "$ref": "common.schema.json#/$defs/instant"
+    },
+    "observedAt": {
+      "$ref": "common.schema.json#/$defs/instant"
+    },
+    "recordedAt": {
+      "$ref": "common.schema.json#/$defs/instant"
+    },
+    "effectiveAt": {
+      "$ref": "common.schema.json#/$defs/instant"
+    },
+    "payloadDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "causalParents": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/digest"
+      }
+    },
+    "correctionOf": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "finality": {
+      "$ref": "common.schema.json#/$defs/finality"
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  }
+}

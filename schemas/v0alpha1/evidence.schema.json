@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha1/evidence.schema.json",
+  "title": "Timeline evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "subject",
+    "claim",
+    "payloadDigest",
+    "producer",
+    "coverage",
+    "finality"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.evidence.v0alpha1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/subject"
+    },
+    "claim": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "payloadDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "producer": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": {
+          "$ref": "common.schema.json#/$defs/instant"
+        },
+        "to": {
+          "$ref": "common.schema.json#/$defs/instant"
+        }
+      }
+    },
+    "confidenceBps": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "finality": {
+      "$ref": "common.schema.json#/$defs/finality"
+    },
+    "provenanceParents": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/digest"
+      }
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  }
+}

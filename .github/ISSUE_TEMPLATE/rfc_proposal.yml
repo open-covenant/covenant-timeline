@@ -1,0 +1,35 @@
+name: RFC proposal
+description: Propose a normative, compatibility, governance, or architecture decision.
+title: "rfc: "
+labels: ["rfc"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: surface
+    attributes:
+      label: Normative surface and stakeholders
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility, security, privacy, and financial-authority impact
+    validations:
+      required: true
+  - type: textarea
+    id: conformance
+    attributes:
+      label: Expected conformance cases and reviewer disciplines
+    validations:
+      required: true

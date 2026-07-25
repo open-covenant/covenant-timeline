@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha1/common.schema.json",
+  "title": "Covenant Timeline common types",
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref", "environment"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/identifier"
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "environment": {
+          "enum": [
+            "simulation",
+            "test",
+            "paper",
+            "shadow",
+            "canary",
+            "production"
+          ]
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "coordinateType",
+        "authority",
+        "ordering",
+        "finality"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": [
+            "calendar",
+            "duration",
+            "logical",
+            "event",
+            "external",
+            "simulation",
+            "market",
+            "composite"
+          ]
+        },
+        "coordinateType": {
+          "enum": ["instant", "integer", "decimal", "string", "tuple"]
+        },
+        "authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ordering": {
+          "enum": ["total", "partial"]
+        },
+        "finality": {
+          "enum": ["immediate", "declared", "external", "reversible"]
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "optional": {
+          "type": "object",
+          "propertyNames": {
+            "format": "uri"
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "scale", "unit"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)$"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 38
+        },
+        "unit": {
+          "$ref": "#/$defs/identifier"
+        },
+        "asset": {
+          "$ref": "#/$defs/identifier"
+        },
+        "venue": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "finality": {
+      "enum": ["provisional", "confirmed", "final", "superseded", "reverted"]
+    }
+  }
+}

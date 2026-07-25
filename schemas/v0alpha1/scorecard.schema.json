@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha1/scorecard.schema.json",
+  "title": "Timeline scorecard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "subject",
+    "capability",
+    "environment",
+    "policy",
+    "window",
+    "dimensions",
+    "evidenceRefs",
+    "confidenceBps"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.scorecard.v0alpha1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "environment": {
+      "enum": ["simulation", "test", "paper", "shadow", "canary", "production"]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "digest"],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "digest": {
+          "$ref": "common.schema.json#/$defs/digest"
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": {
+          "$ref": "common.schema.json#/$defs/instant"
+        },
+        "to": {
+          "$ref": "common.schema.json#/$defs/instant"
+        }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "value"],
+        "properties": {
+          "name": {
+            "$ref": "common.schema.json#/$defs/identifier"
+          },
+          "value": {
+            "$ref": "common.schema.json#/$defs/quantity"
+          }
+        }
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/digest"
+      }
+    },
+    "confidenceBps": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "missing": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  }
+}

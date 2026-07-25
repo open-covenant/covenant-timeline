@@ -1,0 +1,32 @@
+{
+  "name": "covenant-timeline",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open specification and reference implementation for temporal contracts.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.31.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "boundary:check": "node scripts/check-boundaries.mjs",
+    "build": "pnpm -r --if-present build",
+    "conformance:check": "node scripts/check-conformance.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "pnpm -r --if-present lint",
+    "spec:check": "node scripts/check-spec.mjs",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "prettier": "3.8.3",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

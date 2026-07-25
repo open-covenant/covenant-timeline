@@ -1,0 +1,24 @@
+name: Conformance failure
+description: Report disagreement with a published fixture.
+title: "conformance: "
+labels: ["conformance"]
+body:
+  - type: input
+    id: implementation
+    attributes:
+      label: Implementation and version
+    validations:
+      required: true
+  - type: input
+    id: fixture
+    attributes:
+      label: Fixture ID and suite revision
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include expected and actual bytes, digest, error code, and commands.
+    validations:
+      required: true

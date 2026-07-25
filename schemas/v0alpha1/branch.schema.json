@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha1/branch.schema.json",
+  "title": "Timeline branch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "parentRunId",
+    "parentEventDigest",
+    "divergence",
+    "kind"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.branch.v0alpha1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "parentRunId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "parentEventDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "divergence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "kind": {
+      "enum": ["observed", "simulation", "counterfactual"]
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  }
+}

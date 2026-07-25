@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { extname } from "node:path";
 
 const files = execFileSync(
@@ -38,6 +38,8 @@ const generatedSegments = new Set([
 ]);
 
 for (const file of files) {
+  if (!existsSync(file)) continue;
+
   const segments = file.split("/");
   if (
     segments.some((segment) => generatedSegments.has(segment)) ||

@@ -5,32 +5,33 @@
 
 ## Problem
 
-A multidisciplinary project will collapse into vendor-specific behavior unless
-the portable core is explicit.
+A portable verifier becomes another workflow platform if execution,
+persistence, and domain policy enter its core.
 
 ## Proposed design
 
-The deterministic core owns schemas, canonicalization, compilation, reduction,
-evaluation, replay, verification, and language-neutral plugin contracts.
+The deterministic core owns schemas, contract validation, reduction, replay,
+and verification.
 
 ```text
 (pinned contract, prior state, accepted event)
     -> (next state, findings, decisions, commands)
 ```
 
-The core performs no network, filesystem, ambient clock, randomness, custody,
-order execution, or Covenant operation. Those belong to adapters and runtimes.
+The core performs no network, filesystem, ambient clock, randomness, database,
+or Covenant operation. Those belong to adapters and host runtimes.
 
 ## Invariants
 
 - Covenant types never appear in normative schemas.
-- Domain profiles cannot redefine ordering, identity, replay, or authority.
+- Profiles cannot redefine ordering, identity, replay, or the effect boundary.
 - Effects return as receipts and accepted events.
 
 ## Rejected alternatives
 
 - Making Covenant the canonical runtime would prevent independent adoption.
-- Embedding exchanges or agent frameworks would turn the core into a monolith.
+- Building a distributed runtime would duplicate established systems and make
+  adoption materially harder.
 
 ## Conformance
 
@@ -38,4 +39,5 @@ Boundary checks reject Covenant imports and implicit environment reads.
 
 ## Unresolved questions
 
-- Which evaluator operations belong in the kernel rather than the plugin ABI?
+- Whether policy evaluation remains a reducer operation or becomes a separately
+  versioned pure function before beta.

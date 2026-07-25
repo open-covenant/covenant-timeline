@@ -14,19 +14,15 @@ Normative objects use I-JSON-compatible values and RFC 8785 canonical JSON.
 Identifiers are SHA-256 digests over canonical UTF-8 bytes. Semantic defaults
 are expanded during compilation and included in the compiled contract.
 
-Normative financial values use integers, normalized decimal strings, or
-explicit rationals with mandated rounding. Binary floating point is prohibited.
-
 ## Invariants
 
 - No locale, key insertion order, or implicit default changes identity.
-- Units, scale, asset, and venue or network remain explicit.
 - Original objects stay verifiable after migration.
 
 ## Conformance
 
-Golden bytes, digests, overflow, scale, unit, and cross-language differential
-cases are required.
+Golden bytes, Unicode and number edge cases, digests, and cross-language
+differential cases are required.
 
 ## Unresolved questions
 

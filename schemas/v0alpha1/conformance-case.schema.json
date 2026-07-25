@@ -27,12 +27,7 @@
       "type": "object"
     },
     "semanticCheck": {
-      "enum": [
-        "cross-clock",
-        "required-extensions",
-        "replay-command",
-        "score-authority"
-      ]
+      "enum": ["duplicate-checkpoints", "required-extensions"]
     },
     "canonicalExpected": {
       "type": "string"

@@ -1,45 +1,45 @@
-# Evidence, Scorecards, and Authority
+# Evidence and Decisions
 
 ## Evidence
 
 Evidence identifies:
 
-- subject and claim;
-- payload digest, media type, size, and retrieval reference;
-- producer, collector, source, and signer where applicable;
-- collection method and configuration;
-- time coverage and relevant clock observations;
-- provenance parents;
-- confidence, completeness, finality, and revocation;
-- confidentiality and retention class.
+- a stable ID;
+- a kind and producer;
+- one or more named claims;
+- the SHA-256 digest of its payload.
 
-The subject, claim, payload digest, producer, and time coverage are required
-(`CTL-EVID-001`). A signature proves that an identity signed bytes; source
-policy determines whether those bytes support a claim.
+Evidence MUST retain these fields (`CTL-EVID-001`). The digest identifies bytes;
+it does not prove the claim is true.
 
-## Evaluation
+Producer authority, signatures, freshness, coverage, confidentiality, and
+conflict resolution belong to versioned adopter or profile policy.
 
-An evaluation names its evaluator, policy, inputs, output dimensions, units,
-missing-data behavior, and explanation. Model-backed evaluations also pin the
-model, prompt, fixture, provider, and declared nondeterminism.
+## Checkpoint evaluation
 
-## Scorecards
+A checkpoint evaluation names:
 
-The minimum scorecard scope is:
+- the checkpoint;
+- the evidence references being considered;
+- the policy reference.
 
-```text
-subject × capability × environment × policy × time window
-```
+The reducer gathers claims only from known evidence. Unknown references produce
+findings and no decision.
 
-A scorecard retains dimensions, units, evidence references, confidence,
-missingness, sample coverage, policy, evaluator, and applicability boundaries
-(`CTL-SCORE-001`). A scalar aggregate is optional.
+A decision retains:
+
+- accepted or rejected outcome;
+- policy reference;
+- evidence references;
+- missing requirements.
+
+These fields MUST remain available even when an adopter presents a simplified
+status (`CTL-DECISION-001`).
 
 ## Authority
 
-A scorecard is not an authorization (`CTL-AUTH-001`). A separate policy
-combines scorecard evidence with current state, exposure, approvals, and hard
-limits to produce a decision.
+A decision may make a command eligible when the pinned checkpoint declares an
+effect template. The command still requires authorization and enforcement by
+the adopter.
 
-The project does not define human consumer, employment, insurance, or housing
-credit scoring.
+Core v0alpha1 defines no scores and grants no authority.

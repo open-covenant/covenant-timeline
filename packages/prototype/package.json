@@ -2,7 +2,7 @@
   "name": "@covenant-org/timeline",
   "version": "0.0.0-alpha.0",
   "private": true,
-  "description": "Experimental TypeScript prototype for Covenant Timeline.",
+  "description": "Temporal contract reducer and verifier for long-running work.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

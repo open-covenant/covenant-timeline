@@ -4,41 +4,21 @@
   "title": "Timeline effect receipt",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema",
-    "id",
-    "commandId",
-    "idempotencyKey",
-    "status",
-    "recordedAt",
-    "effectDigest"
-  ],
+  "required": ["id", "commandId", "status", "effectDigest"],
   "properties": {
-    "schema": {
-      "const": "covenant.timeline.receipt.v0alpha1"
-    },
     "id": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
     "commandId": {
-      "$ref": "common.schema.json#/$defs/identifier"
-    },
-    "idempotencyKey": {
       "type": "string",
-      "minLength": 16,
+      "minLength": 1,
       "maxLength": 512
     },
     "status": {
-      "enum": ["accepted", "succeeded", "failed", "indeterminate", "reconciled"]
-    },
-    "recordedAt": {
-      "$ref": "common.schema.json#/$defs/instant"
+      "enum": ["succeeded", "failed", "indeterminate"]
     },
     "effectDigest": {
       "$ref": "common.schema.json#/$defs/digest"
-    },
-    "extensions": {
-      "$ref": "common.schema.json#/$defs/extensions"
     }
   }
 }

@@ -14,23 +14,22 @@ Accepted events drive a deterministic reducer. It emits commands with stable
 idempotency keys. Effectors run outside the kernel and return receipts as later
 events. Delivery is at least once.
 
-Replay may reproduce recorded commands for verification but marks them
-non-executable. Effectful re-execution is a separate run with explicit
-authority and lineage.
+Replay reproduces command records for verification but never invokes an
+adapter. Effect execution is a separate host-runtime action over newly emitted
+commands.
 
 ## Invariants
 
 - Replay never performs an effect.
 - Exactly-once execution is not claimed across uncontrolled systems.
 - Snapshots are replaceable acceleration artifacts.
-- Branches retain their ancestor and observed or counterfactual status.
 
 ## Conformance
 
-Duplicate delivery, crashes, expected-version conflicts, replay, receipts, and
-branch-lineage cases are required.
+Sequence conflicts, duplicate evidence, replay, unknown receipts, and unresolved
+commands are covered by fixtures and reducer tests.
 
 ## Unresolved questions
 
 - Normative command-key derivation.
-- Compensation semantics across independently operated effectors.
+- How exported hosts prove that an adapter executed only newly emitted commands.

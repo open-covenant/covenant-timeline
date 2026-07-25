@@ -1,23 +1,17 @@
-# Extensions and Compatibility
+# Compatibility
 
-## Extensions
+Every portable object identifies its schema version. Unknown fields fail unless
+they are carried in the extension namespace.
 
-Extension identifiers are globally unique URIs. A required extension changes
-whether a document can be interpreted safely. An implementation MUST reject an
-unknown required extension. It MAY preserve an unknown optional extension
-without interpreting it (`CTL-EXT-001`).
+Required extensions that an implementation does not understand MUST fail.
+Optional extensions MAY be preserved without interpretation (`CTL-EXT-001`).
 
-Extensions cannot change core canonicalization, ordering, replay, or authority
-semantics.
+Before beta:
 
-## Versioning
+- breaking changes use a new alpha schema version;
+- fixtures from released alpha versions remain in the repository;
+- migration tools are preferred over silent coercion;
+- no SemVer stability claim applies to the prototype package.
 
-The specification, schemas, conformance suite, engine, storage, HTTP API,
-plugin ABI, SDKs, adapters, and domain profiles are versioned independently.
-
-Major-zero versions are unstable. A stable implementation must continue to
-verify historical runs using their pinned specification and policy versions.
-
-Unknown core fields fail. Stable semantic fields are not removed or redefined
-within a major version. Migration creates a new object with lineage; it does
-not rewrite the original.
+Stable compatibility begins only after two implementations agree on canonical
+fixtures and real Covenant and external runs complete an upgrade.

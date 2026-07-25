@@ -101,32 +101,17 @@ console.log(
 );
 
 function semanticError(check, document) {
-  if (check === "cross-clock") {
-    const unmapped = (document.comparisons ?? []).some(
-      ({ leftClock, rightClock, mapping }) =>
-        leftClock !== rightClock && !mapping,
-    );
-    return unmapped ? "timeline.clock.mapping_required" : null;
-  }
-
   if (check === "required-extensions") {
     return (document.extensions?.required?.length ?? 0) > 0
       ? "timeline.extension.required_unknown"
       : null;
   }
 
-  if (check === "replay-command") {
-    return document.replayPolicy === "forbid"
+  if (check === "duplicate-checkpoints") {
+    const ids = (document.checkpoints ?? []).map(({ id }) => id);
+    return ids.length === new Set(ids).size
       ? null
-      : "timeline.replay.effect_forbidden";
-  }
-
-  if (check === "score-authority") {
-    return document.kind === "authority-grant" &&
-      document.scorecardRef &&
-      !document.hardPolicyRef
-      ? "timeline.authority.score_not_grant"
-      : null;
+      : "timeline.contract.duplicate_checkpoint";
   }
 
   throw new Error(`unknown semantic check: ${check}`);

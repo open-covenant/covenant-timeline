@@ -12,9 +12,8 @@
 ## Reporting
 
 Use
-[GitHub private vulnerability reporting](https://github.com/open-covenant/covenant-timeline/security/advisories/new)
-or email [security@opencovenant.org](mailto:security@opencovenant.org). Do not
-open a public issue.
+[GitHub private vulnerability reporting](https://github.com/open-covenant/covenant-timeline/security/advisories/new).
+Do not open a public issue.
 
 Include the affected version or commit, impact, realistic attacker outcome,
 minimal reproduction, and suggested mitigation when available.
@@ -30,11 +29,9 @@ disclosure timing is agreed with the reporter.
 - replay determinism;
 - event and evidence integrity;
 - command idempotency and effect boundaries;
-- authorization and score-to-policy separation;
-- SDK and runtime trust boundaries;
-- plugin loading and capabilities;
+- SDK and adapter trust boundaries;
 - release and dependency supply chain.
 
 No bounty exists unless separately announced. Preview releases are not approved
-for custody or unrestricted live trading. An attestation establishes provenance,
-not correctness. A score is not authority.
+for production authorization decisions. An evidence digest establishes byte
+identity, not correctness.

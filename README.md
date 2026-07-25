@@ -1,151 +1,159 @@
 # Covenant Timeline
 
-Covenant Timeline is an open temporal contract engine. A timeline is executable
-input: it defines a clock, subjects, checkpoints, requirements, evidence,
-evaluation policies, and outputs for work that unfolds across time.
+Covenant Timeline is an open contract format and verifier for long-running
+agent and software work.
 
-Covenant is the first reference consumer, not the boundary. The core must remain
-portable enough to fork and use without Covenant, a blockchain, a particular
-agent runtime, or a particular kind of work.
+A timeline contract declares checkpoints, required evidence, evaluation policy,
+and permitted effect requests. An append-only event stream records what
+happened. A deterministic reducer can replay that stream and explain why each
+checkpoint was accepted or rejected.
 
-## What it enables
+Covenant is the first reference adopter. It is not a required dependency.
 
-- Plan and govern long software-engineering builds across releases or calendar
-  periods.
-- Measure code quality and regression resistance across a complete trajectory,
-  not only the final snapshot.
-- Evaluate agent capabilities from a history of scoped, evidenced deliveries.
-- Produce explainable trust and credit scorecards from signed outcomes,
-  settlement receipts, attestations, and policy checks.
-- Drive any function whose eligibility or behavior depends on a declared
-  timeline.
-- Replay or fork a prior checkpoint under different requirements or policies.
+## Why this exists
 
-Code quality, agent reputation, provider reliability, and partnership telemetry
-are adapters over the same primitive. They are not hard-coded into the core.
+Long-running agent work survives process restarts, model changes, handoffs,
+reviews, and releases. A final status does not explain how the work evolved or
+which evidence justified a decision.
 
-## Core model
+Covenant Timeline makes that history portable:
 
 ```text
-Timeline Contract
-      │
-      ▼
-Deterministic Compiler ──► Checkpoint Plan
-                                │
-                                ▼
-                         Runner / Integrations
-                                │
-                                ▼
-                       Evidence + Evaluations
-                                │
-                    ┌───────────┴───────────┐
-                    ▼                       ▼
-               Scorecards             Attestations
+contract + ordered events
+            │
+            ▼
+    deterministic reducer
+            │
+            ├── checkpoint decisions
+            ├── effect requests
+            ├── receipts
+            └── verification findings
 ```
 
-The engine separates:
+The project specifies the evidence and decision boundary. It does not replace a
+workflow engine, database, CI system, or agent runtime.
 
-- **time** from wall-clock dates;
-- **evidence** from claims;
-- **scores** from the underlying evidence vector;
-- **policy** from execution;
-- **portable core semantics** from Covenant-specific trust and settlement.
-
-See the [program plan](./PROGRAM.md), [architecture](./docs/architecture.md),
-[domain profiles](./docs/domain-profiles.md),
-[financial safety model](./docs/financial-safety.md), and
-[roadmap](./ROADMAP.md).
-
-## Current status
-
-This repository is pre-alpha. The TypeScript code in `packages/prototype`
-proves calendar checkpoint generation and deterministic snapshot and trajectory
-scoring. It is not the canonical engine and does not implement the complete
-protocol.
-
-The v0alpha1 specification, schemas, conformance cases, and RFCs are being
-developed before the canonical Rust kernel. Financial material is an
-architecture and safety boundary, not a live-trading product. Do not use this
-repository to grant financial authority or control funds.
-
-## Verify
+## Try the current prototype
 
 Requirements:
 
-- Node.js 22 or later;
-- pnpm 10.31.
+- Node.js 22 or later
+- pnpm 10
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm demo
+```
+
+The demo replays a software-release contract with CI and review evidence,
+evaluates its release checkpoint, emits a Covenant capability request, joins
+the resulting receipt, and verifies the final run.
+
+The prototype API is intentionally small:
+
+```ts
+import { replay, verifyRun } from "@covenant-org/timeline";
+
+const state = replay(contract, "run-42", events);
+const result = verifyRun(state);
+```
+
+See [`examples/software-release.mjs`](./examples/software-release.mjs) for the
+complete runnable example.
+
+## Core boundary
+
+The first release is limited to:
+
+- temporal contracts and checkpoints;
+- ordered events;
+- content-addressed evidence references;
+- policy-pinned checkpoint decisions;
+- idempotent command requests and effect receipts;
+- deterministic replay and verification findings.
+
+The reducer is pure:
+
+```text
+(pinned contract, prior state, accepted event)
+    -> (next state, decision, commands, findings)
+```
+
+Commands request effects. Adapters execute them and return receipts as later
+events. Replay never calls an adapter.
+
+## Current status
+
+This repository is pre-alpha.
+
+Implemented:
+
+- a TypeScript contract validator;
+- an immutable reducer for evidence, checkpoint decisions, commands, and
+  receipts;
+- deterministic replay;
+- run verification;
+- JSON Schemas and a bootstrap conformance corpus;
+- a runnable software-release example.
+
+Not implemented:
+
+- a canonical compiler or complete RFC 8785 implementation;
+- persistent storage or distributed execution;
+- cryptographic evidence verification;
+- production SDK compatibility guarantees;
+- an independent conforming implementation.
+
+The conformance corpus currently validates schemas and selected semantics. It
+does not establish cross-language interoperability.
+
+## Relationship to Covenant
+
+Covenant provides runtime control, capabilities, continuity, audit, provenance,
+and settlement for long-running agents. Timeline adds a portable way to declare
+and verify how that work progresses.
+
+The intended integration is:
+
+```text
+Covenant audit and provenance ──► Timeline evidence events
+Timeline checkpoint decision ──► Covenant capability request
+Covenant effect result ─────────► Timeline receipt event
+```
+
+The standalone repository owns the portable contract and reducer. Covenant
+owns only its adapter.
+
+## Non-goals
+
+Covenant Timeline does not:
+
+- implement a distributed workflow runtime;
+- define a universal quality, trust, reputation, or credit score;
+- grant authority solely because a score or model output crossed a threshold;
+- execute tools, deploy software, move funds, or place trades;
+- require Covenant, a blockchain, or a particular storage system;
+- claim that schema conformance proves correctness, security, or fitness.
+
+Broader domains may be explored after the core has an independent adopter.
+They are not part of the first release.
+
+## Project map
+
+- [`spec/v0alpha1`](./spec/v0alpha1): draft language-neutral semantics
+- [`schemas/v0alpha1`](./schemas/v0alpha1): versioned JSON Schemas
+- [`conformance/v0alpha1`](./conformance/v0alpha1): bootstrap fixtures
+- [`packages/prototype`](./packages/prototype): TypeScript reference prototype
+- [`rfcs`](./rfcs): design decisions and unresolved questions
+- [`ROADMAP.md`](./ROADMAP.md): adoption-gated delivery sequence
+- [`PROGRAM.md`](./PROGRAM.md): scope, staffing, and success criteria
+
+## Verify
+
+```sh
 pnpm verify
 ```
 
-## Prototype API
-
-```ts
-import { buildTimeline, scoreSnapshot } from "@covenant-org/timeline";
-
-const definition = {
-  project: {
-    startDate: "2023-01-01",
-    endDate: "2025-12-31",
-    cadence: "monthly",
-  },
-  growth: {
-    targetFinalNloc: 75_000,
-    nlocPerPeriod: [1_000, 3_500],
-    maximumChurnRatio: 0.45,
-  },
-  milestones: [
-    {
-      date: "2023-03-31",
-      requirements: ["authentication", "account management"],
-      targetNloc: 8_000,
-    },
-  ],
-  qualityGates: {
-    testPassRate: 1,
-    minimumCoverage: 0.8,
-    maximumAverageComplexity: 10,
-    zeroRegressions: true,
-    maximumCriticalSecurityFindings: 0,
-  },
-} as const;
-
-const plan = buildTimeline(definition);
-const score = scoreSnapshot({
-  functional: 1,
-  regressionResistance: 1,
-  maintainability: 0.9,
-  coverage: 0.85,
-  staticQuality: 1,
-  architectureReview: 0.8,
-});
-```
-
-The prototype deliberately does not parse files, mutate repositories, execute
-agents, collect metrics, persist checkpoints, or enforce quality gates. Those
-surfaces will be added behind versioned contracts and conformance fixtures.
-
-## Scoring rule
-
-A score is a versioned view over evidence, not truth. Covenant Timeline will
-retain the complete dimension vector, policy version, evidence references, and
-confidence alongside every aggregate.
-
-It will not define a universal agent score. Capability and trust scorecards must
-be scoped to a domain, policy, subject, and time window. Human consumer credit
-scoring is out of scope.
-
-## Related work
-
-Covenant Timeline is designed to interoperate with, rather than replace:
-
-- [SWE-CI](https://arxiv.org/abs/2603.03823) for long-horizon maintainability
-  evaluation;
-- [SWE-EVO](https://github.com/SWE-EVO/SWE-EVO) for multi-version software
-  evolution tasks;
-- [PyDriller](https://pydriller.readthedocs.io/) for repository history and
-  process metrics;
-- checkpointing and replay systems such as
-  [LangGraph time travel](https://docs.langchain.com/oss/python/langgraph/use-time-travel).
+The repository is Apache-2.0 licensed. See [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+and [`SECURITY.md`](./SECURITY.md) before contributing or reporting a
+vulnerability.

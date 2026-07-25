@@ -2,50 +2,49 @@
 
 ## Mission
 
-Covenant Timeline develops portable, executable, and independently verifiable
-temporal contracts for work that unfolds across time.
+Covenant Timeline makes the evolution of long-running agent and software work
+portable, replayable, and independently verifiable.
 
 ## Project surfaces
 
 The project governs:
 
-- the language-neutral specification;
+- the temporal contract and event specification;
 - normative schemas and canonicalization;
 - the conformance corpus;
-- the deterministic reference kernel;
-- durable runtime contracts;
-- SDK and plugin interfaces;
-- governed domain profiles and reference adapters.
+- the deterministic reference reducer and verifier;
+- portable SDK interfaces;
+- reference adapters and the software-work profile.
 
-Covenant is the first adopter and reference adapter. It is not a required
-dependency and does not own protocol semantics.
+Covenant is the first adopter. It is not a required dependency and does not own
+portable protocol semantics.
 
 ## Core invariant
 
-The deterministic reducer produces state, findings, decisions, and effect
-requests. It never performs external effects. Effectors execute independently
+The reducer produces state, decisions, findings, and command requests from
+pinned inputs. It never performs external effects. Adapters execute separately
 authorized commands and return receipts as later events.
 
 ## Non-goals
 
 Covenant Timeline does not:
 
-- replace workflow engines, event processors, exchanges, ledgers, or databases;
-- hold funds, select trades, or certify profitability;
-- define a universal trust or credit score;
-- support human consumer, employment, housing, or insurance credit decisions;
-- treat signatures, attestations, or scores as proof that a claim is true;
-- make policy, security, regulatory, or fitness claims through conformance.
+- replace durable workflow engines, databases, or event processors;
+- execute agents, tools, deployments, or financial transactions;
+- define a universal quality, trust, reputation, or credit score;
+- treat signatures, attestations, or model output as proof that a claim is true;
+- make security or fitness claims through schema conformance;
+- standardize unrelated disciplines before adopters exist.
 
 ## Bootstrap stage
 
-The project is sponsored and administratively controlled by the Open Covenant
-organization. It does not yet claim vendor or organizational neutrality.
+Open Covenant sponsors and administers the repository during bootstrap. The
+project does not yet claim organizational neutrality.
 
 Transition from bootstrap governance requires:
 
 - at least three active maintainers from two organizations;
-- an independently maintained conforming implementation outside Covenant;
+- one independently maintained conforming implementation;
 - six months of visible contribution and decision history;
 - an accepted governance-transition RFC.
 

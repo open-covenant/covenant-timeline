@@ -7,10 +7,9 @@
   "required": [
     "schema",
     "id",
-    "runId",
     "kind",
+    "payloadRef",
     "idempotencyKey",
-    "payloadDigest",
     "replayPolicy"
   ],
   "properties": {
@@ -20,25 +19,19 @@
     "id": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
-    "runId": {
+    "kind": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
-    "kind": {
+    "payloadRef": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
     "idempotencyKey": {
       "type": "string",
-      "minLength": 16,
+      "minLength": 8,
       "maxLength": 512
-    },
-    "payloadDigest": {
-      "$ref": "common.schema.json#/$defs/digest"
     },
     "replayPolicy": {
       "const": "forbid"
-    },
-    "extensions": {
-      "$ref": "common.schema.json#/$defs/extensions"
     }
   }
 }

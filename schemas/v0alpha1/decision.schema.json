@@ -1,45 +1,43 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://covenant-timeline.org/schemas/v0alpha1/decision.schema.json",
-  "title": "Timeline decision",
+  "title": "Timeline checkpoint decision",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "id", "kind", "policyDigest", "expiresAt"],
+  "required": [
+    "schema",
+    "checkpointId",
+    "outcome",
+    "policyRef",
+    "evidenceRefs",
+    "missingRequirements"
+  ],
   "properties": {
     "schema": {
       "const": "covenant.timeline.decision.v0alpha1"
     },
-    "id": {
+    "checkpointId": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
-    "kind": {
-      "enum": [
-        "eligibility",
-        "limit",
-        "authority-recommendation",
-        "authority-grant",
-        "review",
-        "pause",
-        "deny"
-      ]
+    "outcome": {
+      "enum": ["accepted", "rejected"]
     },
-    "policyDigest": {
-      "$ref": "common.schema.json#/$defs/digest"
+    "policyRef": {
+      "$ref": "common.schema.json#/$defs/identifier"
     },
-    "scorecardRef": {
-      "$ref": "common.schema.json#/$defs/digest"
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
     },
-    "hardPolicyRef": {
-      "$ref": "common.schema.json#/$defs/digest"
-    },
-    "expiresAt": {
-      "$ref": "common.schema.json#/$defs/instant"
-    },
-    "limit": {
-      "$ref": "common.schema.json#/$defs/quantity"
-    },
-    "extensions": {
-      "$ref": "common.schema.json#/$defs/extensions"
+    "missingRequirements": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
     }
   }
 }

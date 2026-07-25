@@ -1,35 +1,19 @@
-# Events and Corrections
+# Events
 
-## Event stream
+Core v0alpha1 accepts three event types:
 
-An accepted event MUST contain:
+| Type                   | Payload                                     |
+| ---------------------- | ------------------------------------------- |
+| `evidence.recorded`    | One evidence object                         |
+| `checkpoint.evaluated` | Checkpoint, policy, and evidence references |
+| `receipt.recorded`     | One effect receipt                          |
 
-- a content digest;
-- run and stream identifiers;
-- stream sequence and expected prior version;
-- type and schema;
-- contract digest;
-- relevant clock observations;
-- payload or payload digest;
-- actor or collector identity;
-- causal parents where known.
+Events are append-only. Accepted events MUST NOT be overwritten or renumbered.
+Correction is represented by appending new evidence and re-evaluating the
+checkpoint.
 
-Accepted events are append-only (`CTL-EVENT-001`). Stream sequence and expected
-prior version provide optimistic concurrency within one stream
-(`CTL-EVENT-002`). Sequence does not assert a global total order across
-independent streams.
+The bootstrap schema validates event shape. The reducer validates sequence,
+references, duplicate evidence, and command joins.
 
-## Corrections and reversals
-
-A correction, revocation, reorg, dispute, redaction, or changed interpretation
-MUST append an event referencing the affected event (`CTL-EVENT-003`). It MUST
-NOT erase or replace the historical event.
-
-Materialized views project the current interpretation. They are not the
-authoritative ledger and may be rebuilt.
-
-## Sensitive evidence
-
-Raw secrets, private keys, and sensitive payloads MUST NOT enter the immutable
-event stream. The event may retain a digest, media type, access class,
-retention state, and retrieval reference.
+Future versions may introduce explicit correction and branch events. They are
+not part of the initial core.

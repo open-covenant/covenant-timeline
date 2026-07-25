@@ -1,44 +1,45 @@
 # Object Model
 
+## Contract
+
+A contract identifies one subject and one or more checkpoints. Each checkpoint
+has:
+
+- a unique identifier;
+- one or more evidence claims required for acceptance;
+- an optional command template emitted after acceptance.
+
+The contract is immutable within a run. An implementation MUST reject unknown
+contract fields outside the extension namespace (`CTL-CORE-002`).
+
+## Run
+
+A run applies an ordered event stream to one pinned contract. The run state is a
+projection and can be rebuilt from the contract and accepted events.
+
 ## Core objects
 
-A Timeline definition is immutable authoring input. Compilation produces a
-canonical contract pinned to all semantics needed for deterministic execution.
-A run applies accepted events to that contract.
+| Object    | Purpose                                                           |
+| --------- | ----------------------------------------------------------------- |
+| Contract  | Declares subject, checkpoints, requirements, and effect templates |
+| Event     | Adds one ordered input                                            |
+| Evidence  | References material supporting claims                             |
+| Decision  | Records a checkpoint evaluation                                   |
+| Command   | Requests an external effect                                       |
+| Receipt   | Records an observed effect result                                 |
+| Run state | Derived projection of accepted events                             |
 
-The core object set is:
-
-| Object              | Purpose                                                      |
-| ------------------- | ------------------------------------------------------------ |
-| Timeline definition | Declares subject, clocks, checkpoints, policies, and outputs |
-| Compiled contract   | Canonical execution form and digest                          |
-| Run                 | One execution pinned to a compiled contract                  |
-| Observation         | Assertion about an external state or clock                   |
-| Event               | Accepted reducer input                                       |
-| Evidence            | Material supporting a claim                                  |
-| Evaluation          | Deterministic derivation from declared evidence              |
-| Scorecard           | Scoped interpretation of evaluation dimensions               |
-| Decision            | Eligibility, authority recommendation, review, or limit      |
-| Command             | Idempotent request for an external effect                    |
-| Receipt             | Result of an attempted effect                                |
-| Branch              | New lineage from an accepted ancestor                        |
-| Attestation         | Signed statement about a versioned object or root            |
-
-Every normative object MUST identify its schema and version
-(`CTL-CORE-001`). Unknown semantic fields MUST fail outside the `extensions`
-namespace (`CTL-CORE-002`).
+Every portable contract and event MUST identify its schema version
+(`CTL-CORE-001`).
 
 ## Kernel boundary
 
-The deterministic kernel computes:
+The kernel computes:
 
 ```text
 (pinned contract, prior state, accepted event)
-    -> (next state, findings, decisions, commands)
+    -> (next state, decision, commands, findings)
 ```
 
-The kernel does not access a network, filesystem, ambient clock, locale,
-randomness source, secret, exchange, chain, or Covenant service.
-
-Domain profiles may add schemas and policies. They cannot redefine ordering,
-canonical identity, replay, effect safety, or authority semantics.
+The kernel MUST NOT access a network, filesystem, ambient clock, locale, random
+source, secret, database, or Covenant service.

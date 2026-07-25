@@ -10,6 +10,6 @@ Run:
 pnpm conformance:check
 ```
 
-This initial harness validates structural and selected cross-object semantics.
-It is not yet the full byte-level compiler, reducer, replay, or cross-language
-suite described by the program.
+This initial harness validates structural and selected semantic requirements.
+It is not yet the full reducer, RFC 8785, or cross-language suite required for
+beta.

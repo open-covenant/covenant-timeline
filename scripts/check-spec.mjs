@@ -42,8 +42,8 @@ for (const [id, rule, mechanical, listedCases] of rows) {
   }
 }
 
-if (rows.length < 15)
-  failures.push(`${requirementsPath}: expected at least 15 requirements`);
+if (rows.length < 8)
+  failures.push(`${requirementsPath}: expected at least 8 requirements`);
 
 for (const testCase of cases) {
   for (const requirement of testCase.requirements ?? []) {

@@ -22,7 +22,7 @@
 
 ## Security and privacy
 
-## Financial-authority impact
+## Effect-boundary impact
 
 ## Conformance cases
 

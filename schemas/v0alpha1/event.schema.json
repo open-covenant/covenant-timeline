@@ -4,23 +4,7 @@
   "title": "Timeline event",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema",
-    "id",
-    "digest",
-    "runId",
-    "streamId",
-    "sequence",
-    "expectedPriorVersion",
-    "type",
-    "contractDigest",
-    "occurredAt",
-    "observedAt",
-    "recordedAt",
-    "effectiveAt",
-    "payloadDigest",
-    "finality"
-  ],
+  "required": ["schema", "id", "sequence", "type"],
   "properties": {
     "schema": {
       "const": "covenant.timeline.event.v0alpha1"
@@ -28,59 +12,83 @@
     "id": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
-    "digest": {
-      "$ref": "common.schema.json#/$defs/digest"
-    },
-    "runId": {
-      "$ref": "common.schema.json#/$defs/identifier"
-    },
-    "streamId": {
-      "$ref": "common.schema.json#/$defs/identifier"
-    },
     "sequence": {
       "type": "integer",
       "minimum": 0
     },
-    "expectedPriorVersion": {
-      "type": "integer",
-      "minimum": -1
-    },
     "type": {
+      "enum": ["evidence.recorded", "checkpoint.evaluated", "receipt.recorded"]
+    },
+    "evidence": {
+      "$ref": "evidence.schema.json"
+    },
+    "checkpointId": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
-    "contractDigest": {
-      "$ref": "common.schema.json#/$defs/digest"
-    },
-    "occurredAt": {
-      "$ref": "common.schema.json#/$defs/instant"
-    },
-    "observedAt": {
-      "$ref": "common.schema.json#/$defs/instant"
-    },
-    "recordedAt": {
-      "$ref": "common.schema.json#/$defs/instant"
-    },
-    "effectiveAt": {
-      "$ref": "common.schema.json#/$defs/instant"
-    },
-    "payloadDigest": {
-      "$ref": "common.schema.json#/$defs/digest"
-    },
-    "causalParents": {
+    "evidenceRefs": {
       "type": "array",
       "uniqueItems": true,
       "items": {
-        "$ref": "common.schema.json#/$defs/digest"
+        "$ref": "common.schema.json#/$defs/identifier"
       }
     },
-    "correctionOf": {
-      "$ref": "common.schema.json#/$defs/digest"
+    "policyRef": {
+      "$ref": "common.schema.json#/$defs/identifier"
     },
-    "finality": {
-      "$ref": "common.schema.json#/$defs/finality"
-    },
-    "extensions": {
-      "$ref": "common.schema.json#/$defs/extensions"
+    "receipt": {
+      "$ref": "receipt.schema.json"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evidence.recorded"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {}
+        },
+        "required": ["evidence"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "checkpoint.evaluated"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "checkpointId": {},
+          "evidenceRefs": {},
+          "policyRef": {}
+        },
+        "required": ["checkpointId", "evidenceRefs", "policyRef"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "receipt.recorded"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "receipt": {}
+        },
+        "required": ["receipt"]
+      }
+    }
+  ]
 }

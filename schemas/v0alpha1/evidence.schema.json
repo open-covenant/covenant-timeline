@@ -4,65 +4,27 @@
   "title": "Timeline evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema",
-    "id",
-    "subject",
-    "claim",
-    "payloadDigest",
-    "producer",
-    "coverage",
-    "finality"
-  ],
+  "required": ["id", "kind", "claims", "payloadDigest", "producer"],
   "properties": {
-    "schema": {
-      "const": "covenant.timeline.evidence.v0alpha1"
-    },
     "id": {
       "$ref": "common.schema.json#/$defs/identifier"
     },
-    "subject": {
-      "$ref": "common.schema.json#/$defs/subject"
-    },
-    "claim": {
+    "kind": {
       "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
     },
     "payloadDigest": {
       "$ref": "common.schema.json#/$defs/digest"
     },
     "producer": {
       "$ref": "common.schema.json#/$defs/identifier"
-    },
-    "coverage": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["from", "to"],
-      "properties": {
-        "from": {
-          "$ref": "common.schema.json#/$defs/instant"
-        },
-        "to": {
-          "$ref": "common.schema.json#/$defs/instant"
-        }
-      }
-    },
-    "confidenceBps": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 10000
-    },
-    "finality": {
-      "$ref": "common.schema.json#/$defs/finality"
-    },
-    "provenanceParents": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "$ref": "common.schema.json#/$defs/digest"
-      }
-    },
-    "extensions": {
-      "$ref": "common.schema.json#/$defs/extensions"
     }
   }
 }

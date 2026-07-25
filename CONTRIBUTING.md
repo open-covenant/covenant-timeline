@@ -24,20 +24,19 @@ include exact validation results.
 ## Change requirements
 
 - Public behavior and schema changes need a compatibility classification.
-- Normative semantics, cryptography, scoring, effect boundaries, financial
-  authority, schemas, plugin ABI, storage compatibility, releases, and
-  governance require an RFC.
+- Normative semantics, cryptography, effect boundaries, schemas, compatibility,
+  releases, and governance require an RFC.
 - Mechanically testable normative requirements need conformance cases.
 - Failure paths, replay, duplicate delivery, and determinism require tests when
   applicable.
 - Documentation and the changelog move with public behavior.
 
-Do not include live credentials, market accounts, private evidence, personal
-identifiers, secrets, or production financial operations in tests or fixtures.
+Do not include live credentials, private evidence, personal identifiers, or
+secrets in tests or fixtures.
 
-Agent-assisted contributions are judged by their output. AI attribution,
-tool-attribution trailers, and `Co-Authored-By` trailers are not required.
-Signed-off commits are not required during bootstrap.
+Contributions are judged by their output. Commit messages must not include AI
+tool attribution or `Co-Authored-By` trailers. Signed-off commits are not
+required during bootstrap.
 
 ## Contribution terms
 

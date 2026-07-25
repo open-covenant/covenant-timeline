@@ -1,36 +1,44 @@
 # Covenant Timeline Core v0alpha1
 
-Status: draft.
+Status: bootstrap draft
 
-This directory contains the normative prose for the first Covenant Timeline
-protocol iteration. The specification is incomplete and unstable.
+This specification defines a minimal portable model for replaying checkpointed
+software and agent work. It is intentionally smaller than the long-term design.
 
-Normative authority is ordered as follows:
+Normative requirements use `MUST`, `MUST NOT`, `SHOULD`, and `MAY` as defined by
+RFC 2119 and RFC 8174.
 
-1. this prose specification defines semantics;
-2. JSON Schemas define document structure;
-3. conformance cases define mechanically testable behavior;
-4. RFCs record decisions and do not override a released specification;
-5. scenarios are non-normative demonstrations.
+## Scope
 
-The words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** are to
-be interpreted as described by RFC 2119 and RFC 8174 when written in uppercase.
+Core v0alpha1 defines:
+
+- contracts and checkpoints;
+- ordered events;
+- evidence references;
+- checkpoint decisions;
+- commands and receipts;
+- replay and findings;
+- canonical object identity.
+
+It does not define persistence, scheduling, transport, cryptographic trust,
+scoring, authorization enforcement, or a distributed runtime.
 
 ## Documents
 
-- [Requirements](./requirements.md)
 - [Object model](./object-model.md)
-- [Clocks and ordering](./clocks.md)
-- [Events and corrections](./events.md)
-- [Reducer, replay, and effects](./replay-and-effects.md)
-- [Evidence, scorecards, and authority](./evidence-and-authority.md)
-- [Canonicalization and quantities](./canonicalization.md)
-- [Extensions and compatibility](./compatibility.md)
+- [Ordering](./clocks.md)
+- [Events](./events.md)
+- [Evidence and decisions](./evidence-and-authority.md)
+- [Replay and effects](./replay-and-effects.md)
+- [Canonicalization](./canonicalization.md)
+- [Compatibility](./compatibility.md)
 - [Errors](./errors.md)
+- [Requirements and fixtures](./requirements.md)
 
 ## Conformance
 
-An implementation claiming `CORE/v0alpha1` conformance MUST identify the exact
-specification and conformance-suite revisions it implements. Conformance means
-protocol compatibility. It does not establish security, policy quality,
-regulatory compliance, trading safety, or profitability.
+The bootstrap conformance corpus validates schemas and selected semantics. It
+does not yet test the complete reducer or RFC 8785 edge cases across languages.
+
+An implementation MUST NOT claim full Core v0alpha1 conformance until those
+surfaces are covered by a published conformance release.

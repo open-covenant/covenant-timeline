@@ -1,35 +1,35 @@
-# RFC 0005: Evidence, Evaluation, and Authority
+# RFC 0005: Evidence and Decisions
 
 - Status: Draft
 - Compatibility: Foundational
 
 ## Problem
 
-Claims, evidence, scores, policy decisions, and authority are routinely
-collapsed into one unsafe number.
+Claims, evidence, decisions, and authority are routinely collapsed into a final
+status that cannot be independently explained.
 
 ## Proposed design
 
-Evidence retains subject, claim, payload digest, provenance, collection method,
-time coverage, source authority, confidence, completeness, and finality.
+Core evidence retains an ID, kind, claims, payload digest, and producer.
+A checkpoint decision retains its policy, evidence references, missing
+requirements, and accepted or rejected outcome.
 
-Scorecards are scoped to subject, capability, environment, policy, and time
-window. They retain their dimensions, evidence, missingness, and uncertainty.
-A separate hard policy issues eligibility, limits, reviews, or authority.
+Source authority, freshness, signatures, confidence, and conflict resolution
+are explicit policy concerns outside the minimal reducer.
 
 ## Invariants
 
 - A signature proves signed bytes, not truth.
-- Missing evidence is not silently converted to failure.
-- A score never grants authority by itself.
-- Human consumer credit is out of scope.
+- Missing evidence remains visible in a rejected decision.
+- Unknown evidence produces a finding and no decision.
+- A decision does not bypass host-runtime authorization.
 
 ## Conformance
 
-Cases cover scope, missingness, policy substitution, correction, score
-decomposition, and direct score-to-authority rejection.
+Cases cover evidence identity and complete decision shape. Reducer tests cover
+missing and unknown evidence.
 
 ## Unresolved questions
 
-- Confidence composition across correlated evidence.
-- Privacy-preserving public scorecard projections.
+- How policy artifacts receive canonical identity.
+- How conflicting evidence is represented without expanding the core.

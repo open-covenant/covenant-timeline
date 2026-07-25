@@ -14,6 +14,7 @@
     "boundary:check": "node scripts/check-boundaries.mjs",
     "build": "pnpm -r --if-present build",
     "conformance:check": "node scripts/check-conformance.mjs",
+    "demo": "pnpm build && node examples/software-release.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm -r --if-present lint",

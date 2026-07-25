@@ -13,13 +13,12 @@ rejected alternatives, and material dissent are recorded publicly.
 - **Maintainer:** merges changes and stewards protocol quality.
 - **Release steward:** prepares and verifies releases.
 - **Security responder:** handles private reports and coordinated disclosure.
-- **Domain reviewer:** reviews safety and applicability in a discipline.
 - **Technical Steering Committee:** inactive until the charter transition gate.
 
 An author cannot be the sole approver of normative, security, release,
-cryptographic, or financial-authority changes once a second eligible reviewer
+cryptographic, or effect-boundary changes once a second eligible reviewer
 exists. During single-maintainer bootstrap, self-approval must be disclosed and
-cannot freeze a stable v1 rule.
+cannot freeze a stable rule.
 
 Appointments, removals, employment conflicts, material sponsorship, and funding
 that could affect decisions are disclosed publicly.
@@ -27,13 +26,12 @@ that could affect decisions are disclosed publicly.
 ## Decisions
 
 Routine implementation changes require maintainer review. Normative semantics,
-schemas, canonicalization, cryptography, effect boundaries, scoring,
-financial-authority behavior, plugin ABI, storage compatibility, releases, and
-governance require an RFC.
+schemas, canonicalization, cryptography, effect boundaries, compatibility,
+releases, and governance require an RFC.
 
-Security, cryptography, and financial-authority RFCs also require an eligible
-domain reviewer before acceptance. Emergency private fixes are permitted,
-followed by an advisory or retrospective decision record after disclosure.
+Security and cryptography RFCs also require an eligible reviewer before
+acceptance. Emergency private fixes are permitted, followed by an advisory or
+retrospective decision record after disclosure.
 
 ## Steering transition
 

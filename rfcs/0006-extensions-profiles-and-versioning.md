@@ -13,14 +13,15 @@ Extensions use globally unique URIs and declare whether they are required or
 optional. Unknown required extensions fail. Unknown optional extensions remain
 identifiable and preservable.
 
-Specifications, schemas, conformance, kernels, runtimes, APIs, plugin ABIs,
-SDKs, adapters, and profiles are independently versioned.
+Specifications, schemas, conformance corpora, SDKs, adapters, and profiles are
+independently versioned.
 
 ## Invariants
 
-- Extensions cannot redefine canonicalization, ordering, replay, or authority.
+- Extensions cannot redefine canonicalization, ordering, replay, or the effect
+  boundary.
 - Stable readers keep verifying historical pinned runs.
-- Corrections and migrations create new lineage instead of rewriting history.
+- Migrations create new objects instead of rewriting historical bytes.
 
 ## Conformance
 
@@ -29,5 +30,5 @@ historical fixtures are tested.
 
 ## Unresolved questions
 
-- Extension discovery and trust registry.
+- Whether extension discovery belongs in this project.
 - Minimum deprecation windows before v1.

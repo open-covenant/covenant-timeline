@@ -1,17 +1,20 @@
 # Agent Capability Delegation
 
-An agent completes a series of scoped software deliveries. Evidence includes
-acceptance, cost, policy outcomes, disputes, repairs, recency, and sample size.
+An agent completes a series of scoped software deliveries. Evidence includes CI
+results, review approvals, policy outcomes, disputes, and repairs.
 
-The scorecard is scoped to:
+A checkpoint contract requires explicit claims before it emits a Covenant
+capability request:
 
 ```text
-agent × software-delivery × test environment × policy v1 × 30-day window
+delivery.accepted + ci.tests.pass + review.approved
+    -> covenant.capability.request
 ```
 
-It may recommend a bounded deployment budget. A separate policy evaluates
-current exposure, approvals, hard limits, and expiry before issuing any
-capability.
+Covenant independently evaluates the request against current capabilities,
+expiry, limits, and operator policy. It returns a receipt whether the request
+succeeds or fails.
 
-The scenario fails if a scorecard directly grants authority, if missing
-evidence becomes a silent zero, or if the agent can extend its own mandate.
+The scenario fails if missing evidence disappears from the decision, Timeline
+directly grants a capability, replay invokes Covenant, or the agent can extend
+its own mandate.

@@ -1,0 +1,42 @@
+{
+  "schema": "covenant.timeline.run.v0alpha1",
+  "runId": "run.rejected",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha1",
+    "id": "software.release.v0",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "checkpoints": [
+      {
+        "id": "release-ready",
+        "requirements": ["ci.tests.pass", "review.approved"]
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "ci",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-actions"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42"],
+      "policyRef": "software.release.v0"
+    }
+  ]
+}

@@ -207,6 +207,29 @@
     }
   },
   {
+    "id": "schema.event-mixed-variant-fields",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha1/event.schema.json",
+    "requirements": ["CTL-CORE-002", "CTL-EVENT-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "ci",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-actions"
+      },
+      "checkpointId": "release-ready"
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
     "id": "schema.valid-decision",
     "targetSchema": "https://covenant-timeline.org/schemas/v0alpha1/decision.schema.json",
     "requirements": ["CTL-DECISION-001"],
@@ -370,6 +393,60 @@
     },
     "expect": {
       "valid": true
+    }
+  },
+  {
+    "id": "schema.valid-run",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha1/run.schema.json",
+    "requirements": ["CTL-RUN-001"],
+    "document": {
+      "schema": "covenant.timeline.run.v0alpha1",
+      "runId": "run-42",
+      "contract": {
+        "schema": "covenant.timeline.contract.v0alpha1",
+        "id": "software.release.v0",
+        "subject": {
+          "kind": "repository",
+          "id": "example/service"
+        },
+        "checkpoints": [
+          {
+            "id": "release-ready",
+            "requirements": ["ci.tests.pass"]
+          }
+        ]
+      },
+      "events": []
+    },
+    "expect": {
+      "valid": true
+    }
+  },
+  {
+    "id": "schema.run-missing-id",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha1/run.schema.json",
+    "requirements": ["CTL-RUN-001"],
+    "document": {
+      "schema": "covenant.timeline.run.v0alpha1",
+      "contract": {
+        "schema": "covenant.timeline.contract.v0alpha1",
+        "id": "software.release.v0",
+        "subject": {
+          "kind": "repository",
+          "id": "example/service"
+        },
+        "checkpoints": [
+          {
+            "id": "release-ready",
+            "requirements": ["ci.tests.pass"]
+          }
+        ]
+      },
+      "events": []
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
     }
   },
   {

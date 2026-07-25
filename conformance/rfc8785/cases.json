@@ -1,0 +1,47 @@
+[
+  {
+    "id": "arrays",
+    "input": [56, { "d": true, "10": null, "1": [] }],
+    "canonical": "[56,{\"1\":[],\"10\":null,\"d\":true}]"
+  },
+  {
+    "id": "french",
+    "input": {
+      "peach": "This sorting order",
+      "péché": "is wrong according to French",
+      "pêche": "but canonicalization MUST",
+      "sin": "ignore locale"
+    },
+    "canonical": "{\"peach\":\"This sorting order\",\"péché\":\"is wrong according to French\",\"pêche\":\"but canonicalization MUST\",\"sin\":\"ignore locale\"}"
+  },
+  {
+    "id": "structures",
+    "input": {
+      "1": { "f": { "f": "hi", "F": 5 }, "\n": 56.0 },
+      "10": {},
+      "": "empty",
+      "a": {},
+      "111": [{ "e": "yes", "E": "no" }],
+      "A": {}
+    },
+    "canonical": "{\"\":\"empty\",\"1\":{\"\\n\":56,\"f\":{\"F\":5,\"f\":\"hi\"}},\"10\":{},\"111\":[{\"E\":\"no\",\"e\":\"yes\"}],\"A\":{},\"a\":{}}"
+  },
+  {
+    "id": "unicode",
+    "input": {
+      "Unnormalized Unicode": "Å"
+    },
+    "canonical": "{\"Unnormalized Unicode\":\"Å\"}"
+  },
+  {
+    "id": "values",
+    "input": {
+      "numbers": [
+        333333333.33333329, 1e30, 4.5, 0.002, 0.000000000000000000000000001
+      ],
+      "string": "€$^O\nA'B\"\\\\\"/",
+      "literals": [null, true, false]
+    },
+    "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$^O\\nA'B\\\"\\\\\\\\\\\"/\"}"
+  }
+]

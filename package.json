@@ -13,15 +13,18 @@
   "scripts": {
     "boundary:check": "node scripts/check-boundaries.mjs",
     "build": "pnpm -r --if-present build",
-    "conformance:check": "node scripts/check-conformance.mjs",
-    "demo": "pnpm build && node examples/software-release.mjs",
+    "conformance:check": "pnpm build && node scripts/check-conformance.mjs",
+    "conformance:cross-check": "python3 scripts/check-jcs-python.py",
+    "demo": "pnpm build && node packages/prototype/dist/cli.js verify conformance/v0alpha1/runs/successful.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm -r --if-present lint",
+    "pack:check": "pnpm build && pnpm --filter @covenant-org/timeline pack --dry-run",
     "spec:check": "node scripts/check-spec.mjs",
     "test": "pnpm -r --if-present test",
+    "timeline": "node packages/prototype/dist/cli.js",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pack:check"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

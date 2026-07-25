@@ -2,9 +2,16 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import {
+  canonicalJson,
+  evaluateRunDocument,
+  validateRunDocument,
+} from "../packages/prototype/dist/index.js";
 
 const schemaDirectory = "schemas/v0alpha1";
 const casesPath = "conformance/v0alpha1/cases.json";
+const runCasesPath = "conformance/v0alpha1/run-cases.json";
+const canonicalCasesPath = "conformance/rfc8785/cases.json";
 const ajv = new Ajv2020({
   allErrors: true,
   strict: true,
@@ -79,7 +86,62 @@ for (const testCase of cases) {
   }
 }
 
+const canonicalCases = JSON.parse(readFileSync(canonicalCasesPath, "utf8"));
+for (const testCase of canonicalCases) {
+  if (canonicalJson(testCase.input) !== testCase.canonical) {
+    failures.push(`${testCase.id}: RFC 8785 canonical output mismatch`);
+  }
+}
+
+const runCases = JSON.parse(readFileSync(runCasesPath, "utf8"));
+for (const testCase of runCases) {
+  const run = JSON.parse(
+    readFileSync(join("conformance/v0alpha1", testCase.file), "utf8"),
+  );
+  const issues = validateRunDocument(run);
+  const valid = issues.length === 0;
+  if (valid !== testCase.expect.valid) {
+    failures.push(
+      `${testCase.id}: expected valid=${testCase.expect.valid}, received valid=${valid}`,
+    );
+    continue;
+  }
+
+  if (!valid) {
+    const issuePaths = issues.map(({ path }) => path);
+    if (testCase.expect.errorCode !== "schema.invalid") {
+      failures.push(`${testCase.id}: expected stable schema.invalid error`);
+    }
+    if (
+      canonicalJson(issuePaths) !== canonicalJson(testCase.expect.issuePaths)
+    ) {
+      failures.push(`${testCase.id}: validation issue paths changed`);
+    }
+    continue;
+  }
+
+  const first = evaluateRunDocument(run);
+  const second = evaluateRunDocument(run);
+  if (canonicalJson(first) !== canonicalJson(second)) {
+    failures.push(`${testCase.id}: replay output is not deterministic`);
+  }
+  if (first.verification.ok !== testCase.expect.ok) {
+    failures.push(`${testCase.id}: verification result changed`);
+  }
+  const checkpoint = first.state.checkpoints["release-ready"];
+  if (checkpoint?.status !== testCase.expect.checkpoint) {
+    failures.push(`${testCase.id}: checkpoint outcome changed`);
+  }
+  if (first.stateDigest !== testCase.expect.stateDigest) {
+    failures.push(`${testCase.id}: state digest changed`);
+  }
+}
+
 if (cases.length < 15) failures.push("expected at least 15 conformance cases");
+if (runCases.length < 5) failures.push("expected at least 5 run fixtures");
+if (canonicalCases.length < 5) {
+  failures.push("expected at least 5 RFC 8785 fixtures");
+}
 
 const requirementsText = readFileSync("spec/v0alpha1/requirements.md", "utf8");
 const mechanicalRequirements = [
@@ -97,7 +159,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `conformance passed (${cases.length} cases, ${schemas.length} schemas)`,
+  `conformance passed (${cases.length} documents, ${runCases.length} runs, ${canonicalCases.length} canonical fixtures, ${schemas.length} schemas)`,
 );
 
 function semanticError(check, document) {
@@ -115,15 +177,4 @@ function semanticError(check, document) {
   }
 
   throw new Error(`unknown semantic check: ${check}`);
-}
-
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
 }

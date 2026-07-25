@@ -33,7 +33,7 @@ contract + ordered events
 The project specifies the evidence and decision boundary. It does not replace a
 workflow engine, database, CI system, or agent runtime.
 
-## Try the current prototype
+## Try the current pre-alpha
 
 Requirements:
 
@@ -49,17 +49,23 @@ The demo replays a software-release contract with CI and review evidence,
 evaluates its release checkpoint, emits a Covenant capability request, joins
 the resulting receipt, and verifies the final run.
 
-The prototype API is intentionally small:
+The API is intentionally small:
 
 ```ts
-import { replay, verifyRun } from "@covenant-org/timeline";
+import { evaluateRunDocument } from "@covenant-org/timeline";
 
-const state = replay(contract, "run-42", events);
-const result = verifyRun(state);
+const report = evaluateRunDocument(run);
+console.log(report.stateDigest, report.verification);
 ```
 
-See [`examples/software-release.mjs`](./examples/software-release.mjs) for the
-complete runnable example.
+The CLI validates, replays, inspects, and verifies portable runs:
+
+```sh
+pnpm timeline inspect conformance/v0alpha1/runs/corrected.json
+pnpm timeline verify conformance/v0alpha1/runs/successful.json --json
+```
+
+See [Getting started](./docs/getting-started.md) for the complete local path.
 
 ## Core boundary
 
@@ -88,24 +94,26 @@ This repository is pre-alpha.
 
 Implemented:
 
-- a TypeScript contract validator;
+- runtime validation for contracts, events, and portable runs;
 - an immutable reducer for evidence, checkpoint decisions, commands, and
   receipts;
-- deterministic replay;
+- RFC 8785 canonical JSON and SHA-256 content identities;
+- deterministic replay with stable state digests;
+- human-readable and JSON CLI output;
 - run verification;
-- JSON Schemas and a bootstrap conformance corpus;
-- a runnable software-release example.
+- JSON Schemas and successful, rejected, incomplete, corrected, and malformed
+  conformance runs;
+- TypeScript and Python agreement on the upstream canonicalization fixtures.
 
 Not implemented:
 
-- a canonical compiler or complete RFC 8785 implementation;
 - persistent storage or distributed execution;
 - cryptographic evidence verification;
 - production SDK compatibility guarantees;
 - an independent conforming implementation.
 
-The conformance corpus currently validates schemas and selected semantics. It
-does not establish cross-language interoperability.
+The package is versioned but not yet published to npm. Cross-language agreement
+currently covers canonical bytes, not an independent reducer.
 
 ## Relationship to Covenant
 
@@ -143,6 +151,7 @@ They are not part of the first release.
 - [`spec/v0alpha1`](./spec/v0alpha1): draft language-neutral semantics
 - [`schemas/v0alpha1`](./schemas/v0alpha1): versioned JSON Schemas
 - [`conformance/v0alpha1`](./conformance/v0alpha1): bootstrap fixtures
+- [`conformance/rfc8785`](./conformance/rfc8785): canonical byte fixtures
 - [`packages/prototype`](./packages/prototype): TypeScript reference prototype
 - [`rfcs`](./rfcs): design decisions and unresolved questions
 - [`ROADMAP.md`](./ROADMAP.md): adoption-gated delivery sequence

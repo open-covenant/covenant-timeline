@@ -1,0 +1,32 @@
+{
+  "schema": "covenant.timeline.run.v0alpha1",
+  "runId": "run.malformed",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha1",
+    "id": "software.release.v0",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "checkpoints": [
+      {
+        "id": "release-ready",
+        "requirements": ["ci.tests.pass"]
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-0",
+      "sequence": 1,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "ci",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
+}

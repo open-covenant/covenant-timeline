@@ -10,6 +10,7 @@ Run:
 pnpm conformance:check
 ```
 
-This initial harness validates structural and selected semantic requirements.
-It is not yet the full reducer, RFC 8785, or cross-language suite required for
-beta.
+The harness also replays successful, rejected, incomplete, corrected, and
+malformed runs and pins their state digests. RFC 8785 fixtures are checked by
+the TypeScript implementation during `pnpm conformance:check` and independently
+by Python during `pnpm conformance:cross-check`.

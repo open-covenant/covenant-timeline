@@ -2,92 +2,92 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://covenant-timeline.org/schemas/v0alpha1/event.schema.json",
   "title": "Timeline event",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema", "id", "sequence", "type"],
-  "properties": {
-    "schema": {
-      "const": "covenant.timeline.event.v0alpha1"
-    },
-    "id": {
-      "$ref": "common.schema.json#/$defs/identifier"
-    },
-    "sequence": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "type": {
-      "enum": ["evidence.recorded", "checkpoint.evaluated", "receipt.recorded"]
-    },
-    "evidence": {
-      "$ref": "evidence.schema.json"
-    },
-    "checkpointId": {
-      "$ref": "common.schema.json#/$defs/identifier"
-    },
-    "evidenceRefs": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "$ref": "common.schema.json#/$defs/identifier"
-      }
-    },
-    "policyRef": {
-      "$ref": "common.schema.json#/$defs/identifier"
-    },
-    "receipt": {
-      "$ref": "receipt.schema.json"
-    }
-  },
-  "allOf": [
+  "oneOf": [
     {
-      "if": {
-        "properties": {
-          "type": {
-            "const": "evidence.recorded"
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "evidence"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha1"
         },
-        "required": ["type"]
-      },
-      "then": {
-        "properties": {
-          "evidence": {}
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
         },
-        "required": ["evidence"]
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "evidence.recorded"
+        },
+        "evidence": {
+          "$ref": "evidence.schema.json"
+        }
       }
     },
     {
-      "if": {
-        "properties": {
-          "type": {
-            "const": "checkpoint.evaluated"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "sequence",
+        "type",
+        "checkpointId",
+        "evidenceRefs",
+        "policyRef"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha1"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "checkpoint.evaluated"
+        },
+        "checkpointId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/identifier"
           }
         },
-        "required": ["type"]
-      },
-      "then": {
-        "properties": {
-          "checkpointId": {},
-          "evidenceRefs": {},
-          "policyRef": {}
-        },
-        "required": ["checkpointId", "evidenceRefs", "policyRef"]
+        "policyRef": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
       }
     },
     {
-      "if": {
-        "properties": {
-          "type": {
-            "const": "receipt.recorded"
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "receipt"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha1"
         },
-        "required": ["type"]
-      },
-      "then": {
-        "properties": {
-          "receipt": {}
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
         },
-        "required": ["receipt"]
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "receipt.recorded"
+        },
+        "receipt": {
+          "$ref": "receipt.schema.json"
+        }
       }
     }
   ]

@@ -7,14 +7,16 @@ digests over canonical UTF-8 bytes.
 Semantic defaults MUST be expanded before hashing. Ambient configuration MUST
 NOT change canonical bytes.
 
-The bootstrap conformance runner currently tests only deterministic key ordering
-for the supported fixture subset. It is not a complete RFC 8785 implementation.
-Full byte-level conformance requires:
+The TypeScript package uses the pinned `canonicalize` RFC 8785 implementation
+and rejects non-I-JSON values before serialization. Content identities use
+lowercase SHA-256 over the canonical UTF-8 bytes.
 
-- a reviewed RFC 8785 implementation;
-- invalid Unicode and number edge cases;
-- official and adversarial fixtures;
-- agreement between at least two languages.
+The conformance suite includes the upstream JSON Canonicalization Scheme
+fixtures for arrays, Unicode, locale-independent ordering, nested structures,
+and ECMAScript number serialization. CI checks those expected bytes with both
+the TypeScript package and the independent Python `rfc8785` implementation.
+Replay fixture state digests pin byte identity across CLI upgrades.
 
-Until then, `CTL-REPLAY-001` is a bootstrap stability requirement, not a stable
-interoperability promise.
+The upstream 100-million-number stress corpus is not run in normal CI.
+Cross-language agreement currently covers the published fixture corpus, not
+every possible IEEE-754 value.

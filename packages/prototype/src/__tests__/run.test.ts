@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  TimelineInputError,
   createRun,
   reduceRun,
   replay,
   verifyRun,
+  type ReceiptRecorded,
   type RunEvent,
 } from "../index.js";
 import { contract } from "./contract.test.js";
@@ -60,6 +62,7 @@ const events: readonly RunEvent[] = [
     },
   },
 ];
+const receiptEvent = events[3] as ReceiptRecorded;
 
 describe("run reducer", () => {
   it("accepts an evidenced checkpoint and joins its effect receipt", () => {
@@ -155,5 +158,67 @@ describe("run reducer", () => {
     expect(replay(contract, "run-42", events)).toEqual(
       replay(contract, "run-42", events),
     );
+  });
+
+  it("corrects a rejected checkpoint by appending evidence", () => {
+    const state = replay(contract, "run-42", [
+      events[0]!,
+      { ...events[2]!, sequence: 1, evidenceRefs: ["ci-42"] },
+      { ...events[1]!, sequence: 2 },
+      {
+        ...events[2]!,
+        id: "event-3",
+        sequence: 3,
+        evidenceRefs: ["ci-42", "review-42"],
+      },
+      {
+        ...receiptEvent,
+        id: "event-4",
+        sequence: 4,
+        receipt: {
+          ...receiptEvent.receipt,
+          commandId: "run-42:release-ready:3",
+        },
+      },
+    ]);
+
+    expect(state.checkpoints["release-ready"]?.status).toBe("accepted");
+    expect(verifyRun(state).ok).toBe(true);
+  });
+
+  it("records duplicate event and receipt findings", () => {
+    const state = replay(contract, "run-42", [
+      ...events,
+      {
+        ...receiptEvent,
+        id: "event-3",
+        sequence: 4,
+      },
+      {
+        ...receiptEvent,
+        id: "event-5",
+        sequence: 5,
+      },
+    ]);
+
+    expect(state.findings.map(({ code }) => code)).toEqual([
+      "timeline.event.duplicate",
+      "timeline.receipt.duplicate",
+    ]);
+  });
+
+  it("exposes stable codes for fatal input errors", () => {
+    try {
+      reduceRun(contract, createRun(contract, "run-42"), {
+        ...events[0]!,
+        sequence: 1,
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(TimelineInputError);
+      expect((error as TimelineInputError).code).toBe(
+        "timeline.event.sequence",
+      );
+    }
   });
 });

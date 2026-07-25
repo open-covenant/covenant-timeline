@@ -1,0 +1,51 @@
+[
+  {
+    "id": "run.successful",
+    "file": "runs/successful.json",
+    "expect": {
+      "valid": true,
+      "ok": true,
+      "checkpoint": "accepted",
+      "stateDigest": "sha256:8b65911cc4907e5939ae955728e9b5b38d6df8f6fc08966fe03ff588d3f2fe06"
+    }
+  },
+  {
+    "id": "run.rejected",
+    "file": "runs/rejected.json",
+    "expect": {
+      "valid": true,
+      "ok": false,
+      "checkpoint": "rejected",
+      "stateDigest": "sha256:7f8bd691777e39ba9b15f242d3dd7dcf9060a21b486eaeac0cf3611811c33caf"
+    }
+  },
+  {
+    "id": "run.incomplete",
+    "file": "runs/incomplete.json",
+    "expect": {
+      "valid": true,
+      "ok": false,
+      "checkpoint": "pending",
+      "stateDigest": "sha256:93b71418d120c86e22cba05edbafb008bb9c7a2b60730caa92293a458a01ed49"
+    }
+  },
+  {
+    "id": "run.corrected",
+    "file": "runs/corrected.json",
+    "expect": {
+      "valid": true,
+      "ok": true,
+      "checkpoint": "accepted",
+      "stateDigest": "sha256:219a8a93688ffd08386ed8da41182e84fccb113b7e113bdfcd06e74f5d62ec3b"
+    }
+  },
+  {
+    "id": "run.malformed",
+    "file": "runs/malformed.json",
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid",
+      "issuePaths": ["events[0].evidence.producer", "events[0].sequence"]
+    }
+  }
+]

@@ -108,10 +108,14 @@ function run(executable, args, options) {
     ...options,
     encoding: "utf8",
     env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
+    shell: process.platform === "win32",
   });
   if (result.status !== 0) {
     throw new Error(
-      [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
+      [result.error?.message, result.stdout, result.stderr]
+        .filter(Boolean)
+        .join("\n")
+        .trim(),
     );
   }
   return result.stdout;

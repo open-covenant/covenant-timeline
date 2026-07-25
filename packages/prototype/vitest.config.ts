@@ -4,5 +4,17 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/__tests__/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/__tests__/**"],
+      thresholds: {
+        statements: 80,
+        branches: 70,
+        functions: 90,
+        lines: 80,
+      },
+    },
   },
 });

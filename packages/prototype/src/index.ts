@@ -11,19 +11,36 @@ export {
 export {
   TimelineDocumentError,
   parseRunDocument,
+  validateCommand,
+  validateDecision,
+  validateEvidence,
   validateEvent,
   validatePortableDocument,
+  validateReceipt,
   validateRunDocument,
   type TimelineRunDocument,
 } from "./document.js";
 export {
   TimelineCanonicalizationError,
+  byteDigest,
   canonicalBytes,
   canonicalJson,
   contentDigest,
+  verifyByteDigest,
   type JsonPrimitive,
   type JsonValue,
 } from "./identity.js";
+export {
+  TimelineJsonError,
+  parseJson,
+  type TimelineJsonIssue,
+} from "./json.js";
+export {
+  DEFAULT_TIMELINE_LIMITS,
+  resolveTimelineLimits,
+  type TimelineLimitOptions,
+  type TimelineLimits,
+} from "./limits.js";
 export {
   evaluateRunDocument,
   evaluateValidatedRun,

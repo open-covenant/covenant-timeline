@@ -1,3 +1,14 @@
+import {
+  canonicalJson,
+  TimelineCanonicalizationError,
+  type JsonValue,
+} from "./identity.js";
+import {
+  resolveTimelineLimits,
+  type TimelineLimitOptions,
+  type TimelineLimits,
+} from "./limits.js";
+
 export interface Subject {
   kind: string;
   id: string;
@@ -35,6 +46,7 @@ export interface ValidationIssue {
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
 
 export class TimelineContractError extends Error {
+  readonly code = "schema.invalid";
   readonly issues: readonly ValidationIssue[];
 
   constructor(issues: readonly ValidationIssue[]) {
@@ -44,7 +56,11 @@ export class TimelineContractError extends Error {
   }
 }
 
-export function validateContract(contract: unknown): ValidationIssue[] {
+export function validateContract(
+  contract: unknown,
+  options: TimelineLimitOptions = {},
+): ValidationIssue[] {
+  const limits = resolveTimelineLimits(options);
   const issues: ValidationIssue[] = [];
   const value = asRecord(contract);
   if (!value) {
@@ -77,11 +93,20 @@ export function validateContract(contract: unknown): ValidationIssue[] {
   if (!Array.isArray(value.checkpoints)) {
     issues.push({ path: "checkpoints", message: "must be an array" });
   } else {
-    validateCheckpoints(value.checkpoints, issues);
+    validateCheckpoints(value.checkpoints, issues, limits);
   }
 
   if (value.extensions !== undefined) {
-    validateExtensions(value.extensions, issues);
+    validateExtensions(value.extensions, issues, limits);
+  }
+  try {
+    canonicalJson(value as JsonValue, limits);
+  } catch (error) {
+    if (error instanceof TimelineCanonicalizationError) {
+      issues.push({ path: error.path, message: error.reason });
+    } else {
+      throw error;
+    }
   }
 
   return issues;
@@ -90,6 +115,7 @@ export function validateContract(contract: unknown): ValidationIssue[] {
 function validateCheckpoints(
   checkpoints: readonly unknown[],
   issues: ValidationIssue[],
+  limits: TimelineLimits,
 ): void {
   if (checkpoints.length === 0) {
     issues.push({
@@ -97,9 +123,15 @@ function validateCheckpoints(
       message: "must contain at least one checkpoint",
     });
   }
+  if (checkpoints.length > limits.maxCheckpoints) {
+    issues.push({
+      path: "checkpoints",
+      message: `must contain at most ${limits.maxCheckpoints} checkpoints`,
+    });
+  }
 
   const checkpointIds = new Set<string>();
-  checkpoints.forEach((entry, index) => {
+  checkpoints.slice(0, limits.maxCheckpoints).forEach((entry, index) => {
     const path = `checkpoints[${index}]`;
     const checkpoint = asRecord(entry);
     if (!checkpoint) {
@@ -122,7 +154,7 @@ function validateCheckpoints(
         message: "must be an array",
       });
     } else {
-      validateRequirements(checkpoint.requirements, path, issues);
+      validateRequirements(checkpoint.requirements, path, issues, limits);
     }
 
     if (checkpoint.onAccept !== undefined) {
@@ -154,6 +186,7 @@ function validateRequirements(
   requirements: readonly unknown[],
   checkpointPath: string,
   issues: ValidationIssue[],
+  limits: TimelineLimits,
 ): void {
   if (requirements.length === 0) {
     issues.push({
@@ -161,21 +194,36 @@ function validateRequirements(
       message: "must contain at least one evidence claim",
     });
   }
+  if (requirements.length > limits.maxRequirementsPerCheckpoint) {
+    issues.push({
+      path: `${checkpointPath}.requirements`,
+      message: `must contain at most ${limits.maxRequirementsPerCheckpoint} entries`,
+    });
+  }
 
   const seen = new Set<string>();
-  requirements.forEach((requirement, index) => {
-    const path = `${checkpointPath}.requirements[${index}]`;
-    validateIdentifier(requirement, path, issues);
-    if (typeof requirement === "string") {
-      if (seen.has(requirement)) {
-        issues.push({ path, message: "must be unique within the checkpoint" });
+  requirements
+    .slice(0, limits.maxRequirementsPerCheckpoint)
+    .forEach((requirement, index) => {
+      const path = `${checkpointPath}.requirements[${index}]`;
+      validateIdentifier(requirement, path, issues);
+      if (typeof requirement === "string") {
+        if (seen.has(requirement)) {
+          issues.push({
+            path,
+            message: "must be unique within the checkpoint",
+          });
+        }
+        seen.add(requirement);
       }
-      seen.add(requirement);
-    }
-  });
+    });
 }
 
-function validateExtensions(value: unknown, issues: ValidationIssue[]): void {
+function validateExtensions(
+  value: unknown,
+  issues: ValidationIssue[],
+  limits: TimelineLimits,
+): void {
   const extensions = asRecord(value);
   if (!extensions) {
     issues.push({ path: "extensions", message: "must be an object" });
@@ -190,27 +238,57 @@ function validateExtensions(value: unknown, issues: ValidationIssue[]): void {
         message: "must be an array",
       });
     } else {
-      extensions.required.forEach((entry, index) => {
-        if (typeof entry !== "string" || !isAbsoluteUrl(entry)) {
-          issues.push({
-            path: `extensions.required[${index}]`,
-            message: "must be an absolute URI",
-          });
-        } else {
-          issues.push({
-            path: `extensions.required[${index}]`,
-            message: "required extension is not supported",
-          });
-        }
-      });
+      if (extensions.required.length > limits.maxRequirementsPerCheckpoint) {
+        issues.push({
+          path: "extensions.required",
+          message: `must contain at most ${limits.maxRequirementsPerCheckpoint} entries`,
+        });
+      }
+      const seen = new Set<string>();
+      extensions.required
+        .slice(0, limits.maxRequirementsPerCheckpoint)
+        .forEach((entry, index) => {
+          if (typeof entry !== "string" || !isAbsoluteUrl(entry)) {
+            issues.push({
+              path: `extensions.required[${index}]`,
+              message: "must be an absolute URI",
+            });
+          } else {
+            issues.push({
+              path: `extensions.required[${index}]`,
+              message: "required extension is not supported",
+            });
+          }
+          if (typeof entry === "string") {
+            if (seen.has(entry)) {
+              issues.push({
+                path: `extensions.required[${index}]`,
+                message: "must be unique",
+              });
+            }
+            seen.add(entry);
+          }
+        });
     }
   }
 
-  if (extensions.optional !== undefined && !asRecord(extensions.optional)) {
-    issues.push({
-      path: "extensions.optional",
-      message: "must be an object",
-    });
+  if (extensions.optional !== undefined) {
+    const optional = asRecord(extensions.optional);
+    if (!optional) {
+      issues.push({
+        path: "extensions.optional",
+        message: "must be an object",
+      });
+    } else {
+      for (const key of Object.keys(optional)) {
+        if (!isAbsoluteUrl(key)) {
+          issues.push({
+            path: `extensions.optional.${key}`,
+            message: "property name must be an absolute URI",
+          });
+        }
+      }
+    }
   }
 }
 

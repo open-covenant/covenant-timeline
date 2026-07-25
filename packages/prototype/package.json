@@ -3,6 +3,22 @@
   "version": "0.0.0-alpha.1",
   "description": "Temporal contract reducer and verifier for long-running work.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-covenant/covenant-timeline.git",
+    "directory": "packages/prototype"
+  },
+  "homepage": "https://github.com/open-covenant/covenant-timeline#readme",
+  "bugs": {
+    "url": "https://github.com/open-covenant/covenant-timeline/issues"
+  },
+  "keywords": [
+    "audit",
+    "event-sourcing",
+    "provenance",
+    "replay",
+    "workflow"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,33 +29,39 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm run build",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+    "coverage": "vitest run --coverage",
+    "clean": "node ../../scripts/clean.mjs dist tsconfig.tsbuildinfo"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "4.1.10",
     "typescript": "6.0.3",
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "sideEffects": false,
   "dependencies": {
-    "canonicalize": "3.0.0"
+    "canonicalize": "3.0.0",
+    "jsonc-parser": "3.3.1"
   }
 }

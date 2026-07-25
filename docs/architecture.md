@@ -73,8 +73,10 @@ Required properties:
 - a receipt joins one known command;
 - replay returns command records but never executes them.
 
-The current TypeScript prototype implements this model. It does not yet claim
-byte-level interoperability.
+The current TypeScript implementation binds state to canonical contract bytes,
+uses an internal linear replay accumulator, and preserves immutable public
+single-event reduction. TypeScript and Python agree on the canonicalization
+fixture corpus; no independent reducer exists yet.
 
 ## Evidence
 
@@ -122,6 +124,10 @@ Adapters enforce authorization, expiry, limits, and idempotency. Timeline
 verifies that a receipt refers to a known command. It does not claim exactly-once
 execution against uncontrolled systems.
 
+Acceptance is final within one run. A later evaluation produces a finding and
+no command. Rejected checkpoints may be corrected by appending evidence and a
+new evaluation.
+
 ## Covenant adapter
 
 The Covenant integration translates between existing Covenant records and the
@@ -159,13 +165,10 @@ An adapter must not:
 
 ## Canonicalization
 
-Normative objects will use I-JSON-compatible values and RFC 8785 canonical JSON.
-Content identifiers will use SHA-256 over canonical UTF-8 bytes.
-
-The bootstrap conformance runner currently includes only a small stable-JSON
-check. It is not the normative RFC 8785 implementation. M2 requires a reviewed
-implementation, official edge-case fixtures, and cross-language agreement
-before byte identity becomes a compatibility promise.
+Normative objects use I-JSON-compatible values and RFC 8785 canonical JSON.
+Content identifiers use SHA-256 over canonical UTF-8 bytes. Strict CLI parsing
+rejects duplicate keys before canonicalization, and TypeScript/Python fixture
+agreement is enforced in CI.
 
 ## Storage
 

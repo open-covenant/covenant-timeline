@@ -4,7 +4,9 @@ import {
   createRun,
   reduceRun,
   replay,
+  validateCommand,
   verifyRun,
+  type EvidenceRecorded,
   type ReceiptRecorded,
   type RunEvent,
 } from "../index.js";
@@ -63,6 +65,7 @@ const events: readonly RunEvent[] = [
   },
 ];
 const receiptEvent = events[3] as ReceiptRecorded;
+const evidenceEvent = events[0] as EvidenceRecorded;
 
 describe("run reducer", () => {
   it("accepts an evidenced checkpoint and joins its effect receipt", () => {
@@ -77,6 +80,9 @@ describe("run reducer", () => {
       missingRequirements: [],
     });
     expect(verifyRun(state)).toEqual({
+      scope: "structural",
+      evidenceAuthority: "external",
+      effectAuthority: "external",
       ok: true,
       pendingCheckpoints: [],
       rejectedCheckpoints: [],
@@ -220,5 +226,161 @@ describe("run reducer", () => {
         "timeline.event.sequence",
       );
     }
+  });
+
+  it("binds incremental state to the exact contract bytes", () => {
+    const state = createRun(contract, "run-42");
+    const substituted = {
+      ...contract,
+      checkpoints: [
+        {
+          ...contract.checkpoints[0]!,
+          requirements: ["attacker.asserted"],
+        },
+      ],
+    };
+
+    expect(() => reduceRun(substituted, state, events[0]!)).toThrowError(
+      expect.objectContaining({
+        code: "timeline.run.contract_mismatch",
+      }),
+    );
+    expect(() => reduceRun(contract, { ...state }, events[0]!)).toThrowError(
+      expect.objectContaining({
+        code: "timeline.run.contract_mismatch",
+      }),
+    );
+  });
+
+  it("does not emit another command after checkpoint acceptance", () => {
+    const repeated = {
+      ...events[2]!,
+      id: "event-3",
+      sequence: 3,
+    };
+    const state = replay(contract, "run-42", [...events.slice(0, 3), repeated]);
+
+    expect(Object.keys(state.commands)).toEqual(["run-42:release-ready:2"]);
+    expect(state.findings).toContainEqual({
+      code: "timeline.checkpoint.finalized",
+      eventId: "event-3",
+      detail: "release-ready",
+    });
+  });
+
+  it("accepts identifiers that match inherited object property names", () => {
+    const event = {
+      ...evidenceEvent,
+      id: "constructor",
+      evidence: { ...evidenceEvent.evidence, id: "constructor" },
+    };
+    const state = replay(contract, "constructor", [event]);
+
+    expect(state.findings).toEqual([]);
+    expect(state.evidence.constructor).toMatchObject({ id: "constructor" });
+  });
+
+  it("rejects one receipt identifier reused for another command", () => {
+    const twoCheckpoints = {
+      ...contract,
+      checkpoints: [
+        contract.checkpoints[0]!,
+        { ...contract.checkpoints[0]!, id: "deploy-ready" },
+      ],
+    };
+    const state = replay(twoCheckpoints, "run-42", [
+      events[0]!,
+      events[1]!,
+      events[2]!,
+      {
+        ...events[2]!,
+        id: "event-3",
+        sequence: 3,
+        checkpointId: "deploy-ready",
+      },
+      {
+        ...receiptEvent,
+        id: "event-4",
+        sequence: 4,
+      },
+      {
+        ...receiptEvent,
+        id: "event-5",
+        sequence: 5,
+        receipt: {
+          ...receiptEvent.receipt,
+          commandId: "run-42:deploy-ready:3",
+        },
+      },
+    ]);
+
+    expect(state.findings).toContainEqual({
+      code: "timeline.receipt.id_duplicate",
+      eventId: "event-5",
+      detail: "receipt-42",
+    });
+  });
+
+  it("rejects malformed runtime events before reduction", () => {
+    expect(() =>
+      reduceRun(contract, createRun(contract, "run-42"), {
+        ...events[0]!,
+        type: "unsupported",
+      } as unknown as RunEvent),
+    ).toThrowError(expect.objectContaining({ code: "schema.invalid" }));
+  });
+
+  it("replays a large evidence stream without quadratic copying", () => {
+    const digest =
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+    const largeRun = Array.from({ length: 5_000 }, (_, index) => ({
+      schema: "covenant.timeline.event.v0alpha1" as const,
+      id: `event-${index}`,
+      sequence: index,
+      type: "evidence.recorded" as const,
+      evidence: {
+        id: `evidence-${index}`,
+        kind: "test",
+        claims: ["test.observed"],
+        payloadDigest: digest,
+        producer: "test",
+      },
+    }));
+
+    expect(replay(contract, "load-test", largeRun).nextSequence).toBe(5_000);
+  });
+
+  it("emits schema-valid commands at maximum run and checkpoint ID lengths", () => {
+    const checkpointId = `c${"x".repeat(127)}`;
+    const longContract = {
+      ...contract,
+      checkpoints: [
+        {
+          id: checkpointId,
+          requirements: ["ready"],
+          onAccept: contract.checkpoints[0]!.onAccept,
+        },
+      ],
+    };
+    const runId = `r${"x".repeat(127)}`;
+    const state = replay(longContract, runId, [
+      {
+        ...evidenceEvent,
+        evidence: {
+          ...evidenceEvent.evidence,
+          claims: ["ready"],
+        },
+      },
+      {
+        ...events[2]!,
+        sequence: 1,
+        checkpointId,
+        evidenceRefs: [evidenceEvent.evidence.id],
+      },
+    ]);
+    const command = Object.values(state.commands)[0];
+
+    expect(command?.id.length).toBeGreaterThan(128);
+    expect(validateCommand(command)).toEqual([]);
   });
 });

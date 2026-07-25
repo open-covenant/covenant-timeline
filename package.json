@@ -7,24 +7,27 @@
   "type": "module",
   "packageManager": "pnpm@10.31.0",
   "engines": {
-    "node": ">=22.0.0",
-    "pnpm": ">=10.0.0"
+    "node": "^22.0.0 || ^24.0.0",
+    "pnpm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
     "boundary:check": "node scripts/check-boundaries.mjs",
     "build": "pnpm -r --if-present build",
+    "clean": "pnpm -r --if-present clean",
     "conformance:check": "pnpm build && node scripts/check-conformance.mjs",
     "conformance:cross-check": "python3 scripts/check-jcs-python.py",
+    "coverage:check": "pnpm -r --if-present coverage",
     "demo": "pnpm build && node packages/prototype/dist/cli.js verify conformance/v0alpha1/runs/successful.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm -r --if-present lint",
-    "pack:check": "pnpm build && pnpm --filter @covenant-org/timeline pack --dry-run",
+    "pack:check": "node scripts/check-package.mjs",
+    "release:check": "node scripts/check-release.mjs",
     "spec:check": "node scripts/check-spec.mjs",
     "test": "pnpm -r --if-present test",
     "timeline": "node packages/prototype/dist/cli.js",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pack:check"
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

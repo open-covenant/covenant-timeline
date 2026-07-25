@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import canonicalize from "canonicalize";
+import { resolveTimelineLimits, type TimelineLimitOptions } from "./limits.js";
 
 export type JsonPrimitive = boolean | null | number | string;
 export type JsonValue =
@@ -9,16 +10,20 @@ export type JsonValue =
 
 export class TimelineCanonicalizationError extends TypeError {
   constructor(
-    message: string,
+    readonly reason: string,
     readonly path = "$",
   ) {
-    super(`${path}: ${message}`);
+    super(`${path}: ${reason}`);
     this.name = "TimelineCanonicalizationError";
   }
 }
 
-export function canonicalJson(value: JsonValue): string {
-  assertJsonValue(value);
+export function canonicalJson(
+  value: JsonValue,
+  options: TimelineLimitOptions = {},
+): string {
+  const limits = resolveTimelineLimits(options);
+  assertJsonValue(value, "$", new Set(), 0, { nodes: 0 }, limits);
   const result = canonicalize(value);
   if (result === undefined) {
     throw new TimelineCanonicalizationError("value is not JSON");
@@ -26,22 +31,53 @@ export function canonicalJson(value: JsonValue): string {
   return result;
 }
 
-export function canonicalBytes(value: JsonValue): Uint8Array {
-  return new TextEncoder().encode(canonicalJson(value));
+export function canonicalBytes(
+  value: JsonValue,
+  options: TimelineLimitOptions = {},
+): Uint8Array {
+  return new TextEncoder().encode(canonicalJson(value, options));
 }
 
-export function contentDigest(value: JsonValue): `sha256:${string}` {
-  const digest = createHash("sha256")
-    .update(canonicalBytes(value))
-    .digest("hex");
+export function contentDigest(
+  value: JsonValue,
+  options: TimelineLimitOptions = {},
+): `sha256:${string}` {
+  return byteDigest(canonicalBytes(value, options));
+}
+
+export function byteDigest(value: Uint8Array): `sha256:${string}` {
+  const digest = createHash("sha256").update(value).digest("hex");
   return `sha256:${digest}`;
+}
+
+export function verifyByteDigest(value: Uint8Array, expected: string): boolean {
+  if (!/^sha256:[0-9a-f]{64}$/.test(expected)) return false;
+  const actual = Buffer.from(byteDigest(value));
+  return timingSafeEqual(actual, Buffer.from(expected));
 }
 
 function assertJsonValue(
   value: unknown,
-  path = "$",
-  ancestors = new Set<object>(),
+  path: string,
+  ancestors: Set<object>,
+  depth: number,
+  budget: { nodes: number },
+  limits: ReturnType<typeof resolveTimelineLimits>,
 ): asserts value is JsonValue {
+  budget.nodes += 1;
+  if (budget.nodes > limits.maxCanonicalNodes) {
+    throw new TimelineCanonicalizationError(
+      `value exceeds ${limits.maxCanonicalNodes} nodes`,
+      path,
+    );
+  }
+  if (depth > limits.maxCanonicalDepth) {
+    throw new TimelineCanonicalizationError(
+      `value exceeds depth ${limits.maxCanonicalDepth}`,
+      path,
+    );
+  }
+
   if (
     value === null ||
     typeof value === "boolean" ||
@@ -81,21 +117,49 @@ function assertJsonValue(
       path,
     );
   }
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    throw new TimelineCanonicalizationError(
+      "object must not contain symbol properties",
+      path,
+    );
+  }
 
   ancestors.add(value);
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
-      assertJsonValue(entry, `${path}[${index}]`, ancestors),
+      assertJsonValue(
+        entry,
+        `${path}[${index}]`,
+        ancestors,
+        depth + 1,
+        budget,
+        limits,
+      ),
     );
   } else {
-    for (const [key, entry] of Object.entries(value)) {
+    for (const [key, descriptor] of Object.entries(
+      Object.getOwnPropertyDescriptors(value),
+    )) {
       if (hasLoneSurrogate(key)) {
         throw new TimelineCanonicalizationError(
           "property name contains a lone surrogate",
           path,
         );
       }
-      assertJsonValue(entry, `${path}.${key}`, ancestors);
+      if (!("value" in descriptor)) {
+        throw new TimelineCanonicalizationError(
+          "object must not contain accessors",
+          `${path}.${key}`,
+        );
+      }
+      assertJsonValue(
+        descriptor.value,
+        `${path}.${key}`,
+        ancestors,
+        depth + 1,
+        budget,
+        limits,
+      );
     }
   }
   ancestors.delete(value);

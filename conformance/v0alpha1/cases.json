@@ -207,6 +207,28 @@
     }
   },
   {
+    "id": "schema.event-unsafe-sequence",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha1/event.schema.json",
+    "requirements": ["CTL-EVENT-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha1",
+      "id": "event-0",
+      "sequence": 9007199254740992,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "ci",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-actions"
+      }
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
     "id": "schema.event-mixed-variant-fields",
     "targetSchema": "https://covenant-timeline.org/schemas/v0alpha1/event.schema.json",
     "requirements": ["CTL-CORE-002", "CTL-EVENT-001"],

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.0-alpha.1 - 2026-07-25
+
 ### Added
 
 - Standalone project scaffold.
@@ -19,3 +21,25 @@
 - Packable `@covenant-org/timeline@0.0.0-alpha.1` candidate.
 - Covenant reference-adapter fixture covering pause, resume, review, release
   readiness, capability requests, receipts, and offline verification.
+- Strict duplicate-key JSON parsing, bounded CLI input, stdin, and version
+  output.
+- Exact contract-byte state binding and payload-byte digest helpers.
+- Runtime/JSON Schema conformance cross-checks and implementation resource
+  limits.
+- Installed-package, SBOM, supply-chain, and trusted-release verification.
+
+### Changed
+
+- Replay now uses a linear mutable accumulator internally while public
+  single-event reduction remains immutable.
+- Structural verification explicitly reports that evidence and effect
+  authority are external.
+- Accepted checkpoints are final within a run and cannot emit another command.
+- Reducer state carries private exact-contract and receipt-identity bindings
+  without changing portable state digests.
+
+### Security
+
+- Reject duplicate JSON keys, unsafe event sequence integers, inherited-property
+  identifier collisions, repeated receipt IDs, excessive canonical depth, and
+  excessive canonical node counts.

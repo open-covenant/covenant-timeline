@@ -27,3 +27,19 @@ stable release. Published tags and artifacts are not overwritten. Registries
 use short-lived trusted publishing rather than long-lived tokens.
 
 Release provenance links source and build. It is not a security endorsement.
+
+The package workflow uses tags named `timeline-v<package-version>`, builds the
+tarball twice, compares the exact bytes, generates a SHA-256 checksum and SPDX
+SBOM, creates GitHub artifact attestations, and publishes through npm trusted
+publishing from the approval-protected `npm` environment.
+
+Before the first publish, administrators must verify:
+
+- ownership of the `@covenant-org` npm scope;
+- trusted publisher linkage to `open-covenant/covenant-timeline`,
+  `release.yml`, and the `npm` environment;
+- required reviewers on the `npm` environment;
+- tag protection for `timeline-v*`;
+- traditional npm automation tokens are disabled after OIDC succeeds.
+
+Workflow presence is not evidence that these external controls are configured.

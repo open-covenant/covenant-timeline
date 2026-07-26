@@ -1,7 +1,7 @@
 {
   "name": "@covenant-org/timeline",
   "version": "0.0.0-alpha.1",
-  "description": "Temporal contract reducer and verifier for long-running work.",
+  "description": "Checkpoint contract reducer and verifier for long-running work.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

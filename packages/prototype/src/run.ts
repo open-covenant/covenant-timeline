@@ -108,7 +108,10 @@ export interface TimelineReduced {
 
 export interface VerifyRunResult {
   scope: "structural";
+  evaluation: "requirement-coverage";
   evidenceAuthority: "external";
+  policyAuthority: "external";
+  policyBinding: "unverified-event-label";
   effectAuthority: "external";
   ok: boolean;
   pendingCheckpoints: readonly string[];
@@ -253,7 +256,10 @@ export function verifyRun(state: RunState): VerifyRunResult {
 
   return {
     scope: "structural",
+    evaluation: "requirement-coverage",
     evidenceAuthority: "external",
+    policyAuthority: "external",
+    policyBinding: "unverified-event-label",
     effectAuthority: "external",
     ok:
       pendingCheckpoints.length === 0 &&

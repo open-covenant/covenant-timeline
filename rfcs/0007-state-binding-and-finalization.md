@@ -65,10 +65,11 @@ the private binding. Persisted event streams remain the source of truth.
 
 ## Security and Privacy
 
-Exact binding prevents same-ID policy and effect-template substitution.
-Finalization prevents accidental or adversarial duplicate effect eligibility.
-The contract digest reveals no contract bytes that were not already required
-to replay the run.
+Exact binding prevents same-ID requirement and effect-template substitution.
+It does not bind the evaluator-supplied `policyRef`, which is not part of a
+v0alpha1 contract. Finalization prevents accidental or adversarial duplicate
+effect eligibility. The contract digest reveals no contract bytes that were
+not already required to replay the run.
 
 ## Effect-Boundary Impact
 

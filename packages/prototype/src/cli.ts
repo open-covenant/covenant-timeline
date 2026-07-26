@@ -191,7 +191,10 @@ function renderVerify(report: TimelineRunReport): string {
   const lines = [
     `${verification.ok ? "STRUCTURALLY VERIFIED" : "STRUCTURAL VERIFICATION FAILED"} ${report.runId}`,
     `  state ${report.stateDigest}`,
+    "  evaluation requirement coverage",
     "  evidence authority external",
+    "  policy authority external",
+    "  policy binding unverified event label",
     "  effect authority external",
   ];
 

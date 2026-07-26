@@ -53,4 +53,13 @@ console.log(report.stateDigest, report.verification);
 An adopter executes newly emitted commands outside Timeline and appends the
 result as a later receipt event. Replaying the exported run never calls that
 adapter. `verification.ok` establishes structural completeness only; evidence
-authority and external effect truth remain adopter responsibilities.
+authority, evaluator policy, and external effect truth remain adopter
+responsibilities.
+
+Core v0alpha1 records `policyRef` from a checkpoint-evaluation event. It does
+not load that policy, verify its identity, or compare it with the contract.
+
+Persist the contract and accepted event stream as the source of truth.
+`RunState` contains private in-process binding metadata and cannot be spread,
+serialized, or reconstructed for incremental continuation. After restart,
+replay the exact contract and complete event stream.

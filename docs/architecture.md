@@ -7,11 +7,13 @@ A timeline contract is immutable input describing:
 - the subject being evaluated;
 - ordered checkpoints;
 - the evidence claims required at each checkpoint;
-- the policy used to evaluate those claims;
 - optional effect requests that become eligible after acceptance.
 
 A run is an ordered event stream applied to a pinned contract. The exported run
 contains enough information for another implementation to replay its decisions.
+Core v0alpha1's only evaluator is requirement coverage over referenced claim
+strings. A checkpoint-evaluation event also supplies a `policyRef` label, but
+the contract does not bind or authenticate that label.
 
 ## Boundary
 
@@ -40,15 +42,15 @@ DBOS, a CI system, or an application database owns durability and execution.
 
 ## First-release objects
 
-| Object    | Responsibility                                                   |
-| --------- | ---------------------------------------------------------------- |
-| Contract  | Pins subject, checkpoints, requirements, and effect templates    |
-| Event     | Adds one ordered input to a run                                  |
-| Evidence  | References material supporting named claims                      |
-| Decision  | Records checkpoint outcome, policy, evidence, and missing claims |
-| Command   | Requests an idempotent external effect                           |
-| Receipt   | Records the observed result of one command                       |
-| Run state | Projection derived by replaying accepted events                  |
+| Object    | Responsibility                                                |
+| --------- | ------------------------------------------------------------- |
+| Contract  | Pins subject, checkpoints, requirements, and effect templates |
+| Event     | Adds one ordered input to a run                               |
+| Evidence  | References material supporting named claims                   |
+| Decision  | Records outcome, policy label, evidence, and missing claims   |
+| Command   | Requests an idempotent external effect                        |
+| Receipt   | Records the observed result of one command                    |
+| Run state | Projection derived by replaying accepted events               |
 
 Compilation, branches, attestations, and domain scorecards may be introduced
 later. They are not required to understand or implement the initial reducer.
@@ -67,7 +69,8 @@ Required properties:
 - identical pinned inputs produce identical output;
 - input ordering is explicit and gaps fail;
 - evidence is append-only within a run;
-- a checkpoint decision names its policy and evidence set;
+- a checkpoint decision retains its evaluator-supplied policy label and
+  evidence set;
 - missing requirements remain visible;
 - every command has a stable idempotency key;
 - a receipt joins one known command;
@@ -101,15 +104,17 @@ A checkpoint evaluation produces:
 
 ```text
 checkpoint
-policy reference
+recorded policy label
 evidence references
 missing requirements
 accepted | rejected
 ```
 
-There is no default scoring function. A domain may publish a versioned
-evaluation policy, but its dimensions and weights are explicit inputs. A score
-cannot directly become authority.
+The outcome above is requirement coverage, not execution of the named policy.
+Core v0alpha1 neither loads `policyRef` nor compares it with contract input. A
+domain may publish a versioned evaluation policy, but an adopter must
+authenticate and enforce it outside this reducer. A score cannot directly
+become authority.
 
 ## Commands and receipts
 
@@ -148,7 +153,7 @@ events must remain verifiable without Covenant.
 
 An adapter may:
 
-- persist contracts, events, and snapshots;
+- persist contracts, events, and replaceable acceleration snapshots;
 - deliver events with retries;
 - schedule future observations;
 - call effectors for newly emitted commands;
@@ -184,6 +189,12 @@ verification manifest
 
 Snapshots are acceleration artifacts. Verification can always restart from the
 contract and accepted event stream.
+
+The reference implementation's `RunState` carries private binding metadata in
+process memory. Spreading, serializing, or reconstructing it intentionally
+loses that metadata, and incremental reduction then fails closed. No snapshot
+hydration API exists in v0alpha1. After a process boundary, the portable
+continuation path is full replay from the exact contract and accepted events.
 
 ## Versioning
 

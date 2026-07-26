@@ -23,15 +23,17 @@ requires:
 - signed checksums, SPDX SBOMs, and provenance attestations.
 
 Single-maintainer bootstrap may publish `0.0.x` previews but cannot publish a
-stable release. Published tags and artifacts are not overwritten. Registries
-use short-lived trusted publishing rather than long-lived tokens.
+stable release. Published tags and artifacts are not overwritten. Registry
+authentication must be short-lived: OIDC trusted publishing is preferred, and
+a protected-environment token is an allowed fallback.
 
 Release provenance links source and build. It is not a security endorsement.
 
 The package workflow uses tags named `timeline-v<package-version>`, builds the
 tarball twice, compares the exact bytes, generates a SHA-256 checksum and SPDX
-SBOM, creates GitHub artifact attestations, and is designed to publish through
-npm trusted publishing from the `npm` environment.
+SBOM, creates GitHub artifact attestations, and publishes from the protected
+`npm` environment. [npm uses a configured OIDC trusted publisher before
+falling back to a token](https://docs.npmjs.com/trusted-publishers/).
 
 The bootstrap `0.0.0-alpha.1` package established ownership of the
 `@covenant-org` release path with a one-time token. That token and its GitHub
@@ -39,9 +41,14 @@ environment secret were removed after the release. Before any later publish,
 administrators must verify:
 
 - trusted publisher linkage to `open-covenant/covenant-timeline`,
-  `release.yml`, and the `npm` environment;
+  `release.yml`, and the `npm` environment, or a short-lived granular
+  `NPM_TOKEN`;
 - required reviewers on the `npm` environment;
 - tag protection for `timeline-v*`;
-- no traditional npm automation token is configured.
+- token fallback, when used, is limited to `@covenant-org/timeline`, permits
+  publish with 2FA bypass, has the shortest practical expiration, exists only
+  in the protected environment, and is revoked after the run.
 
 Workflow presence is not evidence that these external controls are configured.
+Trusted publishing remains the preferred end state, not a prerequisite for a
+release.

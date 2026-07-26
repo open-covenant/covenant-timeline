@@ -4,6 +4,10 @@ This guide defines the evidence needed to count an M4 adoption. Copying the
 reference adapter or replaying a fixture is useful integration work, but it is
 not independent operation.
 
+Start with the bounded [independent operator pilot](./operator-pilot.md). The
+pilot is intentionally small; the evidence requirements below remain the gate
+for counting an adoption.
+
 ## Integration path
 
 1. Pin a released package or an exact repository commit.

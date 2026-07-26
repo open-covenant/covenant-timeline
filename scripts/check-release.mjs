@@ -4,6 +4,7 @@ const manifest = JSON.parse(
   await readFile("packages/prototype/package.json", "utf8"),
 );
 const changelog = await readFile("CHANGELOG.md", "utf8");
+const workflow = await readFile(".github/workflows/release.yml", "utf8");
 const refName = process.env.GITHUB_REF_NAME;
 const tag =
   process.argv.find((argument) => argument.startsWith("timeline-v")) ??
@@ -41,6 +42,15 @@ for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
 await access("packages/prototype/LICENSE").catch(() => {
   errors.push("package LICENSE is missing");
 });
+if (!workflow.includes("id-token: write")) {
+  errors.push("release workflow must support npm OIDC");
+}
+if (
+  !workflow.includes("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}") ||
+  !workflow.includes("--provenance")
+) {
+  errors.push("release workflow must support token fallback with provenance");
+}
 
 if (errors.length > 0) {
   console.error(errors.join("\n"));

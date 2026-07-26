@@ -15,6 +15,7 @@
 - Add a Python v0alpha2 reducer checked against the TypeScript state-digest
   corpus.
 - Add atomic portable run archives and a 50,000-event replay benchmark.
+- Add a bounded independent-operator pilot and proposal template.
 
 ### Changed
 
@@ -26,6 +27,8 @@
   boundary in machine and CLI verification output.
 - Document replay from the exact contract and event stream as the only portable
   restart path; `RunState` is not a hydration format.
+- Allow the protected npm release workflow to use a short-lived,
+  package-scoped token when OIDC trusted publishing is unavailable.
 
 ## 0.0.0-alpha.1 - 2026-07-26
 

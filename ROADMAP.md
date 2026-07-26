@@ -100,7 +100,9 @@ Status: implementation complete; external adoption pending
 - [ ] Independently operated adapter. A Temporal reference adapter now passes a
       real local-server worker-restart test, but it is maintained here. The
       required external evidence is defined in
-      [`docs/adoption-guide.md`](./docs/adoption-guide.md).
+      [`docs/adoption-guide.md`](./docs/adoption-guide.md), and the bounded
+      recruitment path is defined in
+      [`docs/operator-pilot.md`](./docs/operator-pilot.md).
 - [x] Public longitudinal archive spanning five source days, separate collector
       processes, CI, approved review, archive effect, and receipt verification.
       The source project did not adopt Timeline.

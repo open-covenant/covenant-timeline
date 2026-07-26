@@ -21,9 +21,9 @@ This is still a production-hardened alpha, not an independently proven
 production protocol. The Temporal adapter and Python reducer are maintained in
 this repository. The external project represented by the public archive did
 not adopt Timeline. “Timeline” still means ordered event history rather than
-deadlines or temporal logic. Trusted-publisher linkage, protected release
-approval, external operation, and independently maintained interoperability
-remain real release and adoption blockers.
+deadlines or temporal logic. Protected release approval, external operation,
+and independently maintained interoperability remain real release and adoption
+blockers.
 
 This audit treats "production ready" as two separate gates:
 
@@ -36,7 +36,7 @@ This audit treats "production ready" as two separate gates:
    release governance is independently exercised.
 
 The first gate is achievable in this repository. The second requires external
-adopters and registry/governance configuration and must remain an explicit
+adopters and independently exercised governance and must remain an explicit
 blocker until observed.
 
 ## Evidence Reviewed
@@ -113,8 +113,8 @@ blocker until observed.
       duplicates, comments, and trailing commas.
 - [x] **Create a fail-closed release workflow.** Releases need tag/version
       agreement, a clean rebuild, tests, artifact inspection, checksums, SBOM,
-      provenance, and a tag-restricted npm environment. The workflow now has no
-      token fallback, so it fails closed until trusted publishing is linked.
+      provenance, and a tag-restricted npm environment. The workflow supports
+      OIDC first and a short-lived protected-environment token fallback.
 - [x] **Protect `main` and release tags.** `main` now requires the seven observed
       first-party checks and pull-request flow with administrator enforcement;
       force pushes and deletion are disabled. `timeline-v*` tags cannot be
@@ -122,8 +122,6 @@ blocker until observed.
 - [x] **Establish registry package authority.**
       `@covenant-org/timeline@0.0.0-alpha.1` was published from the protected
       release tag with registry provenance and independently verified bytes.
-- [ ] **Complete credentialless release governance.** Trusted publisher
-      configuration and required `npm` environment reviewers remain unverified.
 
 ## High Priority (P1 - Fix Before Launch)
 
@@ -189,6 +187,9 @@ blocker until observed.
       an operational constraint.
 - [ ] **Exercise rollback.** Verify package deprecation/yank instructions and
       historical run verification against a released artifact.
+- [ ] **Complete credentialless publishing.** Exercise OIDC trusted publishing
+      and require `npm` environment reviewers. This is preferred supply-chain
+      hardening; the short-lived token path keeps releases available.
 
 ## Low Priority (P3 - Technical Debt)
 
@@ -288,8 +289,8 @@ Recommended host metrics:
    interoperability claim.
 3. Exercise accepted-decision correction and branch semantics only from a real
    incident; do not invent an untested branch protocol.
-4. Link npm trusted publishing and require protected environment approval before
-   the next package release.
+4. Require protected environment approval and prefer npm trusted publishing;
+   use the short-lived token fallback when OIDC configuration is unavailable.
 5. Exercise deprecation and historical verification before declaring rollback
    operational.
 6. Add portable snapshot hydration only if independent measurements require it.
@@ -303,7 +304,7 @@ Recommended host metrics:
   count.
 - No portable snapshot hydration test; intentionally deferred because replay at
   the supported maximum remains subsecond locally.
-- No trusted-publisher release exercise for the next package version.
+- No OIDC trusted-publisher exercise for the next package version.
 
 ## Action Plan
 
@@ -312,7 +313,7 @@ Recommended host metrics:
    weakening the evidence standard.
 3. Transfer or reimplement one adapter or reducer under independent governance.
 4. Record real correction incidents before specifying branch semantics.
-5. Complete trusted-publisher linkage and protected-environment review before
-   the next npm release.
+5. Complete protected-environment review before the next npm release; exercise
+   OIDC when available without making external configuration a release gate.
 6. Exercise package deprecation and historical verification as a rollback
    drill.

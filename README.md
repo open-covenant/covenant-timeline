@@ -27,6 +27,11 @@ Covenant is the first reference adopter. It is not a required dependency.
   independently. The Temporal adapter and public archive are maintained here
   and do not count as independent adoption.
 
+[Run the first independent operator pilot](./docs/operator-pilot.md) with one
+existing workflow, one checkpoint, one process restart, and one redacted
+portable run. A small independent maintainer qualifies; this does not require a
+partnership with a workflow vendor.
+
 ## Why this exists
 
 Long-running agent work survives process restarts, model changes, handoffs,
@@ -173,9 +178,9 @@ Not implemented:
 
 `@covenant-org/timeline@0.0.0-alpha.1` is published on npm under the `next`
 channel with registry provenance. v0alpha2 and the Temporal adapter are
-currently source-only and have not been published. Future releases require the
-npm trusted publisher to be linked to the repository workflow; no long-lived
-npm token is stored in GitHub.
+currently source-only and have not been published. Future releases prefer npm
+trusted publishing but can use a short-lived, package-scoped token from the
+protected `npm` environment. No long-lived npm token is stored in GitHub.
 
 `verification.ok` means the pinned run is structurally complete under its
 declared claims. Generic replay does not re-run profile proofs or verify real
@@ -231,6 +236,7 @@ They are not part of the first release.
 - [`profiles/github/v1`](./profiles/github/v1): software-delivery authority
 - [`implementations/python`](./implementations/python): second-language reducer
 - [`examples/public-runs`](./examples/public-runs): signed public run archive
+- [`docs/operator-pilot.md`](./docs/operator-pilot.md): first-operator pilot
 - [`docs/adoption-guide.md`](./docs/adoption-guide.md): independent-adoption
   evidence contract
 - [`rfcs`](./rfcs): design decisions and unresolved questions

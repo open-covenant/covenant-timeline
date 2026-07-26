@@ -1,0 +1,61 @@
+name: Independent operator pilot
+description: Propose a small externally operated Timeline pilot.
+title: "pilot: "
+labels: ["adoption", "help wanted"]
+body:
+  - type: input
+    id: project
+    attributes:
+      label: External project
+      description: Link the repository where the integration and run will be operated.
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Host runtime
+      options:
+        - Temporal
+        - Restate
+        - DBOS
+        - Existing service or job system
+        - Other durable runtime
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow and checkpoint
+      description: Describe one real workflow, one checkpoint, and its authenticated evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: restart
+    attributes:
+      label: Restart boundary
+      description: Explain which process will restart and where the contract and event stream will persist.
+    validations:
+      required: true
+  - type: textarea
+    id: effect
+    attributes:
+      label: Low-risk effect
+      description: Describe the idempotent effect and receipt that will complete the run.
+    validations:
+      required: true
+  - type: textarea
+    id: support
+    attributes:
+      label: Maintainer support requested
+      description: Identify the contract, profile, adapter, or verification help needed.
+    validations:
+      required: true
+  - type: checkboxes
+    id: independence
+    attributes:
+      label: Operator boundary
+      options:
+        - label: The run, evidence admission, persistence, and effect dispatch will be operated outside Open Covenant.
+          required: true
+        - label: Any public archive will exclude secrets, private payloads, and live credentials.
+          required: true

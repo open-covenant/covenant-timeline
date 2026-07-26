@@ -2,10 +2,10 @@
 
 ## Definition
 
-Covenant Timeline's next architecture is a portable, proof-carrying temporal
-reasoning substrate. A model or application proposes explicit temporal records
-and a typed query. A deterministic kernel returns a canonical result and a
-reasoner-bound proof receipt.
+Covenant Timeline is a portable, proof-carrying temporal reasoning substrate. A
+model or application proposes explicit temporal records and a typed query. A
+deterministic kernel returns a canonical result and a reasoner-bound proof
+receipt.
 
 The experimental v0alpha3 contract declares:
 
@@ -21,8 +21,7 @@ Every query pins a context and an explicit event-prefix knowledge cut. Every
 conclusion binds the projected state, query, semantic result, reasoner, and
 proof.
 
-v0alpha1 and v0alpha2 are checkpoint compatibility formats. They remain
-replayable, but checkpoints are not the center of the v0alpha3 architecture.
+v0alpha1 and v0alpha2 remain replayable checkpoint compatibility formats.
 
 ## Boundary
 
@@ -53,8 +52,10 @@ outside the core.
 
 Timeline does not schedule work. Covenant, Temporal.io, Restate, DBOS, a CI
 system, or an application database may persist runs and invoke the kernel.
-“Now,” calendar rules, time-zone data, source authority, and clock mappings
-must be explicit host or profile inputs.
+v0alpha3 does not parse civil timestamps or named time zones. Applications must
+map them to integer axes under an explicit calendar, time-zone database, and
+ambiguity policy before admission. No shared normalization profile ships yet.
+Source authority and clock mappings are also host or profile inputs.
 
 ## Temporal objects
 
@@ -199,9 +200,9 @@ and optional effect templates. Its reducer performs deterministic requirement
 coverage and records an evaluator-supplied `policyRef` label. It does not
 resolve, authenticate, or contract-bind that label.
 
-Source-only v0alpha2 pins profile, policy reference, and policy digest in each
-checkpoint. Evidence must carry the same authority binding. Domain profiles
-still authenticate source material outside the reducer.
+v0alpha2 pins profile, policy reference, and policy digest in each checkpoint.
+Evidence must carry the same authority binding. Domain profiles still
+authenticate source material outside the reducer.
 
 The checkpoint reducer remains pure:
 
@@ -265,8 +266,9 @@ future work driven by real operational need.
 
 ## Versioning
 
-Every portable object identifies its schema version. v0alpha3 is experimental
-source governed by Draft RFC 0009. It is not a stable or normative release.
+Every portable object identifies its schema version. The npm alpha distributes
+the experimental v0alpha3 reference implementation governed by Draft RFC 0009.
+It is not a stable or normative release.
 
 v0alpha1 and v0alpha2 fixtures remain unchanged. Stable temporal compatibility
 starts only after:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.0-alpha.2 - 2026-07-27
+
 ### Added
 
 - Add v0alpha2 contracts, events, decisions, migration, schemas, specification,
@@ -30,6 +32,7 @@
   digests.
 - Add `timeline reason`, a model-facing integration guide, an executable
   temporal demo, and a baseline kernel benchmark.
+- Publish the Draft v0alpha3 temporal API in the npm alpha channel.
 
 ### Changed
 

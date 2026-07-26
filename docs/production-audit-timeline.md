@@ -20,18 +20,16 @@ the Python reducer agrees with the TypeScript corpus.
 This is still a production-hardened alpha, not an independently proven
 production protocol. The Temporal.io adapter and Python checkpoint reducer are
 maintained in this repository. The external project represented by the public
-archive did not adopt Timeline. The published alpha still means ordered
-checkpoint history rather than temporal logic. Protected release approval,
-external operation, and independently maintained interoperability remain real
-release and adoption blockers.
+archive did not adopt Timeline. The alpha.2 package includes the Draft v0alpha3
+temporal reference implementation alongside v0alpha1 and v0alpha2 checkpoint
+compatibility APIs. External operation, an independently maintained temporal
+implementation, and RFC completion remain real release and adoption blockers.
 
-The repository now also contains an experimental temporal-first v0alpha3
-contract and integer constraint kernel. It adds explicit temporal axes,
-scenario contexts, points, proper intervals, digest-referenced coordinate and
-difference assertions, historical knowledge cuts, typed queries, and proof
-receipts. That source removes the architectural “sequence as modeled time”
-limitation; it does not make the published package a general temporal reasoner
-or satisfy the production protocol gate.
+v0alpha3 adds explicit temporal axes, scenario contexts, points, proper
+intervals, digest-referenced coordinate and difference assertions, historical
+knowledge cuts, typed queries, and proof receipts. This is a bounded temporal
+reasoner for discrete axes. It does not parse civil time, establish independent
+interoperability, or satisfy the production protocol gate.
 
 This audit treats "production ready" as two separate gates:
 

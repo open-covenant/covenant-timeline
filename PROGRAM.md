@@ -5,17 +5,15 @@
 Covenant Timeline is being developed as a portable, proof-carrying temporal
 reasoning substrate for AI systems.
 
-The next contract, v0alpha3, is temporal-first. It represents explicit axes,
-scenario contexts, points, proper intervals, bounded constraints, knowledge
-cuts, typed queries, and checked conclusions. A model can propose assertions and
-questions; a deterministic kernel returns bounds, possible relations,
-schedules, or contradictions with independently checkable evidence.
+v0alpha3 is the temporal contract. It represents explicit axes, scenario
+contexts, points, proper intervals, bounded constraints, knowledge cuts, typed
+queries, and checked conclusions. A model can propose assertions and questions;
+a deterministic kernel returns bounds, possible relations, schedules, or
+contradictions with independently checkable evidence.
 
-The released v0alpha1 and source-only v0alpha2 checkpoint contracts remain
-immutable compatibility formats. They established portable replay, canonical
-event history, evidence identity, and effect receipts, but their event sequence
-is only record order. Checkpoints may consume verified temporal conclusions;
-they are no longer the center of the product architecture.
+The v0alpha1 and v0alpha2 checkpoint contracts remain immutable compatibility
+formats for portable replay, canonical event history, evidence identity, and
+effect receipts. Checkpoints may consume verified temporal conclusions.
 
 This is an immediately buildable neuro-symbolic interface, not a claim that an
 external solver changes model weights. Model-native temporal reasoning requires
@@ -23,15 +21,15 @@ separate open-weight training or architecture experiments.
 
 ## Current status
 
-- v0alpha1 is the released checkpoint format. Source-only v0alpha2 retains its
-  frozen checkpoint semantics and compatibility fixtures.
+- v0alpha1 and v0alpha2 retain frozen checkpoint semantics and compatibility
+  fixtures.
 - [RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md) defines the
   temporal-first v0alpha3 contract and is currently Draft.
-- Any v0alpha3 implementation in the repository is experimental source until
-  the RFC, schemas, conformance corpus, and required final-comment period are
-  complete.
-- The independent checkpoint-operator pilot remains useful adoption evidence,
-  but it does not block temporal-first implementation.
+- The npm alpha distributes the experimental v0alpha3 reference implementation.
+  Stable semantics require the RFC, schemas, conformance corpus, and
+  final-comment period to complete.
+- The project is seeking an independent v0alpha3 implementation and an
+  externally operated long-running-agent pilot.
 
 ## Product boundary
 
@@ -83,7 +81,7 @@ completeness profile.
 
 ## Success criteria
 
-### Experimental temporal source
+### Experimental temporal implementation
 
 - A contributor can run a temporal query and verify its receipt locally in
   fifteen minutes.

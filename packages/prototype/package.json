@@ -1,7 +1,7 @@
 {
   "name": "@covenant-org/timeline",
-  "version": "0.0.0-alpha.1",
-  "description": "Temporal reasoning substrate and checkpoint verifier for long-running work.",
+  "version": "0.0.0-alpha.2",
+  "description": "Proof-carrying temporal reasoning for long-running AI systems.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

@@ -98,6 +98,116 @@ describe("timeline CLI", () => {
     });
   });
 
+  it("reasons over a temporal run and emits a proof receipt", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "timeline-cli-"));
+    directories.push(directory);
+    const runFile = join(directory, "temporal-run.json");
+    const queryFile = join(directory, "temporal-query.json");
+    await writeFile(
+      runFile,
+      JSON.stringify({
+        schema: "covenant.timeline.run.v0alpha3",
+        contract: {
+          schema: "covenant.timeline.contract.v0alpha3",
+          id: "cli.temporal.v1",
+          subject: { kind: "workflow", id: "example" },
+          axes: [
+            {
+              id: "elapsed",
+              kind: "metric",
+              unit: "tick",
+              origin: "workflow.origin.v1",
+            },
+          ],
+          contexts: [{ id: "actual", mode: "actual" }],
+        },
+        events: [
+          {
+            schema: "covenant.timeline.event.v0alpha3",
+            id: "event-0",
+            sequence: 0,
+            type: "point.declared",
+            point: {
+              id: "start",
+              contextId: "actual",
+              axisId: "elapsed",
+            },
+          },
+          {
+            schema: "covenant.timeline.event.v0alpha3",
+            id: "event-1",
+            sequence: 1,
+            type: "point.declared",
+            point: { id: "end", contextId: "actual", axisId: "elapsed" },
+          },
+          {
+            schema: "covenant.timeline.event.v0alpha3",
+            id: "event-2",
+            sequence: 2,
+            type: "coordinate.asserted",
+            assertion: {
+              id: "start-coordinate",
+              contextId: "actual",
+              pointId: "start",
+              coordinate: { minimum: 0, maximum: 0 },
+              evidenceRefs: [
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              ],
+            },
+          },
+          {
+            schema: "covenant.timeline.event.v0alpha3",
+            id: "event-3",
+            sequence: 3,
+            type: "constraint.asserted",
+            assertion: {
+              id: "duration",
+              contextId: "actual",
+              constraint: {
+                fromPointId: "start",
+                toPointId: "end",
+                minimum: 5,
+                maximum: 10,
+              },
+              evidenceRefs: [
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              ],
+            },
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      queryFile,
+      JSON.stringify({
+        schema: "covenant.timeline.query.v0alpha3",
+        id: "query.duration",
+        contextId: "actual",
+        recordedThrough: 3,
+        type: "difference.bounds",
+        fromPointId: "start",
+        toPointId: "end",
+      }),
+      "utf8",
+    );
+
+    const result = await invoke(["reason", runFile, queryFile, "--json"]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      schema: "covenant.timeline.conclusion.v0alpha3",
+      queryId: "query.duration",
+      result: {
+        type: "difference.bounds",
+        status: "bounded",
+        minimum: 5,
+        maximum: 10,
+      },
+      receipt: { proof: { kind: "bounds" } },
+    });
+  });
+
   it("rejects input above the CLI byte ceiling", async () => {
     const directory = await mkdtemp(join(tmpdir(), "timeline-cli-"));
     directories.push(directory);

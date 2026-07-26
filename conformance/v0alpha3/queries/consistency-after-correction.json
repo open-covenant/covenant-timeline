@@ -1,0 +1,7 @@
+{
+  "schema": "covenant.timeline.query.v0alpha3",
+  "id": "query.consistency.latest",
+  "contextId": "actual",
+  "recordedThrough": 16,
+  "type": "context.consistency"
+}

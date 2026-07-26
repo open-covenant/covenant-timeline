@@ -21,10 +21,17 @@ import {
   validateEventV0Alpha2,
   validateReceiptV0Alpha2,
   validateRunDocumentV0Alpha2,
+  reasonTemporalQueryV0Alpha3,
+  validateContractV0Alpha3,
+  validateEventV0Alpha3,
+  validateQueryV0Alpha3,
+  validateRunDocumentV0Alpha3,
+  verifyTemporalConclusionV0Alpha3,
 } from "../packages/prototype/dist/index.js";
 
 const schemaDirectory = "schemas/v0alpha1";
 const schemaDirectoryV0Alpha2 = "schemas/v0alpha2";
+const schemaDirectoryV0Alpha3 = "schemas/v0alpha3";
 const casesPath = "conformance/v0alpha1/cases.json";
 const runCasesPath = "conformance/v0alpha1/run-cases.json";
 const canonicalCasesPath = "conformance/rfc8785/cases.json";
@@ -35,12 +42,15 @@ const ajv = new Ajv2020({
 });
 addFormats(ajv);
 
-const schemas = [schemaDirectory, schemaDirectoryV0Alpha2].flatMap(
-  (directory) =>
-    readdirSync(directory)
-      .filter((file) => file.endsWith(".schema.json"))
-      .sort()
-      .map((file) => JSON.parse(readFileSync(join(directory, file), "utf8"))),
+const schemas = [
+  schemaDirectory,
+  schemaDirectoryV0Alpha2,
+  schemaDirectoryV0Alpha3,
+].flatMap((directory) =>
+  readdirSync(directory)
+    .filter((file) => file.endsWith(".schema.json"))
+    .sort()
+    .map((file) => JSON.parse(readFileSync(join(directory, file), "utf8"))),
 );
 
 for (const schema of schemas) ajv.addSchema(schema);
@@ -380,13 +390,353 @@ for (const requirement of mechanicalRequirementsV0Alpha2) {
   }
 }
 
+const caseValidatorV0Alpha3 = ajv.getSchema(
+  "https://covenant-timeline.org/schemas/v0alpha3/conformance-case.schema.json",
+);
+if (!caseValidatorV0Alpha3) {
+  throw new Error("v0alpha3 conformance case schema is not registered");
+}
+const casesV0Alpha3 = JSON.parse(
+  readFileSync("conformance/v0alpha3/cases.json", "utf8"),
+);
+const idsV0Alpha3 = new Set();
+const coveredRequirementsV0Alpha3 = new Set();
+const runtimeValidatorsV0Alpha3 = new Map([
+  ["contract.schema.json", validateContractV0Alpha3],
+  ["event.schema.json", validateEventV0Alpha3],
+  ["run.schema.json", validateRunDocumentV0Alpha3],
+]);
+
+for (const testCase of casesV0Alpha3) {
+  if (!caseValidatorV0Alpha3(testCase)) {
+    failures.push(
+      `${testCase.id ?? "<unknown>"}: invalid v0alpha3 case definition`,
+    );
+    continue;
+  }
+  if (idsV0Alpha3.has(testCase.id)) {
+    failures.push(`${testCase.id}: duplicate v0alpha3 case id`);
+    continue;
+  }
+  idsV0Alpha3.add(testCase.id);
+  testCase.requirements.forEach((requirement) =>
+    coveredRequirementsV0Alpha3.add(requirement),
+  );
+
+  const validator = ajv.getSchema(testCase.targetSchema);
+  if (!validator) {
+    failures.push(
+      `${testCase.id}: unknown v0alpha3 target schema ${testCase.targetSchema}`,
+    );
+    continue;
+  }
+  const errorCode = validator(testCase.document) ? null : "schema.invalid";
+  const valid = errorCode === null;
+  if (valid !== testCase.expect.valid) {
+    failures.push(
+      `${testCase.id}: expected v0alpha3 valid=${testCase.expect.valid}, received valid=${valid}` +
+        (errorCode ? ` (${errorCode})` : ""),
+    );
+    continue;
+  }
+  if (!valid && errorCode !== testCase.expect.errorCode) {
+    failures.push(
+      `${testCase.id}: expected ${testCase.expect.errorCode}, received ${errorCode}`,
+    );
+  }
+
+  const schemaName = testCase.targetSchema.split("/").at(-1);
+  const runtimeValidator = runtimeValidatorsV0Alpha3.get(schemaName);
+  if (runtimeValidator) {
+    const runtimeValid = runtimeValidator(testCase.document).length === 0;
+    if (runtimeValid !== testCase.expect.valid) {
+      failures.push(
+        `${testCase.id}: v0alpha3 runtime validator received valid=${runtimeValid}`,
+      );
+    }
+  }
+}
+
+const temporalRun = JSON.parse(
+  readFileSync("conformance/v0alpha3/runs/software-release.json", "utf8"),
+);
+const temporalRunIssues = validateRunDocumentV0Alpha3(temporalRun);
+if (temporalRunIssues.length > 0) {
+  failures.push(
+    `v0alpha3 software-release run is invalid: ${canonicalJson(temporalRunIssues)}`,
+  );
+}
+const temporalResultCases = [
+  {
+    file: "consistency-before-correction.json",
+    result: { type: "context.consistency", status: "consistent" },
+  },
+  {
+    file: "consistency-after-correction.json",
+    result: { type: "context.consistency", status: "consistent" },
+  },
+  {
+    file: "difference-bounds.json",
+    result: {
+      type: "difference.bounds",
+      status: "bounded",
+      minimum: 90600,
+      maximum: 178200,
+    },
+  },
+  {
+    file: "point-relations-at-cut.json",
+    result: {
+      type: "point.relations",
+      status: "resolved",
+      possible: ["before"],
+    },
+  },
+  {
+    file: "interval-relations.json",
+    result: {
+      type: "interval.relations",
+      status: "resolved",
+      possible: ["meets"],
+    },
+  },
+];
+const conclusionValidatorV0Alpha3 = ajv.getSchema(
+  "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json",
+);
+if (!conclusionValidatorV0Alpha3) {
+  throw new Error("v0alpha3 conclusion schema is not registered");
+}
+for (const testCase of temporalResultCases) {
+  const query = JSON.parse(
+    readFileSync(join("conformance/v0alpha3/queries", testCase.file), "utf8"),
+  );
+  const queryIssues = validateQueryV0Alpha3(query, temporalRun);
+  if (queryIssues.length > 0) {
+    failures.push(
+      `${testCase.file}: invalid v0alpha3 query ${canonicalJson(queryIssues)}`,
+    );
+    continue;
+  }
+  const first = reasonTemporalQueryV0Alpha3(temporalRun, query);
+  const second = reasonTemporalQueryV0Alpha3(temporalRun, query);
+  if (canonicalJson(first) !== canonicalJson(second)) {
+    failures.push(`${testCase.file}: v0alpha3 conclusion is not deterministic`);
+  }
+  if (canonicalJson(first.result) !== canonicalJson(testCase.result)) {
+    failures.push(
+      `${testCase.file}: expected ${canonicalJson(testCase.result)}, received ${canonicalJson(first.result)}`,
+    );
+  }
+  if (!conclusionValidatorV0Alpha3(first)) {
+    failures.push(`${testCase.file}: generated conclusion fails JSON Schema`);
+  }
+  if (!verifyTemporalConclusionV0Alpha3(temporalRun, query, first)) {
+    failures.push(
+      `${testCase.file}: generated proof receipt failed verification`,
+    );
+  }
+}
+
+const conclusionFixtureV0Alpha3 = JSON.parse(
+  readFileSync(
+    "conformance/v0alpha3/conclusions/difference-bounds.json",
+    "utf8",
+  ),
+);
+if (!conclusionValidatorV0Alpha3(conclusionFixtureV0Alpha3)) {
+  failures.push("v0alpha3 bounds conclusion fixture fails JSON Schema");
+}
+const differenceBoundsQueryV0Alpha3 = JSON.parse(
+  readFileSync("conformance/v0alpha3/queries/difference-bounds.json", "utf8"),
+);
+if (
+  !verifyTemporalConclusionV0Alpha3(
+    temporalRun,
+    differenceBoundsQueryV0Alpha3,
+    conclusionFixtureV0Alpha3,
+  )
+) {
+  failures.push("v0alpha3 bounds conclusion fixture failed proof verification");
+}
+
+const validRelationConclusionV0Alpha3 = casesV0Alpha3.find(
+  ({ id }) => id === "schema.valid-relation-conclusion",
+)?.document;
+const validConsistencyConclusionV0Alpha3 = structuredClone(
+  casesV0Alpha3.find(({ id }) => id === "schema.conclusion-bad-digest")
+    ?.document ?? {},
+);
+if (
+  !validRelationConclusionV0Alpha3 ||
+  validConsistencyConclusionV0Alpha3.receipt === undefined
+) {
+  failures.push("v0alpha3 conclusion schema invariant fixtures are missing");
+} else {
+  validConsistencyConclusionV0Alpha3.receipt.stateDigest =
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const negativeCycle =
+    validRelationConclusionV0Alpha3.receipt.proof.cases.find(
+      ({ possible }) => !possible,
+    )?.witness;
+  if (!negativeCycle) {
+    failures.push("v0alpha3 negative-cycle invariant fixture is missing");
+  } else {
+    const schemaInvariantCases = [];
+
+    const consistentWithCycle = structuredClone(
+      validConsistencyConclusionV0Alpha3,
+    );
+    consistentWithCycle.receipt.proof = negativeCycle;
+    schemaInvariantCases.push([
+      "consistent result with negative-cycle proof",
+      consistentWithCycle,
+    ]);
+
+    const boundedWithNull = structuredClone(conclusionFixtureV0Alpha3);
+    boundedWithNull.result.minimum = null;
+    schemaInvariantCases.push([
+      "bounded result with null limit",
+      boundedWithNull,
+    ]);
+
+    const partialWithTwoLimits = structuredClone(conclusionFixtureV0Alpha3);
+    partialWithTwoLimits.result.status = "partially-bounded";
+    schemaInvariantCases.push([
+      "partially-bounded result with two finite limits",
+      partialWithTwoLimits,
+    ]);
+
+    const boundsWithSchedule = structuredClone(conclusionFixtureV0Alpha3);
+    boundsWithSchedule.receipt.proof =
+      validConsistencyConclusionV0Alpha3.receipt.proof;
+    schemaInvariantCases.push([
+      "bounded result with schedule proof",
+      boundsWithSchedule,
+    ]);
+
+    const resolvedWithTwoRelations = structuredClone(
+      validRelationConclusionV0Alpha3,
+    );
+    resolvedWithTwoRelations.result.possible = ["before", "equal"];
+    schemaInvariantCases.push([
+      "resolved result with two possible relations",
+      resolvedWithTwoRelations,
+    ]);
+
+    const indeterminateWithOneRelation = structuredClone(
+      validRelationConclusionV0Alpha3,
+    );
+    indeterminateWithOneRelation.result.status = "indeterminate";
+    schemaInvariantCases.push([
+      "indeterminate result with one possible relation",
+      indeterminateWithOneRelation,
+    ]);
+
+    const inconsistentWithPossibleRelation = structuredClone(
+      validRelationConclusionV0Alpha3,
+    );
+    inconsistentWithPossibleRelation.result.status = "inconsistent";
+    inconsistentWithPossibleRelation.receipt.proof = negativeCycle;
+    schemaInvariantCases.push([
+      "inconsistent result with a possible relation",
+      inconsistentWithPossibleRelation,
+    ]);
+
+    const falseCaseWithSchedule = structuredClone(
+      validRelationConclusionV0Alpha3,
+    );
+    falseCaseWithSchedule.receipt.proof.cases[1].witness =
+      validRelationConclusionV0Alpha3.receipt.proof.cases[0].witness;
+    schemaInvariantCases.push([
+      "impossible relation case with schedule witness",
+      falseCaseWithSchedule,
+    ]);
+
+    const incompletePointCases = structuredClone(
+      validRelationConclusionV0Alpha3,
+    );
+    incompletePointCases.receipt.proof.cases.pop();
+    schemaInvariantCases.push([
+      "incomplete point relation proof",
+      incompletePointCases,
+    ]);
+
+    const inconsistentWithRelationCases = structuredClone(
+      validRelationConclusionV0Alpha3,
+    );
+    inconsistentWithRelationCases.result.status = "inconsistent";
+    inconsistentWithRelationCases.result.possible = [];
+    schemaInvariantCases.push([
+      "inconsistent relation result with relation-cases proof",
+      inconsistentWithRelationCases,
+    ]);
+
+    for (const [name, document] of schemaInvariantCases) {
+      if (conclusionValidatorV0Alpha3(document)) {
+        failures.push(`v0alpha3 conclusion schema accepted ${name}`);
+      }
+    }
+  }
+}
+
+const temporalEnvironmentOutputs = [
+  { LANG: "C", LC_ALL: "C", TZ: "UTC" },
+  { LANG: "tr_TR.UTF-8", LC_ALL: "tr_TR.UTF-8", TZ: "Pacific/Auckland" },
+].map((environment) => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "reason",
+      "conformance/v0alpha3/runs/software-release.json",
+      "conformance/v0alpha3/queries/difference-bounds.json",
+      "--json",
+    ],
+    {
+      encoding: "utf8",
+      env: { ...process.env, ...environment },
+    },
+  );
+  if (result.status !== 0) {
+    failures.push(
+      `v0alpha3 cross-environment reasoning failed: ${(result.stderr || result.stdout).trim()}`,
+    );
+  }
+  return result.stdout;
+});
+if (
+  temporalEnvironmentOutputs.length === 2 &&
+  temporalEnvironmentOutputs[0] !== temporalEnvironmentOutputs[1]
+) {
+  failures.push("locale or time zone changed v0alpha3 reasoning output");
+}
+
+if (casesV0Alpha3.length < 9) {
+  failures.push("expected at least 9 v0alpha3 conformance cases");
+}
+const requirementsTextV0Alpha3 = readFileSync(
+  "spec/v0alpha3/requirements.md",
+  "utf8",
+);
+const mechanicalRequirementsV0Alpha3 = [
+  ...requirementsTextV0Alpha3.matchAll(
+    /\|\s+(CTL3-[A-Z]+-\d{3})\s+\|.*\|\s+yes\s+\|/g,
+  ),
+].map((match) => match[1]);
+for (const requirement of mechanicalRequirementsV0Alpha3) {
+  if (!coveredRequirementsV0Alpha3.has(requirement)) {
+    failures.push(`${requirement}: no v0alpha3 conformance coverage`);
+  }
+}
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exit(1);
 }
 
 console.log(
-  `conformance passed (${cases.length + casesV0Alpha2.length} documents, ${runCases.length + runCasesV0Alpha2.length} runs, ${canonicalCases.length} canonical fixtures, ${schemas.length} schemas, 4 environment replays)`,
+  `conformance passed (${cases.length + casesV0Alpha2.length + casesV0Alpha3.length} documents, ${runCases.length + runCasesV0Alpha2.length + 1} runs, ${canonicalCases.length} canonical fixtures, ${schemas.length} schemas, 6 environment replays, ${temporalResultCases.length} temporal queries)`,
 );
 
 function semanticError(check, document) {

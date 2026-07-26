@@ -2,7 +2,7 @@
   "name": "covenant-timeline",
   "version": "0.0.0",
   "private": true,
-  "description": "Open checkpoint contract specification and reference verifier.",
+  "description": "Temporal reasoning research program and checkpoint verifier for AI systems.",
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.31.0",
@@ -30,6 +30,8 @@
     "spec:check": "node scripts/check-spec.mjs",
     "test": "pnpm -r --if-present test",
     "timeline": "node packages/prototype/dist/cli.js",
+    "temporal:benchmark": "pnpm build && node scripts/benchmark-temporal.mjs",
+    "temporal:demo": "pnpm build && node examples/temporal-reasoning.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
   },

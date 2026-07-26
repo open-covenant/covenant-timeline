@@ -1,0 +1,1035 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json",
+  "title": "Timeline v0alpha3 temporal conclusion",
+  "$defs": {
+    "consistencyResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status"],
+          "properties": {
+            "type": {
+              "const": "context.consistency"
+            },
+            "status": {
+              "const": "consistent"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status"],
+          "properties": {
+            "type": {
+              "const": "context.consistency"
+            },
+            "status": {
+              "const": "inconsistent"
+            }
+          }
+        }
+      ]
+    },
+    "differenceBoundsResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "minimum", "maximum"],
+          "properties": {
+            "type": {
+              "const": "difference.bounds"
+            },
+            "status": {
+              "const": "bounded"
+            },
+            "minimum": {
+              "$ref": "common.schema.json#/$defs/safeInteger"
+            },
+            "maximum": {
+              "$ref": "common.schema.json#/$defs/safeInteger"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "minimum", "maximum"],
+          "properties": {
+            "type": {
+              "const": "difference.bounds"
+            },
+            "status": {
+              "const": "partially-bounded"
+            },
+            "minimum": {
+              "$ref": "common.schema.json#/$defs/safeInteger"
+            },
+            "maximum": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "minimum", "maximum"],
+          "properties": {
+            "type": {
+              "const": "difference.bounds"
+            },
+            "status": {
+              "const": "partially-bounded"
+            },
+            "minimum": {
+              "type": "null"
+            },
+            "maximum": {
+              "$ref": "common.schema.json#/$defs/safeInteger"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "minimum", "maximum"],
+          "properties": {
+            "type": {
+              "const": "difference.bounds"
+            },
+            "status": {
+              "const": "unbounded"
+            },
+            "minimum": {
+              "type": "null"
+            },
+            "maximum": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "minimum", "maximum"],
+          "properties": {
+            "type": {
+              "const": "difference.bounds"
+            },
+            "status": {
+              "const": "inconsistent"
+            },
+            "minimum": {
+              "type": "null"
+            },
+            "maximum": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    "pointRelationsResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "possible"],
+          "properties": {
+            "type": {
+              "const": "point.relations"
+            },
+            "status": {
+              "const": "inconsistent"
+            },
+            "possible": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "possible"],
+          "properties": {
+            "type": {
+              "const": "point.relations"
+            },
+            "status": {
+              "const": "resolved"
+            },
+            "possible": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "$ref": "common.schema.json#/$defs/pointRelation"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "possible"],
+          "properties": {
+            "type": {
+              "const": "point.relations"
+            },
+            "status": {
+              "const": "indeterminate"
+            },
+            "possible": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/pointRelation"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "intervalRelationsResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "possible"],
+          "properties": {
+            "type": {
+              "const": "interval.relations"
+            },
+            "status": {
+              "const": "inconsistent"
+            },
+            "possible": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "possible"],
+          "properties": {
+            "type": {
+              "const": "interval.relations"
+            },
+            "status": {
+              "const": "resolved"
+            },
+            "possible": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "$ref": "common.schema.json#/$defs/intervalRelation"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "status", "possible"],
+          "properties": {
+            "type": {
+              "const": "interval.relations"
+            },
+            "status": {
+              "const": "indeterminate"
+            },
+            "possible": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 13,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/intervalRelation"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "semanticResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/consistencyResult"
+        },
+        {
+          "$ref": "#/$defs/differenceBoundsResult"
+        },
+        {
+          "$ref": "#/$defs/pointRelationsResult"
+        },
+        {
+          "$ref": "#/$defs/intervalRelationsResult"
+        }
+      ]
+    },
+    "scheduleProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "coordinates"],
+      "properties": {
+        "kind": {
+          "const": "schedule"
+        },
+        "coordinates": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "common.schema.json#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "common.schema.json#/$defs/safeInteger"
+          }
+        }
+      }
+    },
+    "proofEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "fromNodeId", "toNodeId", "maximum"],
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "fromNodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "toNodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "maximum": {
+          "$ref": "common.schema.json#/$defs/safeInteger"
+        }
+      }
+    },
+    "proofEdges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/proofEdge"
+      }
+    },
+    "negativeCycleProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "edges"],
+      "properties": {
+        "kind": {
+          "const": "negative-cycle"
+        },
+        "edges": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/proofEdges"
+            },
+            {
+              "type": "array",
+              "minItems": 1
+            }
+          ]
+        }
+      }
+    },
+    "boundsProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "lowerEdges", "upperEdges"],
+      "properties": {
+        "kind": {
+          "const": "bounds"
+        },
+        "lowerEdges": {
+          "$ref": "#/$defs/proofEdges"
+        },
+        "upperEdges": {
+          "$ref": "#/$defs/proofEdges"
+        }
+      }
+    },
+    "relationCase": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relation", "possible", "witness"],
+          "properties": {
+            "relation": {
+              "$ref": "common.schema.json#/$defs/relation"
+            },
+            "possible": {
+              "const": true
+            },
+            "witness": {
+              "$ref": "#/$defs/scheduleProof"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relation", "possible", "witness"],
+          "properties": {
+            "relation": {
+              "$ref": "common.schema.json#/$defs/relation"
+            },
+            "possible": {
+              "const": false
+            },
+            "witness": {
+              "$ref": "#/$defs/negativeCycleProof"
+            }
+          }
+        }
+      ]
+    },
+    "relationProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "cases"],
+      "properties": {
+        "kind": {
+          "const": "relation-cases"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relationCase"
+          }
+        }
+      }
+    },
+    "pointRelationProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "cases"],
+      "properties": {
+        "kind": {
+          "const": "relation-cases"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/relationCase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "$ref": "common.schema.json#/$defs/pointRelation"
+                  }
+                }
+              }
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "after"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "before"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "equal"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
+        }
+      }
+    },
+    "intervalRelationProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "cases"],
+      "properties": {
+        "kind": {
+          "const": "relation-cases"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/relationCase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "$ref": "common.schema.json#/$defs/intervalRelation"
+                  }
+                }
+              }
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "after"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "before"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "contains"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "during"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "equal"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "finished-by"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "finishes"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "meets"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "met-by"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "overlapped-by"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "overlaps"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "started-by"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "relation": {
+                    "const": "starts"
+                  }
+                },
+                "required": ["relation"]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
+        }
+      }
+    },
+    "proof": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/boundsProof"
+        },
+        {
+          "$ref": "#/$defs/negativeCycleProof"
+        },
+        {
+          "$ref": "#/$defs/relationProof"
+        },
+        {
+          "$ref": "#/$defs/scheduleProof"
+        }
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reasoner",
+        "stateDigest",
+        "queryDigest",
+        "semanticResultDigest",
+        "proof"
+      ],
+      "properties": {
+        "reasoner": {
+          "const": "covenant.timeline.stn.v0alpha1"
+        },
+        "stateDigest": {
+          "$ref": "common.schema.json#/$defs/digest"
+        },
+        "queryDigest": {
+          "$ref": "common.schema.json#/$defs/digest"
+        },
+        "semanticResultDigest": {
+          "$ref": "common.schema.json#/$defs/digest"
+        },
+        "proof": {
+          "$ref": "#/$defs/proof"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "queryId", "result", "receipt"],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.conclusion.v0alpha3"
+    },
+    "queryId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "result": {
+      "$ref": "#/$defs/semanticResult"
+    },
+    "receipt": {
+      "$ref": "#/$defs/receipt"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "context.consistency"
+              },
+              "status": {
+                "const": "consistent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/scheduleProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "context.consistency"
+              },
+              "status": {
+                "const": "inconsistent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/negativeCycleProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "difference.bounds"
+              },
+              "status": {
+                "enum": ["bounded", "partially-bounded", "unbounded"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/boundsProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "difference.bounds"
+              },
+              "status": {
+                "const": "inconsistent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/negativeCycleProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "point.relations"
+              },
+              "status": {
+                "enum": ["indeterminate", "resolved"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/pointRelationProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "point.relations"
+              },
+              "status": {
+                "const": "inconsistent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/negativeCycleProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "interval.relations"
+              },
+              "status": {
+                "enum": ["indeterminate", "resolved"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/intervalRelationProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["result"],
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": ["type", "status"],
+            "properties": {
+              "type": {
+                "const": "interval.relations"
+              },
+              "status": {
+                "const": "inconsistent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["receipt"],
+        "properties": {
+          "receipt": {
+            "type": "object",
+            "required": ["proof"],
+            "properties": {
+              "proof": {
+                "$ref": "#/$defs/negativeCycleProof"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

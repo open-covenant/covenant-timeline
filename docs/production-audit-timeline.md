@@ -18,12 +18,20 @@ the Temporal adapter survives a worker restart against a real local server; and
 the Python reducer agrees with the TypeScript corpus.
 
 This is still a production-hardened alpha, not an independently proven
-production protocol. The Temporal adapter and Python reducer are maintained in
-this repository. The external project represented by the public archive did
-not adopt Timeline. “Timeline” still means ordered event history rather than
-deadlines or temporal logic. Protected release approval, external operation,
-and independently maintained interoperability remain real release and adoption
-blockers.
+production protocol. The Temporal.io adapter and Python checkpoint reducer are
+maintained in this repository. The external project represented by the public
+archive did not adopt Timeline. The published alpha still means ordered
+checkpoint history rather than temporal logic. Protected release approval,
+external operation, and independently maintained interoperability remain real
+release and adoption blockers.
+
+The repository now also contains an experimental temporal-first v0alpha3
+contract and integer constraint kernel. It adds explicit temporal axes,
+scenario contexts, points, proper intervals, digest-referenced coordinate and
+difference assertions, historical knowledge cuts, typed queries, and proof
+receipts. That source removes the architectural “sequence as modeled time”
+limitation; it does not make the published package a general temporal reasoner
+or satisfy the production protocol gate.
 
 This audit treats "production ready" as two separate gates:
 
@@ -38,6 +46,26 @@ This audit treats "production ready" as two separate gates:
 The first gate is achievable in this repository. The second requires external
 adopters and independently exercised governance and must remain an explicit
 blocker until observed.
+
+## Temporal-first v0alpha3 addendum
+
+v0alpha3 is evaluated as an experimental subsystem under Draft RFC 0009. Its
+local gate requires:
+
+- strict schema and runtime validation;
+- deterministic, resource-bounded state projection;
+- correct Simple Temporal Network consistency and tight-bound results;
+- complete point and interval relation cases;
+- independently verified schedules, paths, and negative cycles;
+- explicit knowledge-cut and context-isolation regressions;
+- locale and time-zone independence;
+- installed-package and CLI smoke tests; and
+- unchanged v0alpha1 and v0alpha2 fixtures.
+
+It is not production-ready until a second implementation agrees on semantic
+results and verifies supported receipts, an external operator runs a real
+temporal workflow, RFC governance completes, and security review covers model
+extraction, proof substitution, graph exhaustion, and temporal-data privacy.
 
 ## Evidence Reviewed
 
@@ -90,6 +118,16 @@ blocker until observed.
   source seconds, crossed separate local collector processes, and replayed to
   state digest
   `sha256:3f5a7478eb134cedbc2a1074cf07bc1b37629d684d0c9960f469368bee361f27`.
+- Experimental v0alpha3 full local verification on 2026-07-26:
+  - 164 prototype tests and four restart-adapter tests passed;
+  - 53 conformance documents, eight runs, five canonical fixtures, 25 schemas,
+    six locale/time-zone replays, and five temporal queries passed;
+  - the stored bounds conclusion passed both schema validation and direct
+    certificate verification;
+  - prototype coverage measured 83.99% statements, 76.30% branches, 96.39%
+    functions, and 85.42% lines; and
+  - a 500-point, 499-constraint chain returned bounds `499..998`, verified its
+    receipt, and measured a 31.42 ms median on Node.js 24.14.0.
 
 ## Critical Issues (P0 - Block Release)
 

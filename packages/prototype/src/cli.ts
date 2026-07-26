@@ -9,6 +9,16 @@ import { TimelineDocumentError, validatePortableDocument } from "./document.js";
 import { canonicalJson, type JsonValue } from "./identity.js";
 import { parseJson, TimelineJsonError } from "./json.js";
 import { evaluateRunDocument, type TimelineRunReport } from "./report.js";
+import {
+  parseQueryV0Alpha3,
+  parseRunDocumentV0Alpha3,
+  reasonTemporalQueryV0Alpha3,
+  TemporalKernelErrorV0Alpha3,
+  validateContractV0Alpha3,
+  validateEventV0Alpha3,
+  validateRunDocumentV0Alpha3,
+  type TemporalConclusionV0Alpha3,
+} from "./v0alpha3/index.js";
 
 interface CliIo {
   stdout(value: string): void;
@@ -22,13 +32,16 @@ const defaultIo: CliIo = {
 
 export const DEFAULT_MAX_INPUT_BYTES = 16 * 1024 * 1024;
 
-const USAGE = `Usage: timeline <command> <file|-> [--json]
+const USAGE = `Usage:
+  timeline <command> <file|-> [--json]
+  timeline reason <run-file|-> <query-file> [--json]
 
 Commands:
   validate  Validate a contract, event, command, decision, or portable run
   replay    Replay a portable run without executing effects
   inspect   Show checkpoints, evidence, commands, and receipts
   verify    Replay and structurally verify a portable run
+  reason    Evaluate a v0alpha3 temporal query and emit its proof receipt
 
 Options:
   --json     Emit canonical JSON
@@ -56,17 +69,24 @@ export async function runCli(
   const positional = argv.filter(
     (argument) => !argument.startsWith("-") || argument === "-",
   );
-  if (unknownFlags.length > 0 || positional.length !== 2) {
+  const command = positional[0];
+  const expectedPositionals = command === "reason" ? 3 : 2;
+  if (
+    unknownFlags.length > 0 ||
+    positional.length !== expectedPositionals ||
+    (command === "reason" && positional[1] === "-" && positional[2] === "-")
+  ) {
     io.stderr(USAGE);
     return 2;
   }
 
-  const [command, file] = positional;
+  const file = positional[1]!;
   if (
     command !== "validate" &&
     command !== "replay" &&
     command !== "inspect" &&
-    command !== "verify"
+    command !== "verify" &&
+    command !== "reason"
   ) {
     io.stderr(`Unknown command: ${command}\n\n${USAGE}`);
     return 2;
@@ -93,8 +113,64 @@ export async function runCli(
     return 1;
   }
 
+  if (command === "reason") {
+    const queryFile = positional[2]!;
+    let queryInput: unknown;
+    try {
+      queryInput = parseJson(await readInput(queryFile));
+    } catch (error) {
+      const result = inputError(error);
+      writeResult(
+        io,
+        json,
+        {
+          ok: false,
+          code: result.code,
+          file: queryFile,
+          message: result.message,
+          ...(result.issues ? { issues: result.issues } : {}),
+        },
+        `INVALID ${queryFile}\n${result.message}`,
+        true,
+      );
+      return 1;
+    }
+
+    try {
+      const run = parseRunDocumentV0Alpha3(input);
+      const query = parseQueryV0Alpha3(queryInput, run);
+      const conclusion = reasonTemporalQueryV0Alpha3(run, query);
+      writeResult(io, json, conclusion, renderTemporalConclusion(conclusion));
+      return 0;
+    } catch (error) {
+      if (error instanceof TimelineDocumentError) {
+        writeResult(
+          io,
+          json,
+          { ok: false, code: error.code, file, issues: error.issues },
+          `INVALID TEMPORAL INPUT\n${error.issues
+            .map(({ path, message }) => `  ${path}: ${message}`)
+            .join("\n")}`,
+          true,
+        );
+        return 1;
+      }
+      if (error instanceof TemporalKernelErrorV0Alpha3) {
+        writeResult(
+          io,
+          json,
+          { ok: false, code: error.code, message: error.message },
+          `TEMPORAL REASONING FAILED\n${error.message}`,
+          true,
+        );
+        return 1;
+      }
+      throw error;
+    }
+  }
+
   if (command === "validate") {
-    const issues = validatePortableDocument(input);
+    const issues = validateDocument(input);
     const ok = issues.length === 0;
     writeResult(
       io,
@@ -140,6 +216,51 @@ export async function runCli(
 
   writeResult(io, json, report, renderVerify(report), !report.verification.ok);
   return report.verification.ok ? 0 : 1;
+}
+
+function validateDocument(
+  input: unknown,
+): ReturnType<typeof validatePortableDocument> {
+  const schema =
+    input && typeof input === "object" && "schema" in input
+      ? (input as { schema?: unknown }).schema
+      : undefined;
+  if (schema === "covenant.timeline.contract.v0alpha3") {
+    return validateContractV0Alpha3(input);
+  }
+  if (schema === "covenant.timeline.event.v0alpha3") {
+    return validateEventV0Alpha3(input);
+  }
+  if (schema === "covenant.timeline.run.v0alpha3") {
+    return validateRunDocumentV0Alpha3(input);
+  }
+  return validatePortableDocument(input);
+}
+
+function renderTemporalConclusion(
+  conclusion: TemporalConclusionV0Alpha3,
+): string {
+  const { result, receipt } = conclusion;
+  const lines = [
+    `TEMPORAL RESULT ${conclusion.queryId}`,
+    `  operation ${result.type}`,
+    `  status ${result.status}`,
+    `  state ${receipt.stateDigest}`,
+    `  proof ${receipt.proof.kind}`,
+  ];
+  if (result.type === "difference.bounds") {
+    lines.push(
+      `  minimum ${result.minimum ?? "unbounded"}`,
+      `  maximum ${result.maximum ?? "unbounded"}`,
+    );
+  }
+  if (
+    result.type === "point.relations" ||
+    result.type === "interval.relations"
+  ) {
+    lines.push(`  possible ${result.possible.join(", ") || "none"}`);
+  }
+  return lines.join("\n");
 }
 
 function renderReplay(report: TimelineRunReport): string {

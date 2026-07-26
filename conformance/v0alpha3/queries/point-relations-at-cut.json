@@ -1,0 +1,9 @@
+{
+  "schema": "covenant.timeline.query.v0alpha3",
+  "id": "query.review-before-deploy.at-9",
+  "contextId": "actual",
+  "recordedThrough": 11,
+  "type": "point.relations",
+  "leftPointId": "review-start",
+  "rightPointId": "deploy-start"
+}

@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json",
+  "title": "Timeline v0alpha3 temporal event",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "point"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "$ref": "common.schema.json#/$defs/sequence"
+        },
+        "type": {
+          "const": "point.declared"
+        },
+        "point": {
+          "$ref": "common.schema.json#/$defs/point"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "interval"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "$ref": "common.schema.json#/$defs/sequence"
+        },
+        "type": {
+          "const": "interval.declared"
+        },
+        "interval": {
+          "$ref": "common.schema.json#/$defs/interval"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "assertion"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "$ref": "common.schema.json#/$defs/sequence"
+        },
+        "type": {
+          "const": "constraint.asserted"
+        },
+        "assertion": {
+          "$ref": "common.schema.json#/$defs/constraintAssertion"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "assertion"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "$ref": "common.schema.json#/$defs/sequence"
+        },
+        "type": {
+          "const": "coordinate.asserted"
+        },
+        "assertion": {
+          "$ref": "common.schema.json#/$defs/coordinateAssertion"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "sequence", "type", "assertion"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "$ref": "common.schema.json#/$defs/sequence"
+        },
+        "type": {
+          "const": "fact.asserted"
+        },
+        "assertion": {
+          "$ref": "common.schema.json#/$defs/factAssertion"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "sequence",
+        "type",
+        "assertionId",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.event.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "sequence": {
+          "$ref": "common.schema.json#/$defs/sequence"
+        },
+        "type": {
+          "const": "assertion.retracted"
+        },
+        "assertionId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "evidenceRefs": {
+          "$ref": "common.schema.json#/$defs/evidenceRefs"
+        }
+      }
+    }
+  ]
+}

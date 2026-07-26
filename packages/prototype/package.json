@@ -1,7 +1,7 @@
 {
   "name": "@covenant-org/timeline",
   "version": "0.0.0-alpha.1",
-  "description": "Checkpoint contract reducer and verifier for long-running work.",
+  "description": "Temporal reasoning substrate and checkpoint verifier for long-running work.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -15,8 +15,10 @@
   "keywords": [
     "audit",
     "event-sourcing",
+    "llm",
     "provenance",
     "replay",
+    "temporal-reasoning",
     "workflow"
   ],
   "type": "module",

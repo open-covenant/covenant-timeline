@@ -1,0 +1,9 @@
+{
+  "schema": "covenant.timeline.query.v0alpha3",
+  "id": "query.approval-meets-deployment",
+  "contextId": "actual",
+  "recordedThrough": 16,
+  "type": "interval.relations",
+  "leftIntervalId": "approval-window",
+  "rightIntervalId": "deployment"
+}

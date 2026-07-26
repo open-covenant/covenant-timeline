@@ -5,26 +5,22 @@
 
 Portable, proof-carrying temporal reasoning for AI systems.
 
-Covenant Timeline gives model-backed applications a deterministic way to
-represent when things happened, compare admitted state at different record
-cuts, reason across plans and possible futures, detect contradictions, and
-carry verifiable temporal conclusions across processes and runtimes.
+Covenant Timeline gives model-backed applications a portable representation of
+temporal facts and constraints. Its deterministic kernel turns admitted records
+into conclusions and proof receipts that can be replayed and verified across
+processes and runtimes.
 
-**Timeline does not treat event sequence as time.** Sequence orders records and
-historical knowledge cuts. Explicit temporal axes and constraints model when
-events occurred, may occur, or were valid. Keeping those orders separate
-prevents hindsight leakage and makes temporal answers reproducible.
-
-> **Project status:** The temporal API is available in this repository as the
-> Draft v0alpha3 reference implementation. The published npm alpha provides the
-> checkpoint compatibility surface. See [Release status](#release-status) for
-> the exact availability and stability boundary.
+Applications can reconstruct earlier knowledge; reason about actual events,
+plans, forecasts, and hypotheses without conflating them; preserve corrections
+without rewriting prior answers; and surface inconsistent dates, durations, or
+ordering constraints.
 
 [Run the temporal reasoner](#run-the-temporal-reasoner-from-source) ·
 [Integrate a model](./docs/model-interface.md) ·
-[Review Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md)
+[Review Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md) ·
+[See release status](#release-status)
 
-## What Timeline enables
+## Core capabilities
 
 - **Represent** metric and ordinal time, points and intervals, bounded
   constraints, and isolated actual, planned, forecast, and hypothetical
@@ -36,10 +32,10 @@ prevents hindsight leakage and makes temporal answers reproducible.
 - **Verify** canonical inputs and conclusions using machine-checkable schedules,
   bound paths, relation cases, or negative cycles.
 
-The result is a portable temporal state that a model, runtime, operator, or
-independent verifier can inspect and replay.
+Every conclusion is bound to the exact projected state, query, semantic result,
+and reasoner profile that produced it.
 
-## Operating model
+## Architecture
 
 Timeline separates probabilistic interpretation from deterministic inference:
 
@@ -62,14 +58,11 @@ proof | alternatives | contradiction
 model or application continues from checked state
 ```
 
-The model interprets source material. The host decides which evidence and
-records are admissible. The kernel computes a deterministic conclusion. The
-verifier checks that conclusion against the same run and query.
-
-Timeline proves that a conclusion follows from admitted temporal constraints.
-It does not prove that the source evidence was true, authentic, complete, or
-authorized. The deploying system remains responsible for evidence
-authentication, authority, and admission policy.
+The model interprets source material, the host authenticates and admits
+records, the kernel computes the conclusion, and a verifier checks the proof
+against the same run and query. Timeline establishes what follows from admitted
+constraints; the deploying system decides whether the underlying evidence is
+authentic, authoritative, and complete.
 
 ## Temporal model
 
@@ -88,9 +81,14 @@ retraction and persistent supersession determine which assertions are active at
 each knowledge cut. Facts can distinguish when something was valid, when it was
 observed, and when it was asserted.
 
-The current kernel uses exact integer arithmetic and a resource-bounded Simple
-Temporal Network solver. It supports tight difference bounds, three point
-relations, and all 13 Allen interval relations.
+Temporal coordinates live on explicit axes. Record sequence establishes
+knowledge order, while points, intervals, and constraints describe occurrence
+and validity. This makes late observations and corrections reproducible without
+changing earlier answers.
+
+The reference kernel uses exact integer arithmetic and a resource-bounded
+Simple Temporal Network solver. It supports tight difference bounds, three
+point relations, and all 13 Allen interval relations.
 
 ## Run the temporal reasoner from source
 
@@ -99,7 +97,7 @@ Requirements:
 - Node.js 22 or 24
 - pnpm 10
 
-From a clone of this repository, run the temporal example and query a portable
+From the repository root, run the example and query the included conformance
 run:
 
 ```sh
@@ -111,8 +109,8 @@ pnpm timeline reason \
   --json
 ```
 
-In this workspace build, the API keeps parsing, reasoning, and verification
-explicit:
+The v0alpha3 API exposes parsing, reasoning, and verification as separate
+operations:
 
 ```ts
 import {
@@ -131,12 +129,16 @@ if (!verifyTemporalConclusionV0Alpha3(run, query, conclusion)) {
 }
 ```
 
-The example returns canonical state and query digests, tight metric bounds,
-possible relations, consistency results, and the proof material required for
-verification. Read the [model interface](./docs/model-interface.md) before
-admitting model-generated assertions.
+The v0alpha3 API is currently distributed from this repository. The published
+npm alpha exposes the checkpoint compatibility API described in
+[Release status](#release-status).
 
-## Where it fits
+The example returns canonical state and query digests, metric bounds, possible
+relations, consistency results, and the proof material required for
+verification. The [model interface](./docs/model-interface.md) defines the
+admission boundary for model-generated assertions.
+
+## Use cases
 
 Timeline is designed for systems that need temporal conclusions to survive
 beyond one prompt or process:
@@ -152,12 +154,9 @@ beyond one prompt or process:
 - **Governed domains:** pair the neutral kernel with domain-owned evidence,
   privacy, authority, and evaluation profiles.
 
-Timeline is useful when reproducibility and revision matter. It is not a
-replacement for a workflow engine, database, scheduler, or evidence authority.
-
 ## Adoption path
 
-Start with one real temporal question, not a platform migration:
+Begin with one bounded temporal question:
 
 1. Export the evidence required to answer the question.
 2. Have a model or application propose typed temporal assertions.
@@ -167,16 +166,14 @@ Start with one real temporal question, not a platform migration:
 6. Restart in a clean process and verify the exported result.
 
 A pilot succeeds when the same admitted run and query produce the same
-conclusion digest, the proof verifies independently of the reasoning call, and
-actual, planned, forecast, and hypothetical records remain isolated.
+conclusion digest, the proof passes a separate verification call, and actual,
+planned, forecast, and hypothetical records remain isolated.
 
 Use the [temporal pilot](./docs/temporal-pilot.md) for the executable path and
-the [adoption guide](./docs/adoption-guide.md) for the evidence required to
-claim independent operation.
+the [adoption guide](./docs/adoption-guide.md) for integration and operating
+evidence.
 
 ## Assurance
-
-### Temporal v0alpha3
 
 - strict runtime validation and versioned JSON Schemas;
 - duplicate-key rejection and bounded processing of untrusted documents;
@@ -188,68 +185,52 @@ claim independent operation.
   fixtures;
 - cross-platform CI on Ubuntu, macOS, and Windows.
 
-### Checkpoint compatibility
-
-The compatibility surface has separate operational evidence:
-
-- a collector-signed public software-delivery archive;
-- a Temporal.io adapter tested across a server and worker restart; and
-- checkpoint-reducer agreement between TypeScript and Python.
-
-This is evidence for the stated implementation boundary, not proof of
-independent production adoption. Review the
-[production audit](./docs/production-audit-timeline.md),
+Before deployment, review the
+[production audit](./docs/production-audit-timeline.md), the
 [threat model](./docs/threat-model.md), and
-[operations guide](./docs/operations.md) before deployment.
+the [operations guide](./docs/operations.md).
 
 ## Release status
 
-| Surface  | Purpose                                                  | Availability                             |
-| -------- | -------------------------------------------------------- | ---------------------------------------- |
-| v0alpha3 | Temporal state, queries, conclusions, and proof receipts | Draft reference implementation in source |
-| v0alpha2 | Contract-bound checkpoint policy identity                | Source-only compatibility surface        |
-| v0alpha1 | Checkpoint contracts and deterministic replay            | Published npm alpha and CLI              |
+| Surface  | Capability                                               | Distribution      | Status            |
+| -------- | -------------------------------------------------------- | ----------------- | ----------------- |
+| v0alpha3 | Temporal state, queries, conclusions, and proof receipts | Repository source | Draft             |
+| v0alpha2 | Contract-bound checkpoint policy identity                | Repository source | Compatibility API |
+| v0alpha1 | Checkpoint contracts and deterministic replay            | npm alpha and CLI | Published alpha   |
 
-v0alpha3 is neither stable nor normative. Its contract is governed by
-[Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md). The contract does
-not depend on Covenant. No independent v0alpha3 implementation has yet been
-demonstrated.
+v0alpha3 is defined by
+[Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md). Its schemas and
+APIs may change while the RFC is Draft. No second conforming temporal
+implementation has yet been demonstrated.
 
 <a id="install-the-released-alpha"></a>
 
-## Checkpoint compatibility
+### Install the npm alpha
 
-The published alpha provides portable checkpoint contracts and deterministic
-replay:
+The current npm package provides portable checkpoint contracts, deterministic
+replay, and the Timeline CLI:
 
 ```sh
 npm install @covenant-org/timeline@0.0.0-alpha.1
 ```
 
-The checkpoint alpha does not expose the v0alpha3 temporal reasoning API.
-See [Getting started](./docs/getting-started.md) for its contract, CLI, and
-verification workflow.
+For the v0alpha3 temporal API, build the current repository source. See
+[Getting started](./docs/getting-started.md) for package and CLI workflows.
 
-## Boundaries
+## Current scope
 
-The current temporal source does not provide:
+| Area                   | Current boundary                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Time model             | Discrete metric and ordinal axes; civil time, calendar arithmetic, recurrence, and cross-axis mappings are future profiles |
+| Reasoning              | Simple Temporal Networks and Allen base relations; disjunctive constraints and dynamic controllability are future work     |
+| Evidence               | SHA-256 content binding in core; storage, authentication, authority, and admission policy belong to the deployment         |
+| Knowledge completeness | Reasons from explicit assertions; completeness-based absence queries are not yet supported                                 |
+| Model integration      | Tool and API integration; no training-time or model-architecture integration                                               |
+| Interoperability       | TypeScript reference implementation; no second conforming temporal implementation yet                                      |
 
-- civil-time normalization, time zones, calendar arithmetic, or recurrence;
-- arbitrary disjunctive interval constraints, cross-axis conversion, or dynamic
-  controllability;
-- causal inference from temporal precedence;
-- completeness-based absence queries;
-- automatic authority admission for model-extracted assertions;
-- evidence storage or source authentication beyond content-digest binding;
-- portable snapshot hydration;
-- stable SDK compatibility or normative governance;
-- a second temporal reasoner for cross-implementation verification; or
-- training-time or architecture-level model integration.
-
-An external kernel can make temporal reasoning part of an AI system's inference
-loop. It cannot by itself make time native to model weights. Medical,
-scientific, financial, and other high-stakes profiles require independent
-domain owners, evidence authority, privacy review, and domain evaluation.
+Workflow orchestration, persistence, scheduling, and domain authority remain
+separate services. High-stakes profiles require domain-owned evidence policy,
+privacy review, and evaluation.
 
 ## Relationship to Covenant
 

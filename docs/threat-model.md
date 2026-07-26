@@ -63,27 +63,39 @@ policy, or compromise the host process.
 
 ## Abuse Paths and Mitigations
 
-| Abuse path                        | Mitigation                                                               | Residual responsibility                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Same-ID contract substitution     | State pins canonical contract digest                                     | Host persists the original contract bytes                                                      |
-| Misleading policy label           | v0alpha2 pins profile and policy digest in contract bytes                | Profile resolves and authenticates actual policy bytes                                         |
-| Duplicate effect eligibility      | Accepted checkpoint is final in one run                                  | Host dispatches only newly emitted commands                                                    |
-| Replay executes an effect         | Core has no adapter or network entrypoint                                | Host separates replay from dispatch                                                            |
-| Duplicate or ambiguous JSON keys  | Strict parser rejects duplicates, comments, and trailing commas          | Non-CLI hosts use `parseJson` or equivalent                                                    |
-| Oversized input or deep values    | CLI byte limit and canonical depth/node limits                           | Host sets tighter deployment limits when needed                                                |
-| Prototype-name identifiers        | Own-property membership checks                                           | None                                                                                           |
-| Forged evidence claims            | Profile proof digest and contract policy binding                         | Profile verifies payload digest, signature, freshness, and producer authority                  |
-| Forged effect receipt             | Receipt is only a structural declaration                                 | Adapter verifies the external system result                                                    |
-| Temporal proof substitution       | Receipt binds state, query, result, and reasoner digests                 | Consumer verifies the supplied certificate before use                                          |
-| Scenario confusion                | Contexts are isolated in projection and query evaluation                 | Host labels and admits model-extracted contexts correctly                                      |
-| Hindsight leakage                 | Every query pins an explicit event-prefix knowledge cut                  | Host does not add later source content to an earlier extraction                                |
-| Chronology presented as causality | Core exposes temporal relations only                                     | Model and domain policy do not infer causal authority from order                               |
-| Constraint-graph exhaustion       | Node, edge, event, proof, and operation limits fail closed               | Host sets lower tenant-specific byte and compute limits                                        |
-| Integer precision loss            | Coordinates, bounds, and closure arithmetic require safe integers        | Profiles normalize external clocks without floating-point coercion                             |
-| False temporal assertions         | Assertions retain evidence content digests; generic core claims no truth | Host retains bytes, checks digests, authenticates sources, and preserves extraction provenance |
-| Sensitive identifiers in logs     | Core performs no implicit logging                                        | Host uses low-cardinality codes and redacts IDs                                                |
-| Compromised registry token        | Trusted publishing uses short-lived OIDC                                 | npm scope, environment, and tag protection must be configured                                  |
-| Artifact replacement              | Reproducible tarball, checksum, SBOM, GitHub and npm provenance          | Consumer verifies provenance and pins versions                                                 |
+| Abuse path                        | Mitigation                                                                | Residual responsibility                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Same-ID contract substitution     | State pins canonical contract digest                                      | Host persists the original contract bytes                                                      |
+| Misleading policy label           | v0alpha2 pins profile and policy digest in contract bytes                 | Profile resolves and authenticates actual policy bytes                                         |
+| Duplicate effect eligibility      | Accepted checkpoint is final in one run                                   | Host dispatches only newly emitted commands                                                    |
+| Replay executes an effect         | Core has no adapter or network entrypoint                                 | Host separates replay from dispatch                                                            |
+| Duplicate or ambiguous JSON keys  | Strict parser rejects duplicates, comments, and trailing commas           | Non-CLI hosts use `parseJson` or equivalent                                                    |
+| Oversized input or deep values    | CLI byte limit and canonical depth/node limits                            | Host sets tighter deployment limits when needed                                                |
+| Prototype-name identifiers        | Own-property membership checks                                            | None                                                                                           |
+| Forged evidence claims            | Profile proof digest and contract policy binding                          | Profile verifies payload digest, signature, freshness, and producer authority                  |
+| Forged effect receipt             | Receipt is only a structural declaration                                  | Adapter verifies the external system result                                                    |
+| Temporal proof substitution       | Receipt binds state, query, result, and reasoner digests                  | Consumer verifies the supplied certificate before use                                          |
+| Scenario confusion                | Contexts are isolated in projection and query evaluation                  | Host labels and admits model-extracted contexts correctly                                      |
+| Hindsight leakage                 | Every query pins an explicit event-prefix knowledge cut                   | Host does not add later source content to an earlier extraction                                |
+| Chronology presented as causality | Core exposes temporal relations only                                      | Model and domain policy do not infer causal authority from order                               |
+| Constraint-graph exhaustion       | Node, edge, event, proof, and operation limits fail closed                | Host sets lower tenant-specific byte and compute limits                                        |
+| Integer precision loss            | Coordinates, bounds, and closure arithmetic require safe integers         | Profiles normalize external clocks without floating-point coercion                             |
+| False temporal assertions         | Assertions retain evidence content digests; generic core claims no truth  | Host retains bytes, checks digests, authenticates sources, and preserves extraction provenance |
+| Sensitive identifiers in logs     | Core performs no implicit logging                                         | Host uses low-cardinality codes and redacts IDs                                                |
+| Compromised registry token        | Scoped short-lived fallback, protected environment, post-run revocation   | OIDC trusted publisher and required environment reviewer remain unconfigured                   |
+| Artifact replacement              | Reproducible tarball, checksum, SBOM, npm provenance, GitHub attestations | Consumer verifies provenance and pins versions                                                 |
+
+Alpha releases may use the documented short-lived token fallback with
+post-release secret removal, token revocation, and failed reauthentication.
+Beta and stable releases require trusted publishing and environment review.
+Release verification covers npm provenance and GitHub build and SBOM
+attestations separately. The public-state verifier delegates Sigstore
+certificate-chain, identity, signature, and transparency-log verification to
+GitHub CLI 2.88 or newer. It delegates npm registry-signature and publish
+attestation verification to `npm audit signatures`, then independently binds
+the decoded statements to the recorded package bytes, source, tag, workflow,
+and invocation. Those tools and their trust roots are part of the verifier's
+trusted computing base.
 
 ## Privacy
 

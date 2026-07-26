@@ -23,7 +23,8 @@ maintained in this repository. The external project represented by the public
 archive did not adopt Timeline. The alpha.2 package includes the Draft v0alpha3
 temporal reference implementation alongside v0alpha1 and v0alpha2 checkpoint
 compatibility APIs. External operation, an independently maintained temporal
-implementation, and RFC completion remain real release and adoption blockers.
+implementation, measured model-side assertion extraction, and RFC completion
+remain blockers to a production protocol claim.
 
 v0alpha3 adds explicit temporal axes, scenario contexts, points, proper
 intervals, digest-referenced coordinate and difference assertions, historical
@@ -62,20 +63,41 @@ local gate requires:
 
 It is not production-ready until a second implementation agrees on semantic
 results and verifies supported receipts, an external operator runs a real
-temporal workflow, RFC governance completes, and security review covers model
-extraction, proof substitution, graph exhaustion, and temporal-data privacy.
+temporal workflow, a controlled benchmark shows that models can emit useful
+admissible assertions more reliably than narrative memory, RFC governance
+completes, and security review covers model extraction, proof substitution,
+graph exhaustion, and temporal-data privacy.
 
 ## Evidence Reviewed
 
 - All specification, RFC, schema, conformance, scenario, governance, package,
-  source, test, script, and workflow files through the M4 branch based on
-  `main` commit `2e55bdd`.
+  source, test, script, and workflow files through tagged alpha.2 source commit
+  `23116b220a24debe83f7aad3bd8b85a945c655cf`, plus the post-release record,
+  validators, public-state verifier, and workflow hardening in this audit
+  revision.
 - Local baseline `pnpm verify`.
 - npm production dependency audit: no known vulnerabilities on 2026-07-26.
-- npm release `@covenant-org/timeline@0.0.0-alpha.1` published from
-  `timeline-v0.0.0-alpha.1` on 2026-07-26 with SLSA provenance. The public
-  registry tarball matched the GitHub release artifact byte for byte, and an
-  unauthenticated install passed the CLI and API smoke tests.
+- npm release `@covenant-org/timeline@0.0.0-alpha.2` published from
+  `timeline-v0.0.0-alpha.2` on 2026-07-26 using the protected-environment token
+  fallback. The release has npm provenance and GitHub build and SBOM
+  attestations; the public package passed clean-install CLI and API smoke tests.
+- The alpha.2 release record binds workflow run `30223008125`, attempt `3`,
+  artifact `8638028013`, source commit
+  `23116b220a24debe83f7aad3bd8b85a945c655cf`, registry SHA-1
+  `84a46f571e44c50d7869788046b4ffd76f1b3ecc`, and tarball SHA-256
+  `8158da1b49f350056192306e84bf50cbfa3ab21b5848e063b6b4b87da05e9c94`.
+  The npm and GitHub tarballs matched byte for byte. `next` pointed to alpha.2
+  while `latest` remained alpha.1.
+- Twelve release-evidence tests cover source, workflow, artifact,
+  attestation, credential-cleanup, checksum, SBOM, duplicate-key, and unknown
+  field substitution.
+- The public-state verifier, using GitHub CLI 2.88.1, cryptographically verified
+  the exact attempt-3 build, SBOM, and npm provenance bundles. Their certificates
+  and statements matched the source, tag, workflow, invocation, package bytes,
+  and downloaded SBOM.
+- The same verifier confirmed the remote annotated tag, passed npm
+  registry-signature verification, and completed a clean installed-package
+  temporal proof from a path containing spaces.
 - v0alpha1 and v0alpha2 traceability and conformance: 41 standalone documents,
   7 portable runs, 5 canonical byte fixtures, 18 schemas, and four
   locale/time-zone replay environments.
@@ -105,6 +127,11 @@ extraction, proof substitution, graph exhaustion, and temporal-data privacy.
   - immutable Actions SHA enforcement was enabled during this audit;
   - the `npm` environment permits only `timeline-v*` tags and contains no npm
     token secret, but it has no required reviewer;
+  - trusted publisher linkage remains unconfigured; alpha.2 used a short-lived
+    scoped token fallback, after which the environment secret was removed, the
+    token was revoked, and an authentication check confirmed it no longer
+    works; these credential-state facts are recorded as operator observations
+    because they cannot be corroborated from public release state;
   - secret validity checks and non-provider-pattern scanning remained
     unavailable or disabled.
 - Hardened replay benchmark on Node.js 24.14.0, Darwin arm64:
@@ -150,14 +177,20 @@ extraction, proof substitution, graph exhaustion, and temporal-data privacy.
 - [x] **Create a fail-closed release workflow.** Releases need tag/version
       agreement, a clean rebuild, tests, artifact inspection, checksums, SBOM,
       provenance, and a tag-restricted npm environment. The workflow supports
-      OIDC first and a short-lived protected-environment token fallback.
+      OIDC when configured and a short-lived protected-environment token
+      fallback.
 - [x] **Protect `main` and release tags.** `main` now requires the seven observed
       first-party checks and pull-request flow with administrator enforcement;
       force pushes and deletion are disabled. `timeline-v*` tags cannot be
       updated or deleted under the active no-bypass ruleset.
 - [x] **Establish registry package authority.**
-      `@covenant-org/timeline@0.0.0-alpha.1` was published from the protected
-      release tag with registry provenance and independently verified bytes.
+      `@covenant-org/timeline@0.0.0-alpha.2` was published from the protected
+      release tag with npm provenance, GitHub build and SBOM attestations, and
+      clean-install verification. A schema-validated release record binds the
+      source, component versions, protocol inputs, workflow attempt, registry
+      metadata, artifacts, SBOM, and attestations; a separate network verifier
+      rechecks the public bytes, remote tag, attestation signatures and
+      identities, transparency log, and installed package.
 
 ## High Priority (P1 - Fix Before Launch)
 
@@ -198,6 +231,11 @@ extraction, proof substitution, graph exhaustion, and temporal-data privacy.
 - [x] **Document the threat and trust model.** State assets, trust boundaries,
       attacker capabilities, replay/effect abuse paths, privacy constraints,
       and adopter obligations.
+- [ ] **Validate the model boundary.** No controlled evaluation yet shows that
+      models can extract admissible typed assertions and queries reliably, or
+      that Timeline improves end-to-end temporal accuracy over a comparable
+      narrative-memory baseline. Invalid output and unsupported definite answers
+      must count as failures, not receive manual repair.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.
@@ -225,7 +263,8 @@ extraction, proof substitution, graph exhaustion, and temporal-data privacy.
       historical run verification against a released artifact.
 - [ ] **Complete credentialless publishing.** Exercise OIDC trusted publishing
       and require `npm` environment reviewers. This is preferred supply-chain
-      hardening; the short-lived token path keeps releases available.
+      hardening for beta and stable releases; the short-lived token path remains
+      acceptable for alpha releases.
 
 ## Low Priority (P3 - Technical Debt)
 
@@ -325,8 +364,8 @@ Recommended host metrics:
    interoperability claim.
 3. Exercise accepted-decision correction and branch semantics only from a real
    incident; do not invent an untested branch protocol.
-4. Require protected environment approval and prefer npm trusted publishing;
-   use the short-lived token fallback when OIDC configuration is unavailable.
+4. Add an eligible protected-environment reviewer and npm trusted publishing
+   before beta or stable; retain the tested short-lived fallback for alpha.
 5. Exercise deprecation and historical verification before declaring rollback
    operational.
 6. Add portable snapshot hydration only if independent measurements require it.
@@ -340,7 +379,8 @@ Recommended host metrics:
   count.
 - No portable snapshot hydration test; intentionally deferred because replay at
   the supported maximum remains subsecond locally.
-- No OIDC trusted-publisher exercise for the next package version.
+- OIDC trusted publishing and a required `npm` environment reviewer remain
+  unconfigured.
 
 ## Action Plan
 
@@ -349,7 +389,7 @@ Recommended host metrics:
    weakening the evidence standard.
 3. Transfer or reimplement one adapter or reducer under independent governance.
 4. Record real correction incidents before specifying branch semantics.
-5. Complete protected-environment review before the next npm release; exercise
-   OIDC when available without making external configuration a release gate.
+5. Configure protected-environment review and exercise OIDC before beta or
+   stable, without making those external controls an alpha release gate.
 6. Exercise package deprecation and historical verification as a rollback
    drill.

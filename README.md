@@ -109,6 +109,12 @@ npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 npx timeline --version
 ```
 
+The current preview is
+[`@covenant-org/timeline@0.0.0-alpha.2`](https://www.npmjs.com/package/@covenant-org/timeline/v/0.0.0-alpha.2).
+The corresponding
+[GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/timeline-v0.0.0-alpha.2)
+includes the release tarball, checksum, and SPDX SBOM.
+
 The v0alpha3 library separates parsing, reasoning, and verification:
 
 ```ts
@@ -217,6 +223,13 @@ implementation has yet been demonstrated.
 
 The alpha package includes all three surfaces. See
 [Getting started](./docs/getting-started.md) for package and CLI workflows.
+The npm release includes registry provenance, and the GitHub tarball is covered
+by build and SBOM attestations. The
+[machine-readable release record](./releases/timeline-v0.0.0-alpha.2.json)
+binds the source tag, protocol inputs, workflow, artifacts, SBOM, and
+attestations; the [release policy](./docs/policies/releases.md) defines offline
+and public-state verification. Cryptographic public-state verification requires
+GitHub CLI 2.88 or newer.
 
 ## Current scope
 

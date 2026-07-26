@@ -110,16 +110,25 @@ active before removing a stale lock. Never automate lock removal by age alone.
 
 ## Release Verification
 
+Public-state verification requires GitHub CLI 2.88 or newer. The verifier
+downloads the recorded public bundles and runs `gh attestation verify` without
+using ambient GitHub authentication.
+
 For a release tag:
 
 1. confirm `timeline-v<package-version>` points to reviewed `main`;
-2. require the protected `npm` environment approval;
+2. verify the tag-restricted `npm` environment and require reviewer approval for
+   beta and stable releases;
 3. verify the workflow built identical tarballs twice;
-4. verify checksum, SPDX SBOM, GitHub attestation, and npm provenance;
-5. install the tarball in an empty consumer and run `timeline --version`;
-6. retain rollback or deprecation instructions.
+4. run `pnpm release:evidence:check` to bind the release record to the local tag,
+   source, components, protocol inputs, and migration;
+5. run `pnpm release:verify-published -- <release-record>` to compare npm and
+   GitHub bytes, checksums, SPDX SBOM, cryptographically verified attestations,
+   the current remote tag, workflow identity, and registry metadata;
+6. retain the machine-readable release record and rollback or deprecation
+   instructions.
 
-The bootstrap release exercised registry scope ownership and tag protection.
-Trusted publisher linkage and required environment reviewers remain external
-controls that must be configured and inspected in their administration
-surfaces before the next release.
+An alpha release may use the documented short-lived token fallback. Record the
+authentication path, remove the environment secret after the run, revoke the
+token, and confirm that it no longer authenticates. Beta and stable releases
+require trusted publishing and an eligible environment reviewer.

@@ -106,11 +106,8 @@ jobs:
           subject-path: ${{ steps.artifact.outputs.archive }}
           sbom-path: ${{ steps.sbom.outputs.path }}
 
-      - name: Publish bootstrap release to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish with npm trusted publishing
         run: >-
           npm publish "${{ steps.artifact.outputs.archive }}"
           --access public
           --tag "${{ steps.metadata.outputs.dist-tag }}"
-          --provenance

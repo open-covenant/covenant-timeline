@@ -33,12 +33,18 @@ contract + ordered events
 The project specifies the evidence and decision boundary. It does not replace a
 workflow engine, database, CI system, or agent runtime.
 
-## Try the current pre-alpha
+## Install the released alpha
 
 Requirements:
 
-- Node.js 22 or later
-- pnpm 10
+- Node.js 22 or 24
+
+```sh
+npm install @covenant-org/timeline@next
+timeline --version
+```
+
+To run the repository demo from source:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -90,9 +96,9 @@ events. Replay never calls an adapter.
 
 ## Current status
 
-This repository is a production-hardened alpha release candidate. That means
-the implementation defends its stated boundary; it does not mean the protocol
-has independent production adoption.
+This repository contains a production-hardened alpha release. That means the
+implementation defends its stated boundary; it does not mean the protocol has
+independent production adoption.
 
 Implemented:
 
@@ -117,11 +123,11 @@ Not implemented:
 - production SDK compatibility guarantees;
 - an independent conforming implementation.
 
-The package is versioned but not yet published to npm. Its release workflow,
-installed-tarball test, SPDX SBOM, checksum, and provenance path are prepared,
-but npm scope ownership and trusted-publisher configuration require external
-verification. Cross-language agreement currently covers canonical bytes, not
-an independent reducer.
+`@covenant-org/timeline@0.0.0-alpha.1` is published on npm under the `next`
+channel with registry provenance. Future releases require the npm trusted
+publisher to be linked to the repository workflow; no long-lived npm token is
+stored in GitHub. Cross-language agreement currently covers canonical bytes,
+not an independent reducer.
 
 `verification.ok` means the pinned run is structurally complete under its
 declared claims. It does not verify evidence authority, payload possession,

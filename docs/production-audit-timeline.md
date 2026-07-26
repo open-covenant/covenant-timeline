@@ -10,11 +10,11 @@ permitted an accepted checkpoint to emit additional effect commands, replayed
 growing runs in quadratic time, and accepted unbounded, ambiguous CLI input.
 
 The repository now closes those local integrity, availability, parser,
-packaging, and supply-chain gaps. It is a production-hardened alpha release
-candidate, not a production protocol. The package is still unpublished, and no
-external authority profile or independent implementation exists. Registry
-authority, protected release configuration, external adoption, and independent
-interoperability remain real release and adoption blockers.
+packaging, and supply-chain gaps. It is a released, production-hardened alpha,
+not a production protocol. The package and its registry provenance are public,
+but no external authority profile or independent implementation exists.
+Trusted-publisher linkage, protected release approval, external adoption, and
+independent interoperability remain real release and adoption blockers.
 
 This audit treats "production ready" as two separate gates:
 
@@ -34,15 +34,19 @@ blocker until observed.
 ## Evidence Reviewed
 
 - All specification, RFC, schema, conformance, scenario, governance, package,
-  source, test, script, and workflow files on `main` at `4f8c2b6`.
+  source, test, script, and workflow files through the released `main` commit
+  `20f720f`.
 - Local baseline `pnpm verify`.
-- npm production dependency audit: no known vulnerabilities on 2026-07-25.
-- npm registry lookup: `@covenant-org/timeline` returned `E404` on 2026-07-25.
+- npm production dependency audit: no known vulnerabilities on 2026-07-26.
+- npm release `@covenant-org/timeline@0.0.0-alpha.1` published from
+  `timeline-v0.0.0-alpha.1` on 2026-07-26 with SLSA provenance. The public
+  registry tarball matched the GitHub release artifact byte for byte, and an
+  unauthenticated install passed the CLI and API smoke tests.
 - Hardened local gate: 73 tests, 82.71% statements, 74.44% branches,
   93.93% functions, 83.36% lines, installed-tarball smoke, deterministic SPDX
   SBOM, reproducible tarball bytes, actionlint, and no known full dependency
   audit findings.
-- GitHub control-plane audit on 2026-07-25:
+- GitHub control-plane audit on 2026-07-26:
   - `main` initially had no branch protection, repository ruleset, or
     environment;
   - `main` now requires a pull request, the seven observed CI and CodeQL checks
@@ -54,6 +58,8 @@ blocker until observed.
   - Dependabot security updates, secret scanning, and push protection were
     enabled during this audit;
   - immutable Actions SHA enforcement was enabled during this audit;
+  - the `npm` environment permits only `timeline-v*` tags and contains no npm
+    token secret, but it has no required reviewer;
   - secret validity checks and non-provider-pattern scanning remained
     unavailable or disabled.
 - Baseline replay benchmark on the local Node.js runtime:
@@ -88,15 +94,17 @@ blocker until observed.
       duplicates, comments, and trailing commas.
 - [x] **Create a fail-closed release workflow.** Releases need tag/version
       agreement, a clean rebuild, tests, artifact inspection, checksums, SBOM,
-      provenance, and an approval-protected npm environment.
+      provenance, and a tag-restricted npm environment. The workflow now has no
+      token fallback, so it fails closed until trusted publishing is linked.
 - [x] **Protect `main` and release tags.** `main` now requires the seven observed
       first-party checks and pull-request flow with administrator enforcement;
       force pushes and deletion are disabled. `timeline-v*` tags cannot be
       updated or deleted under the active no-bypass ruleset.
-- [ ] **Resolve external release authority.** The npm package does not exist or
-      is not visible to the current registry identity. Scope ownership, trusted
-      publisher configuration, and protected environment reviewers remain
-      unverified.
+- [x] **Establish registry package authority.**
+      `@covenant-org/timeline@0.0.0-alpha.1` was published from the protected
+      release tag with registry provenance and independently verified bytes.
+- [ ] **Complete credentialless release governance.** Trusted publisher
+      configuration and required `npm` environment reviewers remain unverified.
 
 ## High Priority (P1 - Fix Before Launch)
 
@@ -228,8 +236,8 @@ Recommended host metrics:
 5. Make structural assurance explicit in the report contract.
 6. Treat effect execution and evidence authority as host/profile concerns with
    documented interfaces and tests, never hidden reducer behavior.
-7. Build release artifacts once in an approval-protected workflow and attest
-   those exact bytes.
+7. Build release artifacts once in a protected workflow and attest those exact
+   bytes.
 
 ## Test Coverage Gaps
 
@@ -254,11 +262,11 @@ Recommended host metrics:
 4. Add adversarial, recovery, and large-run regression tests.
 5. Complete package metadata, license, maps, installed-tarball smoke, and
    release validation scripts.
-6. Add CI security/audit jobs and an approval-protected trusted-publishing
-   workflow with checksums and SBOM.
+6. Add CI security/audit jobs and a trusted-publishing workflow with checksums
+   and SBOM.
 7. Add threat model, operations, adopter, and release runbooks.
 8. Run local verification, clean-install artifact verification, supported
    platform CI, and post-merge CI.
-9. Leave external authority profile, independent implementation, registry
-   ownership, and protected-environment configuration visibly blocked until
-   directly verified.
+9. Leave external authority profile, independent implementation,
+   trusted-publisher linkage, and protected-environment review visibly blocked
+   until directly verified.

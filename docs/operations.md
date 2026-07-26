@@ -97,6 +97,7 @@ For a release tag:
 5. install the tarball in an empty consumer and run `timeline --version`;
 6. retain rollback or deprecation instructions.
 
-Registry scope ownership, trusted publisher linkage, environment reviewers, and
-tag protection are external controls and must be inspected in their respective
-administration surfaces.
+The bootstrap release exercised registry scope ownership and tag protection.
+Trusted publisher linkage and required environment reviewers remain external
+controls that must be configured and inspected in their administration
+surfaces before the next release.

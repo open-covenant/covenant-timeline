@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha3/conformance-case.schema.json",
+  "title": "Covenant Timeline v0alpha3 conformance case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "targetSchema", "requirements", "document", "expect"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]+$"
+    },
+    "targetSchema": {
+      "type": "string",
+      "format": "uri-reference"
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^CTL3-[A-Z]+-[0-9]{3}$"
+      }
+    },
+    "document": {
+      "type": "object"
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valid"],
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "errorCode": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

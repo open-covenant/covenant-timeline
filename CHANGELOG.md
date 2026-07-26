@@ -16,6 +16,20 @@
   corpus.
 - Add atomic portable run archives and a 50,000-event replay benchmark.
 - Add a bounded independent-operator pilot and proposal template.
+- Add the temporal reasoning vision and Draft RFC for the temporal-first
+  v0alpha3 contract.
+- Add experimental v0alpha3 axes, contexts, points, proper intervals,
+  digest-referenced coordinate and difference assertions, temporal facts,
+  historical knowledge cuts, typed queries, and proof-carrying conclusions.
+- Add strict v0alpha3 runtime validation and JSON Schemas.
+- Add a resource-bounded, exact-integer Simple Temporal Network reasoner for
+  consistency, tight bounds, point relations, and all 13 Allen interval base
+  relations.
+- Add independently verifiable schedules, ordered bound paths, exhaustive
+  relation cases, and negative-cycle proofs bound to state, query, and result
+  digests.
+- Add `timeline reason`, a model-facing integration guide, an executable
+  temporal demo, and a baseline kernel benchmark.
 
 ### Changed
 
@@ -29,6 +43,11 @@
   restart path; `RunState` is not a hydration format.
 - Allow the protected npm release workflow to use a short-lived,
   package-scoped token when OIDC trusted publishing is unavailable.
+- Position the checkpoint verifier as the implemented first foundation of the
+  broader temporal reasoning program without changing released alpha
+  semantics.
+- Make temporal-first v0alpha3 the next product contract while retaining
+  v0alpha1 and v0alpha2 as checkpoint compatibility formats.
 
 ## 0.0.0-alpha.1 - 2026-07-26
 

@@ -8,6 +8,12 @@
 Replay needs one unambiguous input order. A universal clock ontology would add
 complexity before the first adopter demonstrates a need for it.
 
+This RFC governs the v0alpha1 and v0alpha2 checkpoint ledger only. It does not
+define the future product boundary. The temporal-first v0alpha3 contract
+proposed in [RFC 0009](./0009-temporal-reasoning-substrate.md) keeps sequence as
+record order while adding explicit temporal axes, entities, constraints,
+knowledge cuts, queries, and proof receipts.
+
 ## Proposed design
 
 Core v0alpha1 uses a contiguous zero-based event sequence as its only normative

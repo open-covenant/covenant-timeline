@@ -80,4 +80,5 @@ export {
   type SaveArchiveOptions,
 } from "./archive.js";
 export * from "./v0alpha2/index.js";
+export * from "./v0alpha3/index.js";
 export * from "./profiles/index.js";

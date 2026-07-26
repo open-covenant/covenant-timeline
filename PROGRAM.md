@@ -2,166 +2,278 @@
 
 ## Product decision
 
-Covenant Timeline will be developed as a thin checkpoint-contract protocol
-with an embeddable verifier.
+Covenant Timeline is being developed as a portable, proof-carrying temporal
+reasoning substrate for AI systems.
 
-It will not build a general durable workflow runtime. Existing runtimes and
-databases may host timeline runs through adapters. Covenant is the first
-reference adopter and provides the initial production use case.
+The next contract, v0alpha3, is temporal-first. It represents explicit axes,
+scenario contexts, points, proper intervals, bounded constraints, knowledge
+cuts, typed queries, and checked conclusions. A model can propose assertions and
+questions; a deterministic kernel returns bounds, possible relations,
+schedules, or contradictions with independently checkable evidence.
 
-The first product wedge is verifiable long-running software and agent work:
+The released v0alpha1 and source-only v0alpha2 checkpoint contracts remain
+immutable compatibility formats. They established portable replay, canonical
+event history, evidence identity, and effect receipts, but their event sequence
+is only record order. Checkpoints may consume verified temporal conclusions;
+they are no longer the center of the product architecture.
 
-- declare checkpoints and evidence requirements;
-- ingest audit, commit, CI, review, and delivery evidence;
-- replay deterministic requirement coverage with a recorded policy label;
-- request bounded Covenant effects;
-- prove which receipt resolved each request.
+This is an immediately buildable neuro-symbolic interface, not a claim that an
+external solver changes model weights. Model-native temporal reasoning requires
+separate open-weight training or architecture experiments.
 
-General scoring, financial authority, trading, prediction markets, and
-multidisciplinary engineering are outside the first release.
+## Current status
 
-## First-release surfaces
+- v0alpha1 is the released checkpoint format. Source-only v0alpha2 retains its
+  frozen checkpoint semantics and compatibility fixtures.
+- [RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md) defines the
+  temporal-first v0alpha3 contract and is currently Draft.
+- Any v0alpha3 implementation in the repository is experimental source until
+  the RFC, schemas, conformance corpus, and required final-comment period are
+  complete.
+- The independent checkpoint-operator pilot remains useful adoption evidence,
+  but it does not block temporal-first implementation.
+
+## Product boundary
 
 The project owns:
 
-1. a language-neutral contract and event specification;
-2. JSON Schemas and portable fixtures;
-3. a deterministic embedded reducer and verifier;
-4. a CLI and one software-work profile;
-5. a Covenant adapter;
-6. import and export guidance for external runtimes.
+1. a language-neutral temporal contract, event, query, and conclusion model;
+2. deterministic projection at an explicit record-time knowledge cut;
+3. a bounded temporal constraint kernel;
+4. canonical semantic results and independently checkable proof receipts;
+5. model-facing JSON, CLI, and library interfaces;
+6. schemas, fixtures, compatibility tests, and multiple conforming
+   implementations; and
+7. adapters through which models, runtimes, and legacy checkpoints use the
+   substrate.
 
 It does not own:
 
-- job scheduling or worker orchestration;
-- persistent queues, timers, leases, or retries;
-- databases, object stores, or observability backends;
-- domain-specific CI, review, or deployment policy;
-- authority enforcement outside an adopter's adapter.
+- workflow scheduling, queues, retries, workers, or durable storage;
+- ambient wall-clock, locale, calendar, or time-zone policy;
+- natural-language truth, evidence authority, or a universal ontology;
+- causal inference from temporal order;
+- domain policy, medical judgment, financial authority, or safety approval; or
+- model-native capability claims without training-time or architecture-level
+  evidence.
+
+Existing workflow and agent runtimes should host Timeline through adapters.
+Covenant remains the first reference adopter, not a required service.
+
+## First temporal kernel
+
+The initial kernel is intentionally small and deterministic:
+
+- discrete safe-integer metric and ordinal axes;
+- isolated actual, planned, forecast, and hypothetical contexts;
+- points and proper intervals;
+- exact and bounded coordinates;
+- Simple Temporal Network difference constraints;
+- append-only assertion, supersession, and retraction;
+- explicit record-time knowledge cuts;
+- consistency, difference-bound, point-relation, and interval-relation queries;
+  and
+- schedules, bound paths, relation cases, and negative cycles as proof
+  receipts.
+
+The first kernel does not implement dense time, arbitrary disjunctive interval
+algebra, recurrence, calendar arithmetic, cross-axis conversion, uncertain
+controllability, deontic obligations, or absence inference without a future
+completeness profile.
 
 ## Success criteria
 
-### Useful pre-alpha
+### Experimental temporal source
 
-- A new contributor completes the local demo in fifteen minutes.
-- A software contract can be replayed from evidence through decision and
-  receipt.
-- Invalid ordering, missing evidence, and unresolved commands produce stable
-  findings.
-- Covenant can translate its audit and provenance records into timeline events.
+- A contributor can run a temporal query and verify its receipt locally in
+  fifteen minutes.
+- Identical contract, event prefix, context, and query produce the same
+  semantic result across supported environments.
+- Contradictory and underdetermined inputs remain explicit.
+- v0alpha1 and v0alpha2 fixtures and digests do not change.
+- Draft status and unsupported semantics are visible at every public entry
+  point.
+
+### Temporal alpha
+
+- TypeScript and an independent second implementation agree on semantic
+  results for the shared corpus.
+- Historical knowledge cuts do not leak later corrections.
+- A model-facing evaluation reports extraction, admission, solver, and final
+  answer errors separately.
+- One real run spans restarts, delayed observations, corrections, concurrency,
+  and deadlines.
+- An independent operator can reproduce every checked conclusion from exported
+  records.
 
 ### Beta
 
-- Covenant operates a real multi-checkpoint engineering run.
-- One external project uses Timeline without Covenant.
-- A second implementation agrees on the portable conformance corpus.
-- Historical fixtures remain verifiable across an upgrade.
-- Security review covers parsing, canonicalization, evidence identity, replay,
-  and the command boundary.
+- The temporal RFC and compatibility policy have completed governance review.
+- At least one model or runtime outside Covenant uses the temporal contract.
+- Two independently maintained implementations verify each other's results and
+  receipts.
+- Real runs have crossed multiple package versions without losing historical
+  verification.
+- Security and privacy reviews cover parsing, resource limits, provenance,
+  projection, proof verification, and adapter authority.
 
 ### Stable release
 
-- The contract and event formats have demonstrated interoperability.
-- Compatibility policy is backed by migration tests.
+- Contract, query, and semantic-result formats have demonstrated
+  interoperability across implementations and adopters.
+- Migration tests back the compatibility policy.
 - At least two organizations actively maintain implementations or adapters.
-- Operators can explain every accepted decision from contract-bound evaluation
-  semantics and authenticated evidence.
-
-Version 1 is adoption-gated, not date-gated.
+- Operators can reproduce every accepted temporal conclusion from pinned
+  inputs without trusting the requesting model or Covenant services.
 
 ## Delivery sequence
 
-### Phase 1: useful core — weeks 0–8
+### Historical foundation: M0–M4
 
-- Replace the calendar-and-score demo with the contract reducer.
-- Stabilize the minimal object vocabulary.
-- Add a proper RFC 8785 implementation and byte-level fixtures.
-- Build CLI commands for validate, replay, inspect, and verify.
-- Implement the software-work profile.
-- Translate Covenant audit and provenance records into portable evidence.
-- Publish one end-to-end local tutorial.
+The checkpoint work proved canonical replay, content identity, a safe effect
+boundary, a Covenant integration, a real Temporal.io restart test, a public
+longitudinal archive, and cross-language verification. External operation of
+the checkpoint adapter is still open.
 
-Exit gate: the Covenant engineering example is useful without reading the
-architecture documents.
+Those results remain compatibility and adoption assets. They do not constrain
+the v0alpha3 object model.
 
-### Phase 2: real integration — weeks 8–16
+### Temporal contract and kernel: M5
 
-- Run a multi-release Covenant build through Timeline.
-- Add storage interfaces without selecting a mandatory database.
-- Add one adapter for an established durable execution system.
-- Add correction, branching, and upgrade fixtures driven by adopter needs.
-- Recruit one independent design partner.
+- Land the v0alpha3 contract, projection rules, schemas, and conformance cases.
+- Implement the bounded TypeScript kernel and receipt verifier.
+- Expose a small library, CLI, and model-facing JSON example.
+- Freeze v0alpha1 and v0alpha2 compatibility tests.
 
-Exit gate: a run survives interruption through its host runtime and remains
-independently verifiable from exported records.
+Exit gate: a model or application can submit portable temporal state and a
+typed query, receive a checked result, and verify it without a hosted service.
 
-### Phase 3: external beta — months 4–9
+### Knowledge time and proofs: M6
 
-- Publish stable TypeScript and one additional language binding.
-- Complete cross-language canonicalization and reducer tests.
-- Document compatibility and migrations from observed upgrades.
-- Complete threat, privacy, and security reviews.
-- Accept one non-software profile only if an external adopter maintains it.
+- Harden correction, retraction, supersession, and historical knowledge cuts.
+- Expand valid-time facts and explicit completeness semantics.
+- Add an independent implementation and solver-oracle testing.
+- Define proof profiles without requiring different reasoners to emit identical
+  receipt bytes.
 
-Exit gate: an external organization can operate and upgrade Timeline without
-Covenant services.
+Exit gate: independent implementations agree on semantic results and verify
+each other's supported proofs across historical cuts and contradictions.
+
+### Model inference bridge: M7
+
+- Add source-linked, content-bound text-to-IR and query interfaces.
+- Return bounded state capsules, alternatives, and repair diagnostics.
+- Bind downstream decisions to exact state, query, and result identities.
+- Compare direct prompting, chain of thought, and kernel-integrated inference
+  on fixed evidence and models.
+
+Exit gate: held-out evaluation shows a repeatable gain without hiding
+extraction failures or increasing unsupported definite answers.
+
+### Longitudinal operation: M8
+
+- Run a real workflow across weeks, restarts, corrections, concurrent work, and
+  deadlines.
+- Measure temporal errors and manual reconciliation before and after
+  integration.
+- Recruit an independent model or runtime operator.
+
+Exit gate: exported records reproduce every conclusion and demonstrate
+operational value beyond a synthetic benchmark.
+
+### Model-integrated research: M9
+
+- Test constrained-decoding or inference-stage kernel integration.
+- Train or adapt an open-weight model on temporal IR and proof traces.
+- Evaluate transfer on held-out structures with and without the external
+  kernel.
+
+Exit gate: claims distinguish tool-integrated, inference-integrated, and
+model-native behavior, and any model-native gain survives removal of the
+external kernel.
+
+### Interoperable beta: M10
+
+- Complete governance, compatibility, security, and privacy review.
+- Stabilize supported APIs and migration tooling from observed use.
+- Establish independent maintenance and release participation.
+
+Exit gate: external operators can adopt, run, verify, and upgrade the temporal
+substrate without Covenant services.
 
 ## Team shape
 
-The narrow program is credible with two to three sustained contributors:
+The temporal program needs sustained ownership in four areas:
 
-| Responsibility                                |                           Capacity |
-| --------------------------------------------- | ---------------------------------: |
-| Protocol and reference implementation         |                                1–2 |
-| Covenant integration and developer experience |                                  1 |
-| Security and independent review               | fractional, increasing before beta |
+| Responsibility                                   |                           Capacity |
+| ------------------------------------------------ | ---------------------------------: |
+| Contract, kernel, and reference implementation   |                                1–2 |
+| Model interface and evaluation                   |                                  1 |
+| Runtime integration and developer experience     |                                  1 |
+| Security, temporal methods, and benchmark review | fractional, increasing before beta |
 
-Additional domain profiles require their own maintainers and reviewers. Core
-maintainers should not simulate expertise in finance, market structure,
-accounting, or engineering certification.
+Model-native work also requires open-weight training infrastructure and
+independent evaluation. Domain profiles require their own maintainers and
+reviewers; core maintainers should not simulate expertise in medicine,
+finance, scientific validation, or engineering certification.
 
 ## Adoption principles
 
-- Solve one painful problem before generalizing.
+- Make the portable JSON contract useful from any model vendor or runtime.
 - Keep the local path smaller than adopting a workflow platform.
-- Make every exported record usable without Covenant.
-- Reuse CloudEvents, W3C PROV, in-toto, and established canonicalization
-  standards where they fit.
-- Integrate with Temporal, Restate, DBOS, and similar systems instead of
-  reimplementing their operational responsibilities.
-- Treat examples and fixtures as stronger evidence than roadmap breadth.
+- Separate probabilistic extraction from deterministic inference.
+- Preserve ambiguity instead of inventing precision.
+- Treat record order, occurrence order, and causality as different concepts.
+- Bind every admitted assertion and conclusion to provenance and content
+  identity.
+- Reuse established temporal algebra, provenance, calendar, and
+  canonicalization standards.
+- Integrate with Temporal.io, Restate, DBOS, and similar systems instead of
+  rebuilding their operational responsibilities.
+- Treat examples, fixtures, and independent runs as stronger evidence than
+  roadmap breadth.
+- Treat “understanding time” as measured behavior, not branding.
 
 Track:
 
-- time to first verified run;
-- real run duration and checkpoint count;
-- unexplained or irreproducible decisions;
-- upgrade success;
-- external implementations and adopters;
+- time to first checked temporal query;
+- semantic-result and proof-verification agreement across implementations;
+- contradiction detection, abstention, and unsupported precision;
+- extraction, admission, solver, and final-answer error rates;
+- reproducibility across knowledge cuts, restarts, and upgrades;
+- external models, runtimes, implementations, and operators; and
 - support burden.
 
-Stars, package downloads, and profile count are secondary.
+Stars, package downloads, profile count, and raw checkpoint count are
+secondary.
 
 ## Expansion gate
 
 A new domain enters the public roadmap only when:
 
 - an external adopter brings a concrete workflow;
-- a named maintainer owns the profile;
-- the domain does not require new core semantics;
-- safety and privacy boundaries are reviewed;
-- executable fixtures precede public capability claims.
+- a named domain maintainer owns the evidence semantics;
+- required core semantics have executable conformance cases;
+- safety, privacy, and authority boundaries are independently reviewed; and
+- public capability claims follow a real exported run.
 
-Until those conditions exist, broader applications remain research notes
-outside the core repository.
+The domain-neutral temporal substrate may advance before any high-stakes
+profile. Medical, scientific, financial, and other regulated uses remain
+outside the product claim until qualified independent owners supply their
+domain rules and evaluation.
 
 ## Stop conditions
 
 Pause expansion when:
 
-- replay produces a different decision from pinned inputs;
-- an adapter can execute an effect during replay;
-- evidence cannot be traced to its producer and payload identity;
-- a profile needs vendor-specific behavior in the core;
-- a decision presents an unverified policy label as enforced policy;
-- the core becomes harder to adopt than the runtime it integrates with.
+- identical pinned inputs produce different semantic results;
+- historical knowledge cuts leak later corrections;
+- a proof cannot be checked independently from its pinned inputs;
+- unrelated scenario contexts constrain one another;
+- record order is presented as occurrence order or causality;
+- temporal inference collapses ambiguity into unsupported precision;
+- model-generated assertions lose source or extraction provenance;
+- an adapter grants authority that the portable record does not justify;
+- the core becomes harder to adopt than the runtime it integrates with; or
+- claimed gains disappear when extraction and solver performance are measured
+  separately.

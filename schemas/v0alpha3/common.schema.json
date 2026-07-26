@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json",
+  "title": "Covenant Timeline v0alpha3 common types",
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._:/-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "safeInteger": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "identifierArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "nonEmptyIdentifierArray": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/digest"
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/identifier"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "axis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "unit", "origin"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": ["metric", "ordinal"]
+        },
+        "unit": {
+          "$ref": "#/$defs/identifier"
+        },
+        "origin": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "mode": {
+          "enum": ["actual", "forecast", "hypothetical", "planned"]
+        }
+      }
+    },
+    "coordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "minimum": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "maximum": {
+          "$ref": "#/$defs/safeInteger"
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "axisId"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "axisId": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "startPointId", "endPointId"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "startPointId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "endPointId": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "differenceConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromPointId", "toPointId"],
+      "minProperties": 3,
+      "properties": {
+        "fromPointId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "toPointId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "minimum": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "maximum": {
+          "$ref": "#/$defs/safeInteger"
+        }
+      }
+    },
+    "constraintAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "constraint", "evidenceRefs"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "constraint": {
+          "$ref": "#/$defs/differenceConstraint"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "supersedes": {
+          "$ref": "#/$defs/nonEmptyIdentifierArray"
+        }
+      }
+    },
+    "coordinateAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "pointId", "coordinate", "evidenceRefs"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "pointId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "coordinate": {
+          "$ref": "#/$defs/coordinate"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "supersedes": {
+          "$ref": "#/$defs/nonEmptyIdentifierArray"
+        }
+      }
+    },
+    "factAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "propositionRef", "evidenceRefs"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "propositionRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "validDuring": {
+          "$ref": "#/$defs/identifier"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/identifier"
+        },
+        "assertedAt": {
+          "$ref": "#/$defs/identifier"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "supersedes": {
+          "$ref": "#/$defs/nonEmptyIdentifierArray"
+        }
+      }
+    },
+    "pointRelation": {
+      "enum": ["after", "before", "equal"]
+    },
+    "intervalRelation": {
+      "enum": [
+        "after",
+        "before",
+        "contains",
+        "during",
+        "equal",
+        "finished-by",
+        "finishes",
+        "meets",
+        "met-by",
+        "overlapped-by",
+        "overlaps",
+        "started-by",
+        "starts"
+      ]
+    },
+    "relation": {
+      "enum": [
+        "after",
+        "before",
+        "contains",
+        "during",
+        "equal",
+        "finished-by",
+        "finishes",
+        "meets",
+        "met-by",
+        "overlapped-by",
+        "overlaps",
+        "started-by",
+        "starts"
+      ]
+    }
+  }
+}

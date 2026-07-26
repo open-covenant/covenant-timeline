@@ -1,0 +1,275 @@
+{
+  "schema": "covenant.timeline.run.v0alpha3",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha3",
+    "id": "software.release.temporal.v1",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "axes": [
+      {
+        "id": "release-seconds",
+        "kind": "metric",
+        "unit": "second",
+        "origin": "release-window.origin.v1"
+      }
+    ],
+    "contexts": [
+      {
+        "id": "actual",
+        "mode": "actual"
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "point.declared",
+      "point": {
+        "id": "work-start",
+        "contextId": "actual",
+        "axisId": "release-seconds"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "point.declared",
+      "point": {
+        "id": "review-start",
+        "contextId": "actual",
+        "axisId": "release-seconds"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-2",
+      "sequence": 2,
+      "type": "point.declared",
+      "point": {
+        "id": "deploy-start",
+        "contextId": "actual",
+        "axisId": "release-seconds"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-3",
+      "sequence": 3,
+      "type": "point.declared",
+      "point": {
+        "id": "deploy-end",
+        "contextId": "actual",
+        "axisId": "release-seconds"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-4",
+      "sequence": 4,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "coordinate.work-start.v1",
+        "contextId": "actual",
+        "pointId": "work-start",
+        "coordinate": {
+          "minimum": 0,
+          "maximum": 0
+        },
+        "evidenceRefs": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-5",
+      "sequence": 5,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "coordinate.review-start.v1",
+        "contextId": "actual",
+        "pointId": "review-start",
+        "coordinate": {
+          "minimum": 86400,
+          "maximum": 172800
+        },
+        "evidenceRefs": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-6",
+      "sequence": 6,
+      "type": "interval.declared",
+      "interval": {
+        "id": "change-work",
+        "contextId": "actual",
+        "startPointId": "work-start",
+        "endPointId": "review-start"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-7",
+      "sequence": 7,
+      "type": "interval.declared",
+      "interval": {
+        "id": "approval-window",
+        "contextId": "actual",
+        "startPointId": "review-start",
+        "endPointId": "deploy-start"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-8",
+      "sequence": 8,
+      "type": "interval.declared",
+      "interval": {
+        "id": "deployment",
+        "contextId": "actual",
+        "startPointId": "deploy-start",
+        "endPointId": "deploy-end"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-9",
+      "sequence": 9,
+      "type": "constraint.asserted",
+      "assertion": {
+        "id": "constraint.review-window.v1",
+        "contextId": "actual",
+        "constraint": {
+          "fromPointId": "work-start",
+          "toPointId": "review-start",
+          "minimum": 86400,
+          "maximum": 172800
+        },
+        "evidenceRefs": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-10",
+      "sequence": 10,
+      "type": "constraint.asserted",
+      "assertion": {
+        "id": "constraint.deploy-delay.v1",
+        "contextId": "actual",
+        "constraint": {
+          "fromPointId": "review-start",
+          "toPointId": "deploy-start",
+          "minimum": 3600,
+          "maximum": 7200
+        },
+        "evidenceRefs": [
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-11",
+      "sequence": 11,
+      "type": "constraint.asserted",
+      "assertion": {
+        "id": "constraint.deploy-duration.v1",
+        "contextId": "actual",
+        "constraint": {
+          "fromPointId": "deploy-start",
+          "toPointId": "deploy-end",
+          "minimum": 600,
+          "maximum": 1800
+        },
+        "evidenceRefs": [
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-12",
+      "sequence": 12,
+      "type": "constraint.asserted",
+      "assertion": {
+        "id": "constraint.deploy-delay.v2",
+        "contextId": "actual",
+        "constraint": {
+          "fromPointId": "review-start",
+          "toPointId": "deploy-start",
+          "minimum": 3600,
+          "maximum": 3600
+        },
+        "evidenceRefs": [
+          "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        "supersedes": ["constraint.deploy-delay.v1"]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-13",
+      "sequence": 13,
+      "type": "assertion.retracted",
+      "assertionId": "constraint.deploy-delay.v1",
+      "evidenceRefs": [
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      ]
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-14",
+      "sequence": 14,
+      "type": "fact.asserted",
+      "assertion": {
+        "id": "fact.review-approved.v1",
+        "contextId": "actual",
+        "propositionRef": "release.review-approved",
+        "validDuring": "approval-window",
+        "observedAt": "review-start",
+        "assertedAt": "review-start",
+        "evidenceRefs": [
+          "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-15",
+      "sequence": 15,
+      "type": "fact.asserted",
+      "assertion": {
+        "id": "fact.review-approved.v2",
+        "contextId": "actual",
+        "propositionRef": "release.review-reopened",
+        "validDuring": "approval-window",
+        "observedAt": "review-start",
+        "assertedAt": "deploy-start",
+        "evidenceRefs": [
+          "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ],
+        "supersedes": ["fact.review-approved.v1"]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-16",
+      "sequence": 16,
+      "type": "assertion.retracted",
+      "assertionId": "fact.review-approved.v1",
+      "evidenceRefs": [
+        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ]
+    }
+  ]
+}

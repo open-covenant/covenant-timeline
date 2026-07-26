@@ -1,0 +1,348 @@
+[
+  {
+    "id": "schema.valid-contract",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/contract.schema.json",
+    "requirements": ["CTL3-CONTRACT-001"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha3",
+      "id": "release.temporal.v1",
+      "subject": {
+        "kind": "repository",
+        "id": "example/service"
+      },
+      "axes": [
+        {
+          "id": "elapsed-seconds",
+          "kind": "metric",
+          "unit": "second",
+          "origin": "run.origin.v1"
+        }
+      ],
+      "contexts": [
+        {
+          "id": "actual",
+          "mode": "actual"
+        }
+      ]
+    },
+    "expect": {
+      "valid": true
+    }
+  },
+  {
+    "id": "schema.contract-empty-axes",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/contract.schema.json",
+    "requirements": ["CTL3-CONTRACT-001"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha3",
+      "id": "release.temporal.v1",
+      "subject": {
+        "kind": "repository",
+        "id": "example/service"
+      },
+      "axes": [],
+      "contexts": [
+        {
+          "id": "actual",
+          "mode": "actual"
+        }
+      ]
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
+    "id": "schema.valid-constraint-event",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json",
+    "requirements": ["CTL3-EVENT-001", "CTL3-CONSTRAINT-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-2",
+      "sequence": 2,
+      "type": "constraint.asserted",
+      "assertion": {
+        "id": "constraint.deploy.v1",
+        "contextId": "actual",
+        "constraint": {
+          "fromPointId": "review-start",
+          "toPointId": "deploy-start",
+          "minimum": 0,
+          "maximum": 3600
+        },
+        "evidenceRefs": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    "expect": {
+      "valid": true
+    }
+  },
+  {
+    "id": "schema.event-unsafe-sequence",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json",
+    "requirements": ["CTL3-CORE-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-overflow",
+      "sequence": 9007199254740992,
+      "type": "point.declared",
+      "point": {
+        "id": "unsafe",
+        "contextId": "actual",
+        "axisId": "elapsed-seconds"
+      }
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
+    "id": "schema.valid-coordinate-event",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json",
+    "requirements": ["CTL3-EVENT-001", "CTL3-ASSERTION-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-coordinate",
+      "sequence": 2,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "coordinate.review-start.v1",
+        "contextId": "actual",
+        "pointId": "review-start",
+        "coordinate": {
+          "minimum": 86400,
+          "maximum": 172800
+        },
+        "evidenceRefs": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    "expect": {
+      "valid": true
+    }
+  },
+  {
+    "id": "schema.event-invalid-evidence-digest",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json",
+    "requirements": ["CTL3-ASSERTION-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-coordinate",
+      "sequence": 2,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "coordinate.review-start.v1",
+        "contextId": "actual",
+        "pointId": "review-start",
+        "coordinate": {
+          "minimum": 86400
+        },
+        "evidenceRefs": ["source-label"]
+      }
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
+    "id": "schema.event-empty-evidence",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json",
+    "requirements": ["CTL3-ASSERTION-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event-3",
+      "sequence": 3,
+      "type": "assertion.retracted",
+      "assertionId": "constraint.deploy.v1",
+      "evidenceRefs": []
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
+    "id": "schema.valid-point-query",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/query.schema.json",
+    "requirements": ["CTL3-QUERY-001"],
+    "document": {
+      "schema": "covenant.timeline.query.v0alpha3",
+      "id": "query.point-order",
+      "contextId": "actual",
+      "recordedThrough": 11,
+      "type": "point.relations",
+      "leftPointId": "review-start",
+      "rightPointId": "deploy-start"
+    },
+    "expect": {
+      "valid": true
+    }
+  },
+  {
+    "id": "schema.query-mixed-variants",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/query.schema.json",
+    "requirements": ["CTL3-CORE-002", "CTL3-QUERY-001"],
+    "document": {
+      "schema": "covenant.timeline.query.v0alpha3",
+      "id": "query.mixed",
+      "contextId": "actual",
+      "recordedThrough": null,
+      "type": "point.relations",
+      "leftPointId": "review-start",
+      "rightPointId": "deploy-start",
+      "leftIntervalId": "approval-window"
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
+    "id": "schema.valid-relation-conclusion",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json",
+    "requirements": ["CTL3-CONCLUSION-001", "CTL3-PROOF-001"],
+    "document": {
+      "schema": "covenant.timeline.conclusion.v0alpha3",
+      "queryId": "query.point-order",
+      "result": {
+        "type": "point.relations",
+        "status": "resolved",
+        "possible": ["before"]
+      },
+      "receipt": {
+        "reasoner": "covenant.timeline.stn.v0alpha1",
+        "stateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "queryDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semanticResultDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "proof": {
+          "kind": "relation-cases",
+          "cases": [
+            {
+              "relation": "before",
+              "possible": true,
+              "witness": {
+                "kind": "schedule",
+                "coordinates": {
+                  "review-start": 86400,
+                  "deploy-start": 90000
+                }
+              }
+            },
+            {
+              "relation": "equal",
+              "possible": false,
+              "witness": {
+                "kind": "negative-cycle",
+                "edges": [
+                  {
+                    "sourceId": "constraint.deploy-delay.v2",
+                    "fromNodeId": "deploy-start",
+                    "toNodeId": "review-start",
+                    "maximum": -3600
+                  },
+                  {
+                    "sourceId": "@query:query.point-order:equal:0",
+                    "fromNodeId": "review-start",
+                    "toNodeId": "deploy-start",
+                    "maximum": 0
+                  }
+                ]
+              }
+            },
+            {
+              "relation": "after",
+              "possible": false,
+              "witness": {
+                "kind": "negative-cycle",
+                "edges": [
+                  {
+                    "sourceId": "constraint.deploy-delay.v2",
+                    "fromNodeId": "deploy-start",
+                    "toNodeId": "review-start",
+                    "maximum": -3600
+                  },
+                  {
+                    "sourceId": "@query:query.point-order:after:0",
+                    "fromNodeId": "review-start",
+                    "toNodeId": "deploy-start",
+                    "maximum": -1
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "expect": {
+      "valid": true
+    }
+  },
+  {
+    "id": "schema.conclusion-proof-mismatch",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json",
+    "requirements": ["CTL3-CONCLUSION-001", "CTL3-PROOF-001"],
+    "document": {
+      "schema": "covenant.timeline.conclusion.v0alpha3",
+      "queryId": "query.consistency",
+      "result": {
+        "type": "context.consistency",
+        "status": "consistent"
+      },
+      "receipt": {
+        "reasoner": "covenant.timeline.stn.v0alpha1",
+        "stateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "queryDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semanticResultDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "proof": {
+          "kind": "negative-cycle",
+          "edges": [
+            {
+              "sourceId": "constraint.loop",
+              "fromNodeId": "point-a",
+              "toNodeId": "point-a",
+              "maximum": -1
+            }
+          ]
+        }
+      }
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  },
+  {
+    "id": "schema.conclusion-bad-digest",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json",
+    "requirements": ["CTL3-CONCLUSION-001"],
+    "document": {
+      "schema": "covenant.timeline.conclusion.v0alpha3",
+      "queryId": "query.consistency",
+      "result": {
+        "type": "context.consistency",
+        "status": "consistent"
+      },
+      "receipt": {
+        "reasoner": "covenant.timeline.stn.v0alpha1",
+        "stateDigest": "sha256:not-a-digest",
+        "queryDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semanticResultDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "proof": {
+          "kind": "schedule",
+          "coordinates": {}
+        }
+      }
+    },
+    "expect": {
+      "valid": false,
+      "errorCode": "schema.invalid"
+    }
+  }
+]

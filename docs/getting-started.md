@@ -33,6 +33,28 @@ pnpm timeline verify conformance/v0alpha2/runs/successful.json
 Human-readable output is the default. Add `--json` for canonical output with
 the contract, event-stream, and replay-state SHA-256 identities.
 
+## Run an experimental temporal query
+
+v0alpha3 is source-only while RFC 0009 remains Draft:
+
+```sh
+pnpm temporal:demo
+pnpm timeline reason \
+  conformance/v0alpha3/runs/software-release.json \
+  conformance/v0alpha3/queries/interval-relations.json \
+  --json
+```
+
+The run declares an elapsed-seconds axis, points, proper intervals,
+digest-referenced coordinate and difference assertions, facts, corrections, and
+retractions. The query pins an explicit event-prefix knowledge cut. The
+conclusion returns a canonical semantic result and a reasoner-bound proof
+receipt.
+
+See [Model interface](./model-interface.md) for the library loop and the
+boundary between model extraction, authority admission, deterministic
+reasoning, and response generation.
+
 ## Embed the verifier
 
 ```js

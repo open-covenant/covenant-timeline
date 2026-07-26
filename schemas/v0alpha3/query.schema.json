@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha3/query.schema.json",
+  "title": "Timeline v0alpha3 temporal query",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "contextId", "recordedThrough", "type"],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.query.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "recordedThrough": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sequence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "const": "context.consistency"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "contextId",
+        "recordedThrough",
+        "type",
+        "fromPointId",
+        "toPointId"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.query.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "recordedThrough": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sequence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "const": "difference.bounds"
+        },
+        "fromPointId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "toPointId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "contextId",
+        "recordedThrough",
+        "type",
+        "leftPointId",
+        "rightPointId"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.query.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "recordedThrough": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sequence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "const": "point.relations"
+        },
+        "leftPointId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "rightPointId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "contextId",
+        "recordedThrough",
+        "type",
+        "leftIntervalId",
+        "rightIntervalId"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.query.v0alpha3"
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "recordedThrough": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sequence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "const": "interval.relations"
+        },
+        "leftIntervalId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "rightIntervalId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schema": "covenant.timeline.query.v0alpha3",
+  "id": "query.release-duration",
+  "contextId": "actual",
+  "recordedThrough": 16,
+  "type": "difference.bounds",
+  "fromPointId": "work-start",
+  "toPointId": "deploy-end"
+}

@@ -4,6 +4,7 @@ const failures = [];
 const totals = [
   checkVersion("v0alpha1", /^CTL-[A-Z]+-\d{3}$/),
   checkVersion("v0alpha2", /^CTL2-[A-Z]+-\d{3}$/),
+  checkVersion("v0alpha3", /^CTL3-[A-Z]+-\d{3}$/),
 ];
 
 if (failures.length > 0) {

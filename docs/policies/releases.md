@@ -30,16 +30,18 @@ Release provenance links source and build. It is not a security endorsement.
 
 The package workflow uses tags named `timeline-v<package-version>`, builds the
 tarball twice, compares the exact bytes, generates a SHA-256 checksum and SPDX
-SBOM, creates GitHub artifact attestations, and publishes through npm trusted
-publishing from the approval-protected `npm` environment.
+SBOM, creates GitHub artifact attestations, and is designed to publish through
+npm trusted publishing from the `npm` environment.
 
-Before the first publish, administrators must verify:
+The bootstrap `0.0.0-alpha.1` package established ownership of the
+`@covenant-org` release path with a one-time token. That token and its GitHub
+environment secret were removed after the release. Before any later publish,
+administrators must verify:
 
-- ownership of the `@covenant-org` npm scope;
 - trusted publisher linkage to `open-covenant/covenant-timeline`,
   `release.yml`, and the `npm` environment;
 - required reviewers on the `npm` environment;
 - tag protection for `timeline-v*`;
-- traditional npm automation tokens are disabled after OIDC succeeds.
+- no traditional npm automation token is configured.
 
 Workflow presence is not evidence that these external controls are configured.

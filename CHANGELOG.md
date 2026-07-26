@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.0.0-alpha.1 - 2026-07-25
+## 0.0.0-alpha.1 - 2026-07-26
 
 ### Added
 
@@ -18,7 +18,7 @@
   fixture agreement.
 - `timeline validate`, `replay`, `inspect`, and `verify` with human-readable and
   canonical JSON output.
-- Packable `@covenant-org/timeline@0.0.0-alpha.1` candidate.
+- Published `@covenant-org/timeline@0.0.0-alpha.1` with npm provenance.
 - Covenant reference-adapter fixture covering pause, resume, review, release
   readiness, capability requests, receipts, and offline verification.
 - Strict duplicate-key JSON parsing, bounded CLI input, stdin, and version

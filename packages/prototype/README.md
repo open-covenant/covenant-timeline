@@ -6,11 +6,10 @@ software and agent work.
 ## Install a released version
 
 ```sh
-npm install @covenant-org/timeline
+npm install @covenant-org/timeline@next
 ```
 
-The package supports Node.js 22 and 24. Before the first registry release,
-produce a local tarball with `pnpm --dir packages/prototype pack`.
+The package supports Node.js 22 and 24.
 
 ## Library
 
@@ -49,5 +48,5 @@ are pending or rejected, commands are unresolved or failed, or findings exist.
 Input is strict JSON, duplicate keys are rejected, and the CLI reads at most
 16 MiB.
 
-The package is pre-alpha. Object schemas and APIs may change between alpha
+The package is alpha software. Object schemas and APIs may change between alpha
 releases.

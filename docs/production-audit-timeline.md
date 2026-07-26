@@ -2,22 +2,28 @@
 
 ## Executive Summary
 
-Covenant Timeline began this audit with a coherent alpha protocol boundary,
-deterministic canonicalization fixtures, a small typed implementation, and
-unusually good cross-platform bootstrap CI, but it was not production safe.
-The reducer bound state to a contract ID rather than the contract bytes,
-permitted an accepted checkpoint to emit additional effect commands, replayed
-growing runs in quadratic time, and accepted unbounded, ambiguous CLI input.
+Covenant Timeline began this audit with a coherent alpha boundary and useful
+conformance corpus, but it was not production safe. The reducer bound state to
+a contract ID rather than the contract bytes, permitted an accepted checkpoint
+to emit additional effect commands, replayed growing runs in quadratic time,
+and accepted unbounded, ambiguous CLI input. v0alpha1 also recorded an
+event-supplied policy label without pinning evaluator identity.
 
-The repository now closes those local integrity, availability, parser,
-packaging, and supply-chain gaps. It is a released, production-hardened alpha,
-not a production protocol. The package and its registry provenance are public,
-but no external authority profile or independent implementation exists.
-Core v0alpha1 deterministically checks requirement coverage and records an
-unverified policy label; it does not enforce contract-bound evaluator policy or
-temporal predicates. “Timeline” means ordered history in the released core.
-Trusted-publisher linkage, protected release approval, external adoption, and
-independent interoperability remain real release and adoption blockers.
+The repository now closes the local integrity, availability, parser,
+packaging, authority-profile, restart, and cross-language gaps found in this
+audit. v0alpha2 binds profile, policy reference, and policy digest in the
+contract; the GitHub software-delivery profile authenticates collector
+envelopes and derives claims; the public corpus includes a five-day source run;
+the Temporal adapter survives a worker restart against a real local server; and
+the Python reducer agrees with the TypeScript corpus.
+
+This is still a production-hardened alpha, not an independently proven
+production protocol. The Temporal adapter and Python reducer are maintained in
+this repository. The external project represented by the public archive did
+not adopt Timeline. “Timeline” still means ordered event history rather than
+deadlines or temporal logic. Trusted-publisher linkage, protected release
+approval, external operation, and independently maintained interoperability
+remain real release and adoption blockers.
 
 This audit treats "production ready" as two separate gates:
 
@@ -25,10 +31,9 @@ This audit treats "production ready" as two separate gates:
    replay is linear, state is bound to exact contract bytes, effect eligibility
    cannot be duplicated accidentally, errors are stable, artifacts are
    inspectable, and release automation fails closed.
-2. **Production protocol claim:** an external runtime and a second
-   implementation verify the same runs, an authority profile verifies evidence
-   authenticity and freshness, and release governance is independently
-   exercised.
+2. **Production protocol claim:** an external organization operates a runtime,
+   an independently maintained implementation verifies the same runs, and
+   release governance is independently exercised.
 
 The first gate is achievable in this repository. The second requires external
 adopters and registry/governance configuration and must remain an explicit
@@ -37,18 +42,29 @@ blocker until observed.
 ## Evidence Reviewed
 
 - All specification, RFC, schema, conformance, scenario, governance, package,
-  source, test, script, and workflow files through the released `main` commit
-  `20f720f`.
+  source, test, script, and workflow files through the M4 branch based on
+  `main` commit `2e55bdd`.
 - Local baseline `pnpm verify`.
 - npm production dependency audit: no known vulnerabilities on 2026-07-26.
 - npm release `@covenant-org/timeline@0.0.0-alpha.1` published from
   `timeline-v0.0.0-alpha.1` on 2026-07-26 with SLSA provenance. The public
   registry tarball matched the GitHub release artifact byte for byte, and an
   unauthenticated install passed the CLI and API smoke tests.
-- Hardened local gate: 73 tests, 82.71% statements, 74.44% branches,
-  93.93% functions, 83.36% lines, installed-tarball smoke, deterministic SPDX
-  SBOM, reproducible tarball bytes, actionlint, and no known full dependency
-  audit findings.
+- v0alpha1 and v0alpha2 traceability and conformance: 41 standalone documents,
+  7 portable runs, 5 canonical byte fixtures, 18 schemas, and four
+  locale/time-zone replay environments.
+- TypeScript reference tests: 112 unit, conformance, and resilience tests with
+  83.30% statements, 75.12% branches, 95.81% functions, and 84.03% lines.
+- Temporal adapter: three handler tests plus one integration test using a real
+  local Temporal server, two workers, one workflow history, a process boundary,
+  and final receipt verification.
+- Python cross-check: 17 v0alpha2 documents, two conformance runs, and the
+  public archive agree with the pinned TypeScript result.
+- GitHub authority profile: four JSON Schemas and one Ed25519-signed public
+  archive pass schema, signature, payload, policy, freshness, and revocation
+  verification.
+- Installed-tarball smoke, deterministic SPDX SBOM, reproducible tarball bytes,
+  actionlint, and no known full dependency audit findings.
 - GitHub control-plane audit on 2026-07-26:
   - `main` initially had no branch protection, repository ruleset, or
     environment;
@@ -65,15 +81,15 @@ blocker until observed.
     token secret, but it has no required reviewer;
   - secret validity checks and non-provider-pattern scanning remained
     unavailable or disabled.
-- Baseline replay benchmark on the local Node.js runtime:
-  - 1,000 evidence events: approximately 106 ms.
-  - 5,000 evidence events: approximately 5,404 ms.
-- Hardened replay benchmark on the same runtime:
-  - 1,000 evidence events: approximately 8 ms.
-  - 5,000 evidence events: approximately 27 ms.
-  - 10,000 evidence events: approximately 50 ms.
+- Hardened replay benchmark on Node.js 24.14.0, Darwin arm64:
+  - 50,000 events: 316.35, 325.36, and 346.56 ms.
+  - median: 325.36 ms.
 - M3 Covenant adapter and offline run evidence recorded in the repository
   roadmap and merged integration history.
+- Public M4 archive: Temporal TypeScript SDK pull request 2219 spanned 426,092
+  source seconds, crossed separate local collector processes, and replayed to
+  state digest
+  `sha256:3f5a7478eb134cedbc2a1074cf07bc1b37629d684d0c9960f469368bee361f27`.
 
 ## Critical Issues (P0 - Block Release)
 
@@ -129,10 +145,10 @@ blocker until observed.
       authenticate policy. Public, specification, threat-model, and operations
       language and machine verification output now describe deterministic
       requirement coverage under an unverified label.
-- [ ] **Contract-bind evaluator identity in a new alpha schema.** The released
-      v0alpha1 schema cannot gain a required field without breaking its
-      published corpus. v0alpha2 must either bind evaluator and policy-artifact
-      identity in each checkpoint or remove `policyRef`.
+- [x] **Contract-bind evaluator identity in a new alpha schema.** v0alpha2
+      checkpoints bind `profile`, `policyRef`, and `policyDigest`; evaluation
+      events cannot override them, mismatched evidence fails closed, and an
+      explicit migration preserves v0alpha1 history.
 - [x] **Harden canonical input.** Reject accessors, symbol properties, excessive
       depth, excessive node counts, cycles, non-finite values, and lone
       surrogates before hashing.
@@ -148,6 +164,9 @@ blocker until observed.
 - [x] **Document the threat and trust model.** State assets, trust boundaries,
       attacker capabilities, replay/effect abuse paths, privacy constraints,
       and adopter obligations.
+- [ ] **Obtain independent operation.** The durable adapter and second-language
+      reducer are repository-maintained references. Neither is independent
+      evidence until another organization operates or maintains one.
 
 ## Medium Priority (P2 - Fix Soon After Launch)
 
@@ -156,16 +175,18 @@ blocker until observed.
 - [ ] **Define correction and branch semantics.** Alpha supports
       rejected-to-accepted correction only. Accepted decisions need a versioned
       supersession or branch model before mutable workflows can rely on them.
-- [ ] **Publish and exercise one authority profile.** Specify signature
-      algorithms, key discovery, freshness, revocation, policy identity, and
-      payload retention, then verify real software-delivery evidence with it.
-- [ ] **Prove one longitudinal restart.** Export and independently verify a real
-      run spanning elapsed time, process restart, CI, review, effect dispatch,
-      and receipt verification.
-- [ ] **Add snapshot hydration only from adopter evidence.** v0alpha1 requires
-      full replay after a process boundary. Design a versioned hydration
-      contract only if an independent adopter measures replay as an operational
-      constraint.
+- [x] **Publish and exercise one authority profile.** The GitHub v1 profile
+      specifies Ed25519 collector keys, policy and payload digests, freshness,
+      revocation, exact required checks, review, merge, and optional deployment
+      evidence.
+- [x] **Prove one longitudinal restart.** The public archive spans five source
+      days and separate local collection processes, and the Temporal integration
+      test crosses a worker restart. This proves the mechanism, not external
+      adoption.
+- [x] **Decide snapshot hydration from measurement.** Full replay at the
+      supported 50,000-event maximum measured a 325.36 ms median. Portable
+      hydration is deliberately deferred until adopter evidence shows replay is
+      an operational constraint.
 - [ ] **Exercise rollback.** Verify package deprecation/yank instructions and
       historical run verification against a released artifact.
 
@@ -182,8 +203,9 @@ blocker until observed.
 ### Assets
 
 - Canonical contract, event, run, state, and artifact bytes.
-- The binding between a run and its requirements and effect template.
-- The distinction between a recorded policy label and authenticated policy.
+- The binding between a run, its requirements, its authority policy, and its
+  effect template.
+- Signed authority envelopes, collector keys, and revocation state.
 - Idempotency keys and the host decision to execute a command.
 - Evidence payload digests and potentially sensitive producer metadata.
 - Package source, release artifacts, checksums, SBOM, and provenance.
@@ -193,6 +215,7 @@ blocker until observed.
 - JSON or JavaScript values entering the package.
 - Portable run files entering the CLI.
 - Evidence metadata entering a host runtime.
+- Profile-specific collector output entering evidence admission.
 - Commands leaving the pure reducer for an effect adapter.
 - Receipts returning from an effect adapter.
 - GitHub Actions publishing to npm.
@@ -201,8 +224,14 @@ blocker until observed.
 
 - Same-ID contract substitution can change requirements or effect templates
   unless exact contract bytes are bound.
-- An event can supply any syntactically valid `policyRef`; v0alpha1 records it
-  without establishing that the named policy exists or was enforced.
+- A v0alpha1 event can supply any syntactically valid `policyRef`; the released
+  version records it without establishing that the named policy exists or was
+  enforced.
+- A v0alpha2 host can still bypass its profile and fabricate a structurally
+  valid evidence record. Profile verification is an admission responsibility,
+  not a network call performed by generic replay.
+- A collector key compromise remains authoritative until the host loads policy
+  bytes that bind a revocation list containing that key.
 - Repeated accepted evaluations create multiple executable commands.
 - Claims are declarative and can be self-asserted unless a host validates
   producer authority and payload integrity.
@@ -215,29 +244,32 @@ blocker until observed.
 - A compromised release path could replace the verifier used to validate
   historical runs.
 
-Cryptographic evidence verification is not present in core v0alpha1. That is an
-honest architectural boundary, but no deployment may translate structural
-verification into authority without a versioned external policy.
+Cryptographic evidence verification is intentionally profile-specific. It is
+not present in generic v0alpha1 or v0alpha2 replay. No deployment may translate
+structural verification into authority unless evidence first passes the
+contract-bound profile.
 
 ## Performance Assessment
 
-Full replay now uses one private mutable accumulator while public single-event
-reduction stays immutable. The hardened benchmark measured approximately 8 ms
-at 1,000 evidence events, 27 ms at 5,000, and 50 ms at 10,000. Explicit event,
-checkpoint, collection, canonical-depth, canonical-node, and CLI-byte limits
-bound reference-implementation work.
+Full replay uses one private mutable accumulator while public single-event
+reduction stays immutable. Three 50,000-event runs measured 316.35, 325.36, and
+346.56 ms on Node.js 24.14.0, Darwin arm64. Explicit event, checkpoint,
+collection, canonical-depth, canonical-node, and CLI-byte limits bound
+reference-implementation work.
 
-These are local bootstrap measurements, not an adopter workload model. Trend
-storage and snapshot hydration should wait for longitudinal run sizes from an
-independent host.
+These are local measurements, not an adopter workload model. The archive store
+therefore persists exact contract and event bytes and replays them after
+restart; it does not pretend that a process-local projection is a portable
+snapshot. Trend storage and snapshot hydration should wait for an independent
+host to demonstrate need.
 
 ## Observability Assessment
 
-The library is correctly free of implicit logging and network calls. The
-canonical report and stable findings are useful machine telemetry. Host metric
-guidance, privacy-safe cardinality rules, stable CLI input codes, and explicit
-structural assurance scope are documented. No real operator has yet exercised
-them across a longitudinal run.
+The generic library is correctly free of implicit logging and network calls.
+The canonical report and stable findings are useful machine telemetry. Host
+metric guidance, privacy-safe cardinality rules, stable CLI input codes, and
+explicit structural assurance scope are documented. Repository-owned
+collectors and adapters exercised them, but no independent operator has.
 
 Recommended host metrics:
 
@@ -250,32 +282,37 @@ Recommended host metrics:
 
 ## Recommended Architecture Changes
 
-1. Define contract-bound evaluator and policy-artifact identity in v0alpha2, or
-   remove `policyRef`.
-2. Implement and exercise one GitHub software-delivery authority profile.
-3. Operate one public longitudinal run through restart and external effects.
-4. Integrate one independently operated durable runtime.
-5. Add portable snapshot hydration only if measured replay cost requires it.
-6. Obtain a second conforming reducer before any beta interoperability claim.
+1. Obtain one externally operated integration using the published adoption
+   evidence contract.
+2. Move one adapter or reducer under independent maintenance before any beta
+   interoperability claim.
+3. Exercise accepted-decision correction and branch semantics only from a real
+   incident; do not invent an untested branch protocol.
+4. Link npm trusted publishing and require protected environment approval before
+   the next package release.
+5. Exercise deprecation and historical verification before declaring rollback
+   operational.
+6. Add portable snapshot hydration only if independent measurements require it.
 
 ## Test Coverage Gaps
 
-- No v0alpha2 contract-bound policy fixture or migration test.
-- No real authority-profile evidence fixture.
-- No longitudinal restart and replay corpus.
-- No independently maintained reducer result.
-- No external-runtime recovery test.
-- No portable snapshot hydration test; intentionally deferred until adopter
-  need is measured.
+- No independently operated adapter or independently maintained reducer result.
+- No production deployment evidence in the public archive.
+- No accepted-decision supersession or branch corpus.
+- No external workload measurement beyond the five-day archive's small event
+  count.
+- No portable snapshot hydration test; intentionally deferred because replay at
+  the supported maximum remains subsecond locally.
+- No trusted-publisher release exercise for the next package version.
 
 ## Action Plan
 
-1. Preserve v0alpha1 replay while removing every policy and temporal overclaim.
-2. Specify v0alpha2 contract-bound evaluator identity and migration fixtures.
-3. Implement and exercise one real software-delivery authority profile.
-4. Operate and publish one longitudinal Covenant run spanning restart and
-   effects.
-5. Recruit one independent runtime adopter before designing snapshot hydration.
-6. Obtain a second reducer result before beta.
-7. Complete trusted-publisher linkage and protected-environment review before
+1. Preserve v0alpha1 replay and the v0alpha2 migration corpus on every release.
+2. Use the independent-adoption template to verify one external runtime without
+   weakening the evidence standard.
+3. Transfer or reimplement one adapter or reducer under independent governance.
+4. Record real correction incidents before specifying branch semantics.
+5. Complete trusted-publisher linkage and protected-environment review before
    the next npm release.
+6. Exercise package deprecation and historical verification as a rollback
+   drill.

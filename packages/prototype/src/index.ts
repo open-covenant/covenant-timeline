@@ -45,6 +45,7 @@ export {
   evaluateRunDocument,
   evaluateValidatedRun,
   type TimelineRunReport,
+  type TimelineRunReportV0Alpha1,
 } from "./report.js";
 export {
   TimelineInputError,
@@ -67,3 +68,16 @@ export {
   type TimelineInputErrorCode,
   type VerifyRunResult,
 } from "./run.js";
+export {
+  DEFAULT_MAX_ARCHIVE_BYTES,
+  FileRunArchiveStore,
+  TimelineArchiveError,
+  createPortableRunArchive,
+  parsePortableRunArchive,
+  type PortableRunArchive,
+  type FileRunArchiveStoreOptions,
+  type RunArchiveStore,
+  type SaveArchiveOptions,
+} from "./archive.js";
+export * from "./v0alpha2/index.js";
+export * from "./profiles/index.js";

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/profiles/github/v1/policy.schema.json",
+  "title": "GitHub software-delivery policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "profile",
+    "repository",
+    "apiVersion",
+    "collectorKeys",
+    "maxAgeSeconds",
+    "clockSkewSeconds",
+    "requiredChecks",
+    "minimumApprovals",
+    "requiredDeployments",
+    "revocationListDigest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.profile.github-policy.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:/-]{0,127}$"
+    },
+    "profile": {
+      "const": "github.software-delivery.v1"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "apiVersion": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "collectorKeys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "algorithm", "publicKey"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:/-]{0,127}$"
+          },
+          "algorithm": {
+            "const": "ed25519"
+          },
+          "publicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    "maxAgeSeconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "clockSkewSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "requiredChecks": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "minimumApprovals": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "requiredDeployments": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "revocationListDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

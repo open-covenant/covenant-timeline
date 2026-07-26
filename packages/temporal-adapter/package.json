@@ -1,0 +1,65 @@
+{
+  "name": "@covenant-org/timeline-temporal",
+  "version": "0.0.0-alpha.1",
+  "description": "Temporal durable-runtime adapter for Covenant Timeline.",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-covenant/covenant-timeline.git",
+    "directory": "packages/temporal-adapter"
+  },
+  "homepage": "https://github.com/open-covenant/covenant-timeline/tree/main/packages/temporal-adapter#readme",
+  "bugs": {
+    "url": "https://github.com/open-covenant/covenant-timeline/issues"
+  },
+  "keywords": [
+    "durable-execution",
+    "temporal",
+    "workflow"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./workflows": {
+      "types": "./dist/workflows.d.ts",
+      "default": "./dist/workflows.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node ../../scripts/clean.mjs dist tsconfig.tsbuildinfo",
+    "coverage": "vitest run --coverage",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "prepack": "pnpm run build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@covenant-org/timeline": "workspace:*",
+    "@temporalio/client": "1.21.1",
+    "@temporalio/worker": "1.21.1",
+    "@temporalio/workflow": "1.21.1"
+  },
+  "devDependencies": {
+    "@temporalio/testing": "1.21.1",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "sideEffects": false
+}

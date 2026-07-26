@@ -24,6 +24,11 @@ Core v0alpha1 does not prove that `policyRef` identifies the policy actually
 used. Hosts must bind policy bytes or a versioned policy digest in their own
 profile and treat Timeline's field as an unverified audit label.
 
+v0alpha2 pins profile and policy identity in checkpoint contract bytes. Profile
+verification must still resolve the policy bytes, authenticate the producer,
+enforce freshness and revocation, and bind the resulting proof before recording
+evidence.
+
 ## Safe Metrics
 
 Use bounded labels:
@@ -82,8 +87,15 @@ Do not dispatch commands merely because replay reconstructs them.
 `RunState` is not a persistence or hydration format. Its exact-contract and
 receipt-identity bindings include private in-process metadata that is lost by
 serialization, object spreading, or reconstruction. Persist the contract and
-accepted event stream. A snapshot may cache replay output, but v0alpha1 cannot
-resume incremental reduction from that snapshot.
+accepted event stream. `FileRunArchiveStore` provides an atomic reference
+implementation. A snapshot may cache replay output, but neither alpha schema
+uses projected state for continuation.
+
+The file store bounds reads and writes to 64 MiB by default; set `maxBytes`
+explicitly when a reviewed workload needs another ceiling. Writers use an
+exclusive `.lock` file containing only a schema, process ID, and creation time.
+After an unclean process exit, confirm that no writer with that process ID is
+active before removing a stale lock. Never automate lock removal by age alone.
 
 ## Incident Response
 

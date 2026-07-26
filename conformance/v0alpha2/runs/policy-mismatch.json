@@ -1,0 +1,52 @@
+{
+  "schema": "covenant.timeline.run.v0alpha2",
+  "runId": "run.v0alpha2.policy-mismatch",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha2",
+    "id": "software.release.v1",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "checkpoints": [
+      {
+        "id": "release-ready",
+        "requirements": ["ci.tests.pass"],
+        "policy": {
+          "profile": "github.software-delivery.v1",
+          "policyRef": "software.release.v1",
+          "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "github.checks",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-collector",
+        "authority": {
+          "profile": "github.software-delivery.v1",
+          "policyRef": "software.release.v1",
+          "policyDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "proofDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42"]
+    }
+  ]
+}

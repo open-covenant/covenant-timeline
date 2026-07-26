@@ -15,6 +15,10 @@ Core v0alpha1's only evaluator is requirement coverage over referenced claim
 strings. A checkpoint-evaluation event also supplies a `policyRef` label, but
 the contract does not bind or authenticate that label.
 
+v0alpha2 retains requirement coverage but moves profile and policy identity into
+each checkpoint. Evaluation events cannot override it. Referenced evidence must
+carry the same binding and the digest of an external profile proof.
+
 ## Boundary
 
 ```text
@@ -47,7 +51,7 @@ DBOS, a CI system, or an application database owns durability and execution.
 | Contract  | Pins subject, checkpoints, requirements, and effect templates |
 | Event     | Adds one ordered input to a run                               |
 | Evidence  | References material supporting named claims                   |
-| Decision  | Records outcome, policy label, evidence, and missing claims   |
+| Decision  | Records outcome, bound policy, evidence, and missing claims   |
 | Command   | Requests an idempotent external effect                        |
 | Receipt   | Records the observed result of one command                    |
 | Run state | Projection derived by replaying accepted events               |
@@ -69,8 +73,8 @@ Required properties:
 - identical pinned inputs produce identical output;
 - input ordering is explicit and gaps fail;
 - evidence is append-only within a run;
-- a checkpoint decision retains its evaluator-supplied policy label and
-  evidence set;
+- a v0alpha1 decision retains its evaluator-supplied label;
+- a v0alpha2 decision copies policy identity from contract bytes;
 - missing requirements remain visible;
 - every command has a stable idempotency key;
 - a receipt joins one known command;
@@ -78,8 +82,8 @@ Required properties:
 
 The current TypeScript implementation binds state to canonical contract bytes,
 uses an internal linear replay accumulator, and preserves immutable public
-single-event reduction. TypeScript and Python agree on the canonicalization
-fixture corpus; no independent reducer exists yet.
+single-event reduction. TypeScript and Python implementations now agree on the
+v0alpha2 state-digest corpus. Both remain maintained in this repository.
 
 ## Evidence
 
@@ -94,9 +98,9 @@ Adapters decide how to retrieve and authenticate a payload. Policies decide
 whether a producer is authoritative, whether evidence is fresh enough, and
 whether conflicting evidence blocks acceptance.
 
-The reducer only determines whether the referenced evidence covers the claims a
-checkpoint requires. Cryptographic verification and domain interpretation stay
-outside the minimal core until their contracts are specified.
+The reducer only determines whether profile-bound evidence covers the claims a
+checkpoint requires. The GitHub authority profile specifies cryptographic
+verification and domain interpretation as a separate admission step.
 
 ## Decisions
 
@@ -111,10 +115,10 @@ accepted | rejected
 ```
 
 The outcome above is requirement coverage, not execution of the named policy.
-Core v0alpha1 neither loads `policyRef` nor compares it with contract input. A
-domain may publish a versioned evaluation policy, but an adopter must
-authenticate and enforce it outside this reducer. A score cannot directly
-become authority.
+Core v0alpha1 neither loads `policyRef` nor compares it with contract input.
+v0alpha2 copies a profile and policy digest from the contract and rejects
+evidence with another binding. A domain profile still authenticates and
+enforces policy outside the reducer. A score cannot directly become authority.
 
 ## Commands and receipts
 
@@ -149,6 +153,10 @@ portable model:
 The adapter may persist Timeline state in Covenant, but exported contracts and
 events must remain verifiable without Covenant.
 
+The Temporal adapter stores ordered event intake in workflow history. Its
+integration test shuts down one worker, starts another against the same local
+server, and completes the run after restart.
+
 ## External runtime adapters
 
 An adapter may:
@@ -177,18 +185,18 @@ agreement is enforced in CI.
 
 ## Storage
 
-The core defines no mandatory database. A portable run archive will contain:
+The core defines no mandatory database. `FileRunArchiveStore` atomically
+persists a portable archive containing:
 
 ```text
 contract
 events[]
-optional evidence payloads or retrieval metadata
-optional snapshots
-verification manifest
+state digest
 ```
 
-Snapshots are acceleration artifacts. Verification can always restart from the
-contract and accepted event stream.
+Snapshots remain optional acceleration artifacts. Verification always restarts
+from the contract and accepted event stream. The measured 50,000-event median
+is 325.36 ms, so hydration is deliberately deferred.
 
 The reference implementation's `RunState` carries private binding metadata in
 process memory. Spreading, serializing, or reconstructing it intentionally

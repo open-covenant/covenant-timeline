@@ -143,13 +143,16 @@ export async function runCli(
 }
 
 function renderReplay(report: TimelineRunReport): string {
+  const { verification } = report;
   return [
     `REPLAYED ${report.runId}`,
     `  contract ${report.contractDigest}`,
     `  events   ${report.eventsDigest}`,
     `  state    ${report.stateDigest}`,
     `  next sequence ${report.state.nextSequence}`,
-    "  evidence authority external",
+    `  evidence authority ${verification.evidenceAuthority}`,
+    `  policy authority ${verification.policyAuthority}`,
+    `  policy binding ${verification.policyBinding.replaceAll("-", " ")}`,
     "  no effects executed",
   ].join("\n");
 }
@@ -191,11 +194,11 @@ function renderVerify(report: TimelineRunReport): string {
   const lines = [
     `${verification.ok ? "STRUCTURALLY VERIFIED" : "STRUCTURAL VERIFICATION FAILED"} ${report.runId}`,
     `  state ${report.stateDigest}`,
-    "  evaluation requirement coverage",
-    "  evidence authority external",
-    "  policy authority external",
-    "  policy binding unverified event label",
-    "  effect authority external",
+    `  evaluation ${verification.evaluation.replaceAll("-", " ")}`,
+    `  evidence authority ${verification.evidenceAuthority.replaceAll("-", " ")}`,
+    `  policy authority ${verification.policyAuthority.replaceAll("-", " ")}`,
+    `  policy binding ${verification.policyBinding.replaceAll("-", " ")}`,
+    `  effect authority ${verification.effectAuthority.replaceAll("-", " ")}`,
   ];
 
   appendList(lines, "pending checkpoints", verification.pendingCheckpoints);

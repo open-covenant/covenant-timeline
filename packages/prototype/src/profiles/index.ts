@@ -1,0 +1,18 @@
+export {
+  GITHUB_DELIVERY_PROFILE,
+  GithubAuthorityError,
+  exportEd25519PublicKey,
+  policyBindingForGithub,
+  signGithubEnvelope,
+  verifyGithubEnvelope,
+  verifyGithubWebhookSignature,
+  type GithubAuthorityEnvelope,
+  type GithubCheckObservation,
+  type GithubCollectorKey,
+  type GithubDeliveryPayload,
+  type GithubDeliveryPolicy,
+  type GithubDeploymentObservation,
+  type GithubRevocationList,
+  type SignGithubEnvelopeOptions,
+  type VerifyGithubEnvelopeOptions,
+} from "./github.js";

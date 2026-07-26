@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha2/command.schema.json",
+  "title": "Timeline v0alpha2 command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "kind",
+    "payloadRef",
+    "idempotencyKey",
+    "replayPolicy"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.command.v0alpha2"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[a-z0-9][a-z0-9._:/-]*$"
+    },
+    "kind": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "payloadRef": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512
+    },
+    "replayPolicy": {
+      "const": "forbid"
+    }
+  }
+}

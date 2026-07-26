@@ -67,6 +67,7 @@ jobs:
           --require-hashes
           -r scripts/requirements-cross-language.txt
       - run: python scripts/check-jcs-python.py
+      - run: python scripts/check-python-reducer.py
 
   supply-chain:
     name: supply chain

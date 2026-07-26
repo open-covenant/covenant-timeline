@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha2/receipt.schema.json",
+  "title": "Timeline v0alpha2 effect receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "commandId", "status", "effectDigest"],
+  "properties": {
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "commandId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "status": {
+      "enum": ["succeeded", "failed", "indeterminate"]
+    },
+    "effectDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    }
+  }
+}

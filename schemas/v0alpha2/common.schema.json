@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha2/common.schema.json",
+  "title": "Covenant Timeline v0alpha2 common types",
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._:/-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/identifier"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "policyBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "policyRef", "policyDigest"],
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "policyRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "policyDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "optional": {
+          "type": "object",
+          "propertyNames": {
+            "format": "uri"
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

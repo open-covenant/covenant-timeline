@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha2/evidence.schema.json",
+  "title": "Timeline v0alpha2 evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "kind",
+    "claims",
+    "payloadDigest",
+    "producer",
+    "authority"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "kind": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
+    },
+    "payloadDigest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "producer": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "policyRef", "policyDigest", "proofDigest"],
+      "properties": {
+        "profile": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "policyRef": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "policyDigest": {
+          "$ref": "common.schema.json#/$defs/digest"
+        },
+        "proofDigest": {
+          "$ref": "common.schema.json#/$defs/digest"
+        }
+      }
+    }
+  }
+}

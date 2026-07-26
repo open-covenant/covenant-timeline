@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/profiles/github/v1/payload.schema.json",
+  "title": "Normalized GitHub software-delivery payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "repository",
+    "pullRequest",
+    "headSha",
+    "baseSha",
+    "openedAt",
+    "mergedAt",
+    "merged",
+    "mergeCommitSha",
+    "checks",
+    "approvedReviews",
+    "approvedAt",
+    "reviewDecision",
+    "deployments",
+    "source"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.profile.github-payload.v1"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "pullRequest": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "headSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "baseSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "openedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mergedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "merged": {
+      "type": "boolean"
+    },
+    "mergeCommitSha": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "conclusion", "completedAt"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "minLength": 1 },
+          "conclusion": { "type": ["string", "null"] },
+          "completedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "approvedReviews": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "approvedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "reviewDecision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deployments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["environment", "status", "updatedAt"],
+        "properties": {
+          "environment": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "minLength": 1 },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "apiVersion"],
+      "properties": {
+        "kind": { "const": "github-api" },
+        "apiVersion": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "merged": { "const": true } },
+        "required": ["merged"]
+      },
+      "then": {
+        "properties": {
+          "mergedAt": { "type": "string", "format": "date-time" },
+          "mergeCommitSha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "mergedAt": { "const": null },
+          "mergeCommitSha": { "const": null }
+        }
+      }
+    }
+  ]
+}

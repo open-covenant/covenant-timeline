@@ -1,0 +1,332 @@
+[
+  {
+    "id": "schema.valid-contract",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/contract.schema.json",
+    "requirements": ["CTL2-CORE-001", "CTL2-CONTRACT-001"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha2",
+      "id": "release.v1",
+      "subject": { "kind": "repository", "id": "example/service" },
+      "checkpoints": [
+        {
+          "id": "release-ready",
+          "requirements": ["ci.tests.pass"],
+          "policy": {
+            "profile": "github.software-delivery.v1",
+            "policyRef": "software.release.v1",
+            "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      ]
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.contract-missing-policy",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/contract.schema.json",
+    "requirements": ["CTL2-CONTRACT-001"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha2",
+      "id": "release.v1",
+      "subject": { "kind": "repository", "id": "example/service" },
+      "checkpoints": [
+        { "id": "release-ready", "requirements": ["ci.tests.pass"] }
+      ]
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.contract-bad-digest",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/contract.schema.json",
+    "requirements": ["CTL2-CONTRACT-001"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha2",
+      "id": "release.v1",
+      "subject": { "kind": "repository", "id": "example/service" },
+      "checkpoints": [
+        {
+          "id": "release-ready",
+          "requirements": ["ci.tests.pass"],
+          "policy": {
+            "profile": "github.software-delivery.v1",
+            "policyRef": "software.release.v1",
+            "policyDigest": "sha256:not-a-digest"
+          }
+        }
+      ]
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.unknown-core-field",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/contract.schema.json",
+    "requirements": ["CTL2-CORE-002"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha2",
+      "id": "release.v1",
+      "subject": { "kind": "repository", "id": "example/service" },
+      "checkpoints": [
+        {
+          "id": "release-ready",
+          "requirements": ["ci.tests.pass"],
+          "policy": {
+            "profile": "github.software-delivery.v1",
+            "policyRef": "software.release.v1",
+            "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          "policyRef": "attacker.policy"
+        }
+      ]
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.valid-evidence",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/evidence.schema.json",
+    "requirements": ["CTL2-EVID-001"],
+    "document": {
+      "id": "ci-42",
+      "kind": "github.checks",
+      "claims": ["ci.tests.pass"],
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "producer": "github-collector",
+      "authority": {
+        "profile": "github.software-delivery.v1",
+        "policyRef": "software.release.v1",
+        "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "proofDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.evidence-missing-authority",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/evidence.schema.json",
+    "requirements": ["CTL2-EVID-001"],
+    "document": {
+      "id": "ci-42",
+      "kind": "github.checks",
+      "claims": ["ci.tests.pass"],
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "producer": "github-collector"
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.evidence-missing-proof",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/evidence.schema.json",
+    "requirements": ["CTL2-EVID-001"],
+    "document": {
+      "id": "ci-42",
+      "kind": "github.checks",
+      "claims": ["ci.tests.pass"],
+      "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "producer": "github-collector",
+      "authority": {
+        "profile": "github.software-delivery.v1",
+        "policyRef": "software.release.v1",
+        "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.valid-evidence-event",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/event.schema.json",
+    "requirements": ["CTL2-CORE-001", "CTL2-EVID-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "github.checks",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-collector",
+        "authority": {
+          "profile": "github.software-delivery.v1",
+          "policyRef": "software.release.v1",
+          "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "proofDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.valid-evaluation-event",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/event.schema.json",
+    "requirements": ["CTL2-EVENT-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42"]
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.evaluation-policy-forbidden",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/event.schema.json",
+    "requirements": ["CTL2-CORE-002", "CTL2-EVENT-001"],
+    "document": {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42"],
+      "policyRef": "attacker.policy"
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.valid-decision",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/decision.schema.json",
+    "requirements": ["CTL2-DECISION-001"],
+    "document": {
+      "schema": "covenant.timeline.decision.v0alpha2",
+      "checkpointId": "release-ready",
+      "outcome": "accepted",
+      "policy": {
+        "profile": "github.software-delivery.v1",
+        "policyRef": "software.release.v1",
+        "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "evidenceRefs": ["ci-42"],
+      "missingRequirements": []
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.decision-missing-policy",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/decision.schema.json",
+    "requirements": ["CTL2-DECISION-001"],
+    "document": {
+      "schema": "covenant.timeline.decision.v0alpha2",
+      "checkpointId": "release-ready",
+      "outcome": "accepted",
+      "evidenceRefs": ["ci-42"],
+      "missingRequirements": []
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "schema.valid-command",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/command.schema.json",
+    "requirements": ["CTL2-EFFECT-001"],
+    "document": {
+      "schema": "covenant.timeline.command.v0alpha2",
+      "id": "run-1:release-ready:2",
+      "kind": "covenant.capability.request",
+      "payloadRef": "release.deploy",
+      "idempotencyKey": "run-1/release-ready/2",
+      "replayPolicy": "forbid"
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.valid-receipt",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/receipt.schema.json",
+    "requirements": ["CTL2-EFFECT-001"],
+    "document": {
+      "id": "receipt-1",
+      "commandId": "run-1:release-ready:2",
+      "status": "succeeded",
+      "effectDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.valid-run",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/run.schema.json",
+    "requirements": ["CTL2-CORE-001", "CTL2-RUN-001"],
+    "document": {
+      "schema": "covenant.timeline.run.v0alpha2",
+      "runId": "run-1",
+      "contract": {
+        "schema": "covenant.timeline.contract.v0alpha2",
+        "id": "release.v1",
+        "subject": { "kind": "repository", "id": "example/service" },
+        "checkpoints": [
+          {
+            "id": "release-ready",
+            "requirements": ["ci.tests.pass"],
+            "policy": {
+              "profile": "github.software-delivery.v1",
+              "policyRef": "software.release.v1",
+              "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      },
+      "events": []
+    },
+    "expect": { "valid": true }
+  },
+  {
+    "id": "schema.run-missing-id",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/run.schema.json",
+    "requirements": ["CTL2-RUN-001"],
+    "document": {
+      "schema": "covenant.timeline.run.v0alpha2",
+      "contract": {
+        "schema": "covenant.timeline.contract.v0alpha2",
+        "id": "release.v1",
+        "subject": { "kind": "repository", "id": "example/service" },
+        "checkpoints": [
+          {
+            "id": "release-ready",
+            "requirements": ["ci.tests.pass"],
+            "policy": {
+              "profile": "github.software-delivery.v1",
+              "policyRef": "software.release.v1",
+              "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      },
+      "events": []
+    },
+    "expect": { "valid": false, "errorCode": "schema.invalid" }
+  },
+  {
+    "id": "semantic.duplicate-checkpoint",
+    "targetSchema": "https://covenant-timeline.org/schemas/v0alpha2/contract.schema.json",
+    "requirements": ["CTL2-CONTRACT-001"],
+    "document": {
+      "schema": "covenant.timeline.contract.v0alpha2",
+      "id": "release.v1",
+      "subject": { "kind": "repository", "id": "example/service" },
+      "checkpoints": [
+        {
+          "id": "release-ready",
+          "requirements": ["ci.tests.pass"],
+          "policy": {
+            "profile": "github.software-delivery.v1",
+            "policyRef": "software.release.v1",
+            "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "id": "release-ready",
+          "requirements": ["review.approved"],
+          "policy": {
+            "profile": "github.software-delivery.v1",
+            "policyRef": "software.release.v1",
+            "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      ]
+    },
+    "semanticCheck": "duplicate-checkpoints",
+    "expect": {
+      "valid": false,
+      "errorCode": "timeline.contract.duplicate_checkpoint"
+    }
+  }
+]

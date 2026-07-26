@@ -4,10 +4,11 @@ Covenant Timeline is a portable checkpoint contract and verifier for
 long-running agent and software work.
 
 A timeline contract declares checkpoints, required evidence claims, and
-permitted effect requests. An append-only event stream records what happened
-and which policy label an evaluator reported. A deterministic reducer replays
-that stream and explains whether the referenced evidence covers each
-checkpoint's declared requirements.
+permitted effect requests. v0alpha1 records the policy label reported by an
+evaluator. The additive v0alpha2 schema instead pins profile and policy identity
+in each checkpoint and rejects evidence carrying another binding. A
+deterministic reducer replays the event stream and explains whether referenced
+evidence covers each checkpoint's declared requirements.
 
 Covenant is the first reference adopter. It is not a required dependency.
 
@@ -70,13 +71,14 @@ The CLI validates, replays, inspects, and verifies portable runs:
 ```sh
 pnpm timeline inspect conformance/v0alpha1/runs/corrected.json
 pnpm timeline verify conformance/v0alpha1/runs/successful.json --json
+pnpm timeline verify conformance/v0alpha2/runs/successful.json --json
 ```
 
 See [Getting started](./docs/getting-started.md) for the complete local path.
 
 ## Core boundary
 
-The first release is limited to:
+The released v0alpha1 core is limited to:
 
 - checkpoint contracts;
 - ordered events;
@@ -89,6 +91,11 @@ Core v0alpha1 does not resolve, execute, authenticate, or contract-bind the
 recorded policy label. The contract bytes pin checkpoint requirements and
 effect templates, not evaluator policy. “Timeline” currently means ordered
 history: the event sequence is the only normative clock.
+
+The unreleased v0alpha2 source schema contract-binds `profile`, `policyRef`, and
+`policyDigest`. Evaluation events cannot override them, and evidence with a
+different authority binding fails closed. Domain profiles still perform policy
+resolution and evidence authentication outside the generic reducer.
 
 The reducer is pure:
 
@@ -120,31 +127,38 @@ Implemented:
 - JSON Schemas and successful, rejected, incomplete, corrected, and malformed
   conformance runs;
 - TypeScript and Python agreement on the upstream canonicalization fixtures;
-- a landed Covenant reference adapter with an offline-verifiable M3 run.
+- a landed Covenant reference adapter with an offline-verifiable M3 run;
+- additive v0alpha2 schemas, migration, contract-bound policy decisions, and
+  substitution-negative fixtures;
+- a GitHub software-delivery profile with Ed25519 collector signatures,
+  freshness, revocation, head-check, review, merge, and payload verification;
+- a public five-day software-delivery archive replayed across separate
+  processes;
+- a Temporal adapter tested across a real local server and worker restart;
+- a Python v0alpha2 reducer matching the TypeScript state-digest corpus;
+- atomic portable event archives and a measured snapshot decision.
 
 Not implemented:
 
-- persistent storage or distributed execution;
-- cryptographic evidence verification;
-- contract-bound evaluator policy or policy-artifact verification;
+- independent external operation or adoption;
+- production deployment evidence in the public run;
 - timestamps, deadlines, validity windows, or temporal predicates;
 - portable state snapshot hydration;
 - production SDK compatibility guarantees;
-- an independent conforming implementation.
+- independently maintained implementation governance.
 
 `@covenant-org/timeline@0.0.0-alpha.1` is published on npm under the `next`
-channel with registry provenance. Future releases require the npm trusted
-publisher to be linked to the repository workflow; no long-lived npm token is
-stored in GitHub. Cross-language agreement currently covers canonical bytes,
-not an independent reducer.
+channel with registry provenance. v0alpha2 and the Temporal adapter are
+currently source-only and have not been published. Future releases require the
+npm trusted publisher to be linked to the repository workflow; no long-lived
+npm token is stored in GitHub.
 
 `verification.ok` means the pinned run is structurally complete under its
-declared claims. It does not verify evidence authority, payload possession,
-producer signatures, evaluator policy, or real external effects. A process
-restart must rebuild state from the exact contract and complete event stream;
-the in-memory `RunState` projection is not a portable continuation snapshot.
-Machine output reports requirement-coverage evaluation and the unverified,
-external policy boundary. See the
+declared claims. Generic replay does not re-run profile proofs or verify real
+external effects. v0alpha2 profile verification is a separate admission step.
+A process restart rebuilds state from the exact contract and complete event
+stream; the in-memory `RunState` projection is not a portable continuation
+snapshot. See the
 [threat model](./docs/threat-model.md) and
 [production operations guide](./docs/operations.md).
 
@@ -182,10 +196,19 @@ They are not part of the first release.
 ## Project map
 
 - [`spec/v0alpha1`](./spec/v0alpha1): draft language-neutral semantics
+- [`spec/v0alpha2`](./spec/v0alpha2): contract-bound policy semantics
 - [`schemas/v0alpha1`](./schemas/v0alpha1): versioned JSON Schemas
+- [`schemas/v0alpha2`](./schemas/v0alpha2): additive alpha schemas
 - [`conformance/v0alpha1`](./conformance/v0alpha1): bootstrap fixtures
+- [`conformance/v0alpha2`](./conformance/v0alpha2): policy-binding fixtures
 - [`conformance/rfc8785`](./conformance/rfc8785): canonical byte fixtures
 - [`packages/prototype`](./packages/prototype): TypeScript reference prototype
+- [`packages/temporal-adapter`](./packages/temporal-adapter): durable Temporal host
+- [`profiles/github/v1`](./profiles/github/v1): software-delivery authority
+- [`implementations/python`](./implementations/python): second-language reducer
+- [`examples/public-runs`](./examples/public-runs): signed public run archive
+- [`docs/adoption-guide.md`](./docs/adoption-guide.md): independent-adoption
+  evidence contract
 - [`rfcs`](./rfcs): design decisions and unresolved questions
 - [`ROADMAP.md`](./ROADMAP.md): adoption-gated delivery sequence
 - [`PROGRAM.md`](./PROGRAM.md): scope, staffing, and success criteria

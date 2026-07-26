@@ -1,0 +1,284 @@
+{
+  "envelope": {
+    "expiresAt": "2026-07-26T17:07:26.027Z",
+    "keyId": "public-run-collector",
+    "observedAt": "2026-07-26T16:07:26.027Z",
+    "payload": {
+      "approvedAt": "2026-07-16T22:19:50.000Z",
+      "approvedReviews": 1,
+      "baseSha": "f2976e3b6759e087015e9019b3a7c67dc2323033",
+      "checks": [
+        {
+          "completedAt": "2026-07-21T17:31:05.000Z",
+          "conclusion": "success",
+          "name": "Build Docs / Build Docs",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:18:58.000Z",
+          "conclusion": "success",
+          "name": "Compile Native Binaries (linux-arm)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:18:58.000Z",
+          "conclusion": "success",
+          "name": "Compile Native Binaries (linux-x64)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:19:02.000Z",
+          "conclusion": "success",
+          "name": "Compile Native Binaries (macos-arm)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:19:20.000Z",
+          "conclusion": "success",
+          "name": "Compile Native Binaries (windows-x64)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:27:20.000Z",
+          "conclusion": "success",
+          "name": "Features Tests / test",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:25:13.000Z",
+          "conclusion": "success",
+          "name": "Lint and Prune / Lint and Prune",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:18:40.000Z",
+          "conclusion": "success",
+          "name": "opengrep/scan",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:32:14.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (linux-arm, Bun, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:37:01.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (linux-arm, Node 20, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:34:22.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (linux-arm, Node 24, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:31:52.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (linux-x64, Bun, Reuse V8 Context false)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:34:08.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (linux-x64, Node 20, Reuse V8 Context false)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:36:59.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (linux-x64, Node 24, Reuse V8 Context false)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:29:03.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (macos-arm, Bun, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:35:08.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (macos-arm, Node 20, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:32:59.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (macos-arm, Node 24, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:33:01.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (windows-x64, Bun, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T18:36:13.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (windows-x64, Node 20, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:42:48.000Z",
+          "conclusion": "success",
+          "name": "Run Integration Tests (windows-x64, Node 24, Reuse V8 Context true)",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:30:45.000Z",
+          "conclusion": "success",
+          "name": "Stress Tests (No Reuse V8 Context) / stress-test",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-07-21T17:30:22.000Z",
+          "conclusion": "success",
+          "name": "Stress Tests (Reuse V8 Context) / stress-test",
+          "status": "completed"
+        }
+      ],
+      "deployments": [],
+      "headSha": "51ce259e49c2fdc562acde5d6bac6c913a5098a9",
+      "mergeCommitSha": "e67efbd15781f81d8f723f7889f81b6da6320118",
+      "merged": true,
+      "mergedAt": "2026-07-21T18:36:28.000Z",
+      "openedAt": "2026-07-16T20:14:56.000Z",
+      "pullRequest": 2219,
+      "repository": "temporalio/sdk-typescript",
+      "reviewDecision": "APPROVED",
+      "schema": "covenant.timeline.profile.github-payload.v1",
+      "source": { "apiVersion": "2026-03-10", "kind": "github-api" }
+    },
+    "payloadDigest": "sha256:cb762198c6af8e1c5352febf17eabea82427c61e7496923371a0f1659b97bed2",
+    "policyDigest": "sha256:add6fd2d3543bcc1915706b90d724f6735d43642bcbd5bf888c083d3f4b23be7",
+    "policyRef": "github.temporalio.sdk-typescript.pr-2219.v1",
+    "profile": "github.software-delivery.v1",
+    "schema": "covenant.timeline.profile.github-envelope.v1",
+    "signature": "mw0n2223LqpTVKtPVHiD-CV2DGgWkDmE6QVcoxKryc3FFy1oby_7fhaUjgin9R7WKsWiid_TtqgO7GWcBz6mCg"
+  },
+  "evaluatedStateDigest": "sha256:e233f4f5dc2f4d94c48428a959cebc584392e5a529f698096e662e53b7185a5d",
+  "finalStateDigest": "sha256:3f5a7478eb134cedbc2a1074cf07bc1b37629d684d0c9960f469368bee361f27",
+  "phase": "complete",
+  "policy": {
+    "apiVersion": "2026-03-10",
+    "clockSkewSeconds": 30,
+    "collectorKeys": [
+      {
+        "algorithm": "ed25519",
+        "id": "public-run-collector",
+        "publicKey": "MCowBQYDK2VwAyEA8YZMn_rbfDCv9bEpKNSwetwn_pkJDMqr85x131lVTm4"
+      }
+    ],
+    "id": "github.temporalio.sdk-typescript.pr-2219.v1",
+    "maxAgeSeconds": 3600,
+    "minimumApprovals": 1,
+    "profile": "github.software-delivery.v1",
+    "repository": "temporalio/sdk-typescript",
+    "requiredChecks": [
+      "Lint and Prune / Lint and Prune",
+      "Features Tests / test",
+      "Run Integration Tests (linux-x64, Node 24, Reuse V8 Context false)"
+    ],
+    "requiredDeployments": [],
+    "revocationListDigest": "sha256:8ffedd87584d9d5cf0905a4e1d5fb6e5998943ee5323317924a49e806afb1d46",
+    "schema": "covenant.timeline.profile.github-policy.v1"
+  },
+  "processRestarts": 1,
+  "revocations": {
+    "generatedAt": "2026-07-26T16:07:26.027Z",
+    "policyRef": "github.temporalio.sdk-typescript.pr-2219.v1",
+    "revokedKeys": [],
+    "schema": "covenant.timeline.profile.github-revocations.v1"
+  },
+  "run": {
+    "contract": {
+      "checkpoints": [
+        {
+          "id": "release-verified",
+          "onAccept": {
+            "kind": "timeline.archive.publish",
+            "payloadRef": "github.pr-2219"
+          },
+          "policy": {
+            "policyDigest": "sha256:add6fd2d3543bcc1915706b90d724f6735d43642bcbd5bf888c083d3f4b23be7",
+            "policyRef": "github.temporalio.sdk-typescript.pr-2219.v1",
+            "profile": "github.software-delivery.v1"
+          },
+          "requirements": [
+            "github.commit.bound",
+            "ci.tests.pass",
+            "review.approved",
+            "release.merged"
+          ]
+        }
+      ],
+      "id": "github.temporalio.sdk-typescript.release",
+      "schema": "covenant.timeline.contract.v0alpha2",
+      "subject": { "id": "temporalio/sdk-typescript", "kind": "repository" }
+    },
+    "events": [
+      {
+        "evidence": {
+          "authority": {
+            "policyDigest": "sha256:add6fd2d3543bcc1915706b90d724f6735d43642bcbd5bf888c083d3f4b23be7",
+            "policyRef": "github.temporalio.sdk-typescript.pr-2219.v1",
+            "profile": "github.software-delivery.v1",
+            "proofDigest": "sha256:c7f2b45bd057010dc8dfeeaaaa4f8d86a629ba8247e803b7e6f7d525f9918adb"
+          },
+          "claims": [
+            "github.commit.bound",
+            "ci.tests.pass",
+            "review.approved",
+            "release.merged"
+          ],
+          "id": "github-pr-2219",
+          "kind": "github.software-delivery",
+          "payloadDigest": "sha256:cb762198c6af8e1c5352febf17eabea82427c61e7496923371a0f1659b97bed2",
+          "producer": "github-collector"
+        },
+        "id": "event-0",
+        "schema": "covenant.timeline.event.v0alpha2",
+        "sequence": 0,
+        "type": "evidence.recorded"
+      },
+      {
+        "checkpointId": "release-verified",
+        "evidenceRefs": ["github-pr-2219"],
+        "id": "event-1",
+        "schema": "covenant.timeline.event.v0alpha2",
+        "sequence": 1,
+        "type": "checkpoint.evaluated"
+      },
+      {
+        "id": "event-2",
+        "receipt": {
+          "commandId": "public.github.temporalio.sdk-typescript.pr-2219:release-verified:1",
+          "effectDigest": "sha256:57cf5a83ca7da82ebf96595eb172be4d63baab2b34ec4cf485761b38eed2e9fb",
+          "id": "receipt-archive-published",
+          "status": "succeeded"
+        },
+        "schema": "covenant.timeline.event.v0alpha2",
+        "sequence": 2,
+        "type": "receipt.recorded"
+      }
+    ],
+    "runId": "public.github.temporalio.sdk-typescript.pr-2219",
+    "schema": "covenant.timeline.run.v0alpha2"
+  },
+  "schema": "covenant.timeline.archive.github-run.v1",
+  "sourceWindow": {
+    "elapsedSeconds": 426092,
+    "mergedAt": "2026-07-21T18:36:28.000Z",
+    "openedAt": "2026-07-16T20:14:56.000Z"
+  },
+  "verification": {
+    "crossedProcessRestart": true,
+    "ok": true,
+    "profileProofDigest": "sha256:c7f2b45bd057010dc8dfeeaaaa4f8d86a629ba8247e803b7e6f7d525f9918adb",
+    "sourceElapsedSeconds": 426092
+  }
+}

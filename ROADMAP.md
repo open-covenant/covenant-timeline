@@ -92,18 +92,25 @@ Completion evidence:
 
 ## M4: Independent adoption
 
-- One concrete software-delivery authority profile covering payload binding,
-  producer authentication, freshness, revocation, and policy identity.
-- One independently operated adapter for Temporal, Restate, DBOS, or another
-  external runtime.
-- One public longitudinal run spanning real elapsed time, restart, CI, review,
-  effect dispatch, and receipt verification.
-- Contract-bound evaluator identity in a new alpha schema, or removal of the
-  policy label if adopter evidence shows it has no interoperable meaning.
-- Storage interface and portable run archive; snapshot hydration only after an
-  adopter demonstrates that full replay is operationally inadequate.
-- Correction and branch semantics driven by real incidents.
-- Second implementation of the portable core.
+Status: implementation complete; external adoption pending
+
+- [x] GitHub software-delivery authority profile covering payload binding,
+      collector authentication, freshness, revocation, checks, review, merge,
+      and policy identity.
+- [ ] Independently operated adapter. A Temporal reference adapter now passes a
+      real local-server worker-restart test, but it is maintained here. The
+      required external evidence is defined in
+      [`docs/adoption-guide.md`](./docs/adoption-guide.md).
+- [x] Public longitudinal archive spanning five source days, separate collector
+      processes, CI, approved review, archive effect, and receipt verification.
+      The source project did not adopt Timeline.
+- [x] Contract-bound evaluator identity in v0alpha2 with explicit v0alpha1
+      migration.
+- [x] Atomic portable run archive and storage interface.
+- [x] Snapshot hydration rejected for now after a 325.36 ms median replay at the
+      supported 50,000-event maximum.
+- [ ] Correction and branch semantics driven by real incidents.
+- [x] Python implementation of the portable v0alpha2 reducer.
 
 Exit criteria:
 
@@ -116,6 +123,12 @@ Exit criteria:
   because an event supplied it.
 - Both implementations pass the same conformance corpus.
 - Upgrade and migration tests preserve historical verification.
+
+Current exit status:
+
+- Policy binding, profile authentication, restartable archive, migration, and
+  cross-language corpus criteria pass.
+- Independent operation, external adoption, and independent maintenance do not.
 
 ## M5: Beta
 

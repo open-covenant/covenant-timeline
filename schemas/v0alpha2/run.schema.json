@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha2/run.schema.json",
+  "title": "Portable Timeline v0alpha2 run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "runId", "contract", "events"],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.run.v0alpha2"
+    },
+    "runId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "contract": {
+      "$ref": "contract.schema.json"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "event.schema.json"
+      }
+    }
+  }
+}

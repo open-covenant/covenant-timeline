@@ -1,0 +1,87 @@
+{
+  "schema": "covenant.timeline.run.v0alpha2",
+  "runId": "run.v0alpha2.successful",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha2",
+    "id": "software.release.v1",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "checkpoints": [
+      {
+        "id": "release-ready",
+        "requirements": ["ci.tests.pass", "review.approved"],
+        "policy": {
+          "profile": "github.software-delivery.v1",
+          "policyRef": "software.release.v1",
+          "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "onAccept": {
+          "kind": "covenant.capability.request",
+          "payloadRef": "release.deploy"
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-0",
+      "sequence": 0,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "ci-42",
+        "kind": "github.checks",
+        "claims": ["ci.tests.pass"],
+        "payloadDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": "github-collector",
+        "authority": {
+          "profile": "github.software-delivery.v1",
+          "policyRef": "software.release.v1",
+          "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "proofDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-1",
+      "sequence": 1,
+      "type": "evidence.recorded",
+      "evidence": {
+        "id": "review-42",
+        "kind": "github.review",
+        "claims": ["review.approved"],
+        "payloadDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "producer": "github-collector",
+        "authority": {
+          "profile": "github.software-delivery.v1",
+          "policyRef": "software.release.v1",
+          "policyDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "proofDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-2",
+      "sequence": 2,
+      "type": "checkpoint.evaluated",
+      "checkpointId": "release-ready",
+      "evidenceRefs": ["ci-42", "review-42"]
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha2",
+      "id": "event-3",
+      "sequence": 3,
+      "type": "receipt.recorded",
+      "receipt": {
+        "id": "receipt-42",
+        "commandId": "run.v0alpha2.successful:release-ready:2",
+        "status": "succeeded",
+        "effectDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  ]
+}

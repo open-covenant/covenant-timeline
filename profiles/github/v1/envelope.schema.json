@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/profiles/github/v1/envelope.schema.json",
+  "title": "Signed GitHub authority envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "profile",
+    "policyRef",
+    "policyDigest",
+    "keyId",
+    "observedAt",
+    "expiresAt",
+    "payloadDigest",
+    "payload",
+    "signature"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.profile.github-envelope.v1"
+    },
+    "profile": {
+      "const": "github.software-delivery.v1"
+    },
+    "policyRef": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:/-]{0,127}$"
+    },
+    "policyDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:/-]{0,127}$"
+    },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payloadDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "payload": {
+      "$ref": "payload.schema.json"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    }
+  }
+}

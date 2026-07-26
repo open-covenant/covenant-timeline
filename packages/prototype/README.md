@@ -37,8 +37,18 @@ Machine output reports `evaluation: "requirement-coverage"`,
 `policyAuthority: "external"`, and
 `policyBinding: "unverified-event-label"`.
 
+v0alpha2 checkpoints pin `profile`, `policyRef`, and `policyDigest`. Evaluation
+events contain no policy override, evidence must carry the same binding, and
+machine output reports `policyAuthority: "contract"` and
+`policyBinding: "contract-digest"`. The GitHub profile exports a separate proof
+verifier for evidence admission.
+
 `RunState` is an in-process projection, not a portable continuation snapshot.
 After a process boundary, replay the exact contract and complete event stream.
+`FileRunArchiveStore` persists that portable source atomically without treating
+projected state as a hydration format. It bounds archive bytes and fails closed
+on concurrent writers; see the production operations guide for stale-lock
+recovery.
 
 ## CLI
 

@@ -81,20 +81,29 @@ try {
       "--input-type=module",
       "--eval",
       [
-        'import { contentDigest, parseJson } from "@covenant-org/timeline";',
+        'import { contentDigest, createPortableRunArchive, evaluateRunDocumentV0Alpha2, parseJson, verifyGithubEnvelope } from "@covenant-org/timeline";',
         "const parsed = parseJson('{\"ready\":true}');",
-        "process.stdout.write(contentDigest(parsed));",
+        "const run={schema:'covenant.timeline.run.v0alpha2',runId:'package.smoke',contract:{schema:'covenant.timeline.contract.v0alpha2',id:'package.smoke',subject:{kind:'repository',id:'example/service'},checkpoints:[{id:'complete',requirements:['ready'],policy:{profile:'example.profile.v1',policyRef:'example.policy.v1',policyDigest:'sha256:'+'a'.repeat(64)}}]},events:[]};",
+        "const report=evaluateRunDocumentV0Alpha2(run);",
+        "const archive=createPortableRunArchive(run);",
+        "process.stdout.write(JSON.stringify({digest:contentDigest(parsed),report:report.schema,archive:archive.schema,profile:typeof verifyGithubEnvelope}));",
       ].join(""),
     ],
     { cwd: temporaryDirectory },
   ).trim();
+  const smokeResult = JSON.parse(smoke);
   if (
-    smoke !==
-    "sha256:b342fc286d0216cc212e0d7ba234894e2e7283ddf14f959adf0fe7fd5924308a"
+    smokeResult.digest !==
+      "sha256:b342fc286d0216cc212e0d7ba234894e2e7283ddf14f959adf0fe7fd5924308a" ||
+    smokeResult.report !== "covenant.timeline.report.v0alpha2" ||
+    smokeResult.archive !== "covenant.timeline.archive.v1" ||
+    smokeResult.profile !== "function"
   ) {
-    throw new Error(`installed package digest smoke changed: ${smoke}`);
+    throw new Error(`installed package API smoke changed: ${smoke}`);
   }
-  console.log(`package check passed (${archives[0]}, installed CLI and API)`);
+  console.log(
+    `package check passed (${archives[0]}, installed CLI, v0alpha2, and archive APIs)`,
+  );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

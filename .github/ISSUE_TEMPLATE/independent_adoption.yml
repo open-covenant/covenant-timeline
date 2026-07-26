@@ -1,0 +1,55 @@
+name: Independent adoption
+description: Report an externally operated Timeline integration and portable run.
+title: "adoption: "
+labels: ["adoption"]
+body:
+  - type: input
+    id: project
+    attributes:
+      label: Project and integration revision
+      description: Link to the external project and pin the exact commit.
+    validations:
+      required: true
+  - type: input
+    id: timeline
+    attributes:
+      label: Timeline version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: authority
+    attributes:
+      label: Authority profile and policy
+      description: Identify the profile, immutable policy bytes, and evidence admission operator.
+    validations:
+      required: true
+  - type: textarea
+    id: restart
+    attributes:
+      label: Restart and effect evidence
+      description: Explain the process boundary, command idempotency, receipt path, and elapsed run window.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Portable run verification
+      description: Link a redacted run and include the exact verification command and state digest.
+    validations:
+      required: true
+  - type: textarea
+    id: incidents
+    attributes:
+      label: Corrections, incidents, and replay measurements
+      description: Include observed operational problems or state that none were observed.
+    validations:
+      required: true
+  - type: checkboxes
+    id: independence
+    attributes:
+      label: Independence and privacy
+      options:
+        - label: The integration is operated outside the Covenant Timeline repository.
+          required: true
+        - label: The report contains no secrets, private payloads, or live credentials.
+          required: true

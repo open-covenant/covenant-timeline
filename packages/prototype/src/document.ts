@@ -20,6 +20,7 @@ import type {
   Receipt,
   RunEvent,
 } from "./run.js";
+import { validatePortableDocumentV0Alpha2 } from "./v0alpha2/document.js";
 
 export interface TimelineRunDocument {
   schema: "covenant.timeline.run.v0alpha1";
@@ -262,6 +263,12 @@ export function validatePortableDocument(
   }
   if (document.schema === "covenant.timeline.decision.v0alpha1") {
     return validateDecision(document, options);
+  }
+  if (
+    typeof document.schema === "string" &&
+    document.schema.endsWith(".v0alpha2")
+  ) {
+    return validatePortableDocumentV0Alpha2(document, options);
   }
   return [{ path: "schema", message: "must identify a portable document" }];
 }

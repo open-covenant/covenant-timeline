@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- Add v0alpha2 contracts, events, decisions, migration, schemas, specification,
+  and conformance fixtures with contract-bound policy identity.
+- Add a signed GitHub software-delivery authority profile with freshness,
+  revocation, check, review, merge, deployment, and webhook verification.
+- Add a public five-day delivery archive that verifies across separate
+  collector, resume, and finalization processes.
+- Add a Temporal durable-runtime adapter and real local-server worker-restart
+  integration test.
+- Add a Python v0alpha2 reducer checked against the TypeScript state-digest
+  corpus.
+- Add atomic portable run archives and a 50,000-event replay benchmark.
+
 ### Changed
 
 - Describe Core v0alpha1 as deterministic checkpoint requirement coverage,

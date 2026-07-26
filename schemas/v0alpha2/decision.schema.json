@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/v0alpha2/decision.schema.json",
+  "title": "Timeline v0alpha2 checkpoint decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "checkpointId",
+    "outcome",
+    "policy",
+    "evidenceRefs",
+    "missingRequirements"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.decision.v0alpha2"
+    },
+    "checkpointId": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "outcome": {
+      "enum": ["accepted", "rejected"]
+    },
+    "policy": {
+      "$ref": "common.schema.json#/$defs/policyBinding"
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
+    },
+    "missingRequirements": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
+    }
+  }
+}

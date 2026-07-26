@@ -1,0 +1,23 @@
+[
+  {
+    "id": "run.v0alpha2.successful",
+    "file": "runs/successful.json",
+    "expect": {
+      "valid": true,
+      "ok": true,
+      "checkpoint": "accepted",
+      "stateDigest": "sha256:c3ef3de1df41043ae5eb6d24fcdecd0cb49138764acacd9e77ebc773e732e4c3"
+    }
+  },
+  {
+    "id": "run.v0alpha2.policy-mismatch",
+    "file": "runs/policy-mismatch.json",
+    "expect": {
+      "valid": true,
+      "ok": false,
+      "checkpoint": "pending",
+      "finding": "timeline.evidence.policy_mismatch",
+      "stateDigest": "sha256:c6f4d9ad4200388eff3cecf757277979b42fc06bb9d9dbe2b3958cf8152535df"
+    }
+  }
+]

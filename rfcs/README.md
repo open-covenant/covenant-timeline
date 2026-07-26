@@ -24,3 +24,8 @@ A normative rule is not stable until the reference implementation and an
 independent implementation pass its conformance cases.
 
 Required sections are defined by [the template](./0000-template.md).
+
+Implemented bootstrap decisions:
+
+- [RFC 0007: State binding and checkpoint finalization](./0007-state-binding-and-finalization.md)
+- [RFC 0008: Contract-bound policy identity](./0008-contract-bound-policy.md)

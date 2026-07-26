@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/profiles/github/v1/revocations.schema.json",
+  "title": "GitHub collector revocation list",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "policyRef", "generatedAt", "revokedKeys"],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.profile.github-revocations.v1"
+    },
+    "policyRef": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:/-]{0,127}$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "revokedKeys": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._:/-]{0,127}$"
+      }
+    }
+  }
+}

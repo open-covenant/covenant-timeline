@@ -10,7 +10,7 @@ not independently established.
 
 - Contract, event, state, and report integrity.
 - Exact binding between a run and its contract.
-- Accurate representation of the unverified `policyRef` boundary.
+- Accurate representation of v0alpha1 labels and v0alpha2 policy bindings.
 - Command uniqueness and idempotency keys.
 - Evidence payload and effect digests.
 - Historical verification under pinned semantics.
@@ -57,13 +57,13 @@ policy, or compromise the host process.
 | Abuse path                       | Mitigation                                                      | Residual responsibility                                                       |
 | -------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Same-ID contract substitution    | State pins canonical contract digest                            | Host persists the original contract bytes                                     |
-| Misleading policy label          | Specification identifies `policyRef` as unverified              | Profile binds and authenticates actual policy bytes                           |
+| Misleading policy label          | v0alpha2 pins profile and policy digest in contract bytes       | Profile resolves and authenticates actual policy bytes                        |
 | Duplicate effect eligibility     | Accepted checkpoint is final in one run                         | Host dispatches only newly emitted commands                                   |
 | Replay executes an effect        | Core has no adapter or network entrypoint                       | Host separates replay from dispatch                                           |
 | Duplicate or ambiguous JSON keys | Strict parser rejects duplicates, comments, and trailing commas | Non-CLI hosts use `parseJson` or equivalent                                   |
 | Oversized input or deep values   | CLI byte limit and canonical depth/node limits                  | Host sets tighter deployment limits when needed                               |
 | Prototype-name identifiers       | Own-property membership checks                                  | None                                                                          |
-| Forged evidence claims           | Verification scope says authority is external                   | Profile verifies payload digest, signature, freshness, and producer authority |
+| Forged evidence claims           | Profile proof digest and contract policy binding                | Profile verifies payload digest, signature, freshness, and producer authority |
 | Forged effect receipt            | Receipt is only a structural declaration                        | Adapter verifies the external system result                                   |
 | Sensitive identifiers in logs    | Core performs no implicit logging                               | Host uses low-cardinality codes and redacts IDs                               |
 | Compromised registry token       | Trusted publishing uses short-lived OIDC                        | npm scope, environment, and tag protection must be configured                 |

@@ -9,7 +9,7 @@ portable, replayable, and independently verifiable.
 
 The project governs:
 
-- the temporal contract and event specification;
+- the checkpoint contract and event specification;
 - normative schemas and canonicalization;
 - the conformance corpus;
 - the deterministic reference reducer and verifier;

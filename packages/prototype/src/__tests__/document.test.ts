@@ -35,6 +35,9 @@ describe("portable run document", () => {
     expect(validateRunDocument(run)).toEqual([]);
     expect(parseRunDocument(run)).toBe(run);
     expect(evaluateRunDocument(run).verification).toMatchObject({
+      evaluation: "requirement-coverage",
+      policyAuthority: "external",
+      policyBinding: "unverified-event-label",
       ok: false,
       pendingCheckpoints: ["release-ready"],
     });

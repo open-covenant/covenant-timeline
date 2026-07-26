@@ -81,7 +81,10 @@ describe("run reducer", () => {
     });
     expect(verifyRun(state)).toEqual({
       scope: "structural",
+      evaluation: "requirement-coverage",
       evidenceAuthority: "external",
+      policyAuthority: "external",
+      policyBinding: "unverified-event-label",
       effectAuthority: "external",
       ok: true,
       pendingCheckpoints: [],

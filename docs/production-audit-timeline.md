@@ -13,6 +13,9 @@ The repository now closes those local integrity, availability, parser,
 packaging, and supply-chain gaps. It is a released, production-hardened alpha,
 not a production protocol. The package and its registry provenance are public,
 but no external authority profile or independent implementation exists.
+Core v0alpha1 deterministically checks requirement coverage and records an
+unverified policy label; it does not enforce contract-bound evaluator policy or
+temporal predicates. “Timeline” means ordered history in the released core.
 Trusted-publisher linkage, protected release approval, external adoption, and
 independent interoperability remain real release and adoption blockers.
 
@@ -121,6 +124,15 @@ blocker until observed.
 - [x] **Make verification scope explicit.** A structurally successful run does
       not establish evidence truth, producer authority, payload possession, or
       real effect execution. Machine and human output must state this.
+- [x] **Stop overstating evaluator policy.** Core v0alpha1 records an
+      event-supplied `policyRef`; it does not bind, resolve, hash, execute, or
+      authenticate policy. Public, specification, threat-model, and operations
+      language and machine verification output now describe deterministic
+      requirement coverage under an unverified label.
+- [ ] **Contract-bind evaluator identity in a new alpha schema.** The released
+      v0alpha1 schema cannot gain a required field without breaking its
+      published corpus. v0alpha2 must either bind evaluator and policy-artifact
+      identity in each checkpoint or remove `policyRef`.
 - [x] **Harden canonical input.** Reject accessors, symbol properties, excessive
       depth, excessive node counts, cycles, non-finite values, and lone
       surrogates before hashing.
@@ -144,9 +156,16 @@ blocker until observed.
 - [ ] **Define correction and branch semantics.** Alpha supports
       rejected-to-accepted correction only. Accepted decisions need a versioned
       supersession or branch model before mutable workflows can rely on them.
-- [ ] **Publish an authority profile.** Specify signature algorithms, key
-      discovery, freshness, revocation, policy pinning, and payload retention for
-      at least one real deployment profile.
+- [ ] **Publish and exercise one authority profile.** Specify signature
+      algorithms, key discovery, freshness, revocation, policy identity, and
+      payload retention, then verify real software-delivery evidence with it.
+- [ ] **Prove one longitudinal restart.** Export and independently verify a real
+      run spanning elapsed time, process restart, CI, review, effect dispatch,
+      and receipt verification.
+- [ ] **Add snapshot hydration only from adopter evidence.** v0alpha1 requires
+      full replay after a process boundary. Design a versioned hydration
+      contract only if an independent adopter measures replay as an operational
+      constraint.
 - [ ] **Exercise rollback.** Verify package deprecation/yank instructions and
       historical run verification against a released artifact.
 
@@ -163,7 +182,8 @@ blocker until observed.
 ### Assets
 
 - Canonical contract, event, run, state, and artifact bytes.
-- The binding between a run and its policy/effect template.
+- The binding between a run and its requirements and effect template.
+- The distinction between a recorded policy label and authenticated policy.
 - Idempotency keys and the host decision to execute a command.
 - Evidence payload digests and potentially sensitive producer metadata.
 - Package source, release artifacts, checksums, SBOM, and provenance.
@@ -179,7 +199,10 @@ blocker until observed.
 
 ### Principal Risks
 
-- Same-ID contract substitution changes policy after state creation.
+- Same-ID contract substitution can change requirements or effect templates
+  unless exact contract bytes are bound.
+- An event can supply any syntactically valid `policyRef`; v0alpha1 records it
+  without establishing that the named policy exists or was enforced.
 - Repeated accepted evaluations create multiple executable commands.
 - Claims are declarative and can be self-asserted unless a host validates
   producer authority and payload integrity.
@@ -198,23 +221,23 @@ verification into authority without a versioned external policy.
 
 ## Performance Assessment
 
-The current replay path repeatedly spreads `eventIds`, `evidence`, `commands`,
-`receipts`, and `findings`. This is quadratic as state grows. The measured jump
-from roughly 106 ms at 1,000 events to roughly 5,404 ms at 5,000 events confirms
-the design issue. Production replay needs one mutable accumulator per replay,
-immutable outputs at API boundaries, explicit input ceilings, and a regression
-test over a representative large run.
+Full replay now uses one private mutable accumulator while public single-event
+reduction stays immutable. The hardened benchmark measured approximately 8 ms
+at 1,000 evidence events, 27 ms at 5,000, and 50 ms at 10,000. Explicit event,
+checkpoint, collection, canonical-depth, canonical-node, and CLI-byte limits
+bound reference-implementation work.
 
-Canonicalization is recursive and has no explicit depth or node budget.
-Programmatic callers can trigger stack exhaustion or excessive traversal even
-when the CLI byte ceiling is active.
+These are local bootstrap measurements, not an adopter workload model. Trend
+storage and snapshot hydration should wait for longitudinal run sizes from an
+independent host.
 
 ## Observability Assessment
 
 The library is correctly free of implicit logging and network calls. The
-canonical report and stable findings are useful machine telemetry. Missing
-pieces are a documented host metric set, privacy-safe cardinality guidance,
-stable CLI input error codes, and an explicit assurance scope in reports.
+canonical report and stable findings are useful machine telemetry. Host metric
+guidance, privacy-safe cardinality rules, stable CLI input codes, and explicit
+structural assurance scope are documented. No real operator has yet exercised
+them across a longitudinal run.
 
 Recommended host metrics:
 
@@ -227,46 +250,32 @@ Recommended host metrics:
 
 ## Recommended Architecture Changes
 
-1. Add exact contract identity and finalized-checkpoint invariants to the core
-   state machine.
-2. Split private mutable replay accumulation from public immutable
-   single-event reduction.
-3. Centralize runtime validation primitives and implementation limits.
-4. Add strict JSON parsing and bounded byte acquisition at the CLI boundary.
-5. Make structural assurance explicit in the report contract.
-6. Treat effect execution and evidence authority as host/profile concerns with
-   documented interfaces and tests, never hidden reducer behavior.
-7. Build release artifacts once in a protected workflow and attest those exact
-   bytes.
+1. Define contract-bound evaluator and policy-artifact identity in v0alpha2, or
+   remove `policyRef`.
+2. Implement and exercise one GitHub software-delivery authority profile.
+3. Operate one public longitudinal run through restart and external effects.
+4. Integrate one independently operated durable runtime.
+5. Add portable snapshot hydration only if measured replay cost requires it.
+6. Obtain a second conforming reducer before any beta interoperability claim.
 
 ## Test Coverage Gaps
 
-- No exact-contract substitution regression.
-- No accepted-checkpoint replay regression.
-- No large-run complexity regression.
-- No resource-limit tests.
-- No duplicate JSON-key test.
-- No prototype-name identifier test.
-- No duplicate receipt-ID test.
-- No programmatic malformed-event test.
-- No installed-artifact test in CI.
-- No release-script or tag/version test.
-- No package checksum, SBOM, or provenance dry-run.
+- No v0alpha2 contract-bound policy fixture or migration test.
+- No real authority-profile evidence fixture.
+- No longitudinal restart and replay corpus.
+- No independently maintained reducer result.
+- No external-runtime recovery test.
+- No portable snapshot hydration test; intentionally deferred until adopter
+  need is measured.
 
 ## Action Plan
 
-1. Fix reducer integrity, linear replay, own-property membership, receipt
-   identity, runtime validation, and structural assurance output.
-2. Add canonicalization and document limits plus strict bounded CLI input.
-3. Cross-check all runtime validators against JSON Schema conformance cases.
-4. Add adversarial, recovery, and large-run regression tests.
-5. Complete package metadata, license, maps, installed-tarball smoke, and
-   release validation scripts.
-6. Add CI security/audit jobs and a trusted-publishing workflow with checksums
-   and SBOM.
-7. Add threat model, operations, adopter, and release runbooks.
-8. Run local verification, clean-install artifact verification, supported
-   platform CI, and post-merge CI.
-9. Leave external authority profile, independent implementation,
-   trusted-publisher linkage, and protected-environment review visibly blocked
-   until directly verified.
+1. Preserve v0alpha1 replay while removing every policy and temporal overclaim.
+2. Specify v0alpha2 contract-bound evaluator identity and migration fixtures.
+3. Implement and exercise one real software-delivery authority profile.
+4. Operate and publish one longitudinal Covenant run spanning restart and
+   effects.
+5. Recruit one independent runtime adopter before designing snapshot hydration.
+6. Obtain a second reducer result before beta.
+7. Complete trusted-publisher linkage and protected-environment review before
+   the next npm release.

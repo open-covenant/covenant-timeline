@@ -12,6 +12,10 @@ has:
 The contract is immutable within a run. An implementation MUST reject unknown
 contract fields outside the extension namespace (`CTL-CORE-002`).
 
+Core v0alpha1 contracts do not contain an evaluator policy reference or policy
+artifact digest. Contract identity therefore binds checkpoint requirements and
+effect templates, not evaluator policy.
+
 ## Run
 
 A portable run document pins a run ID, one contract, and its ordered event

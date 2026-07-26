@@ -36,6 +36,8 @@ describe("timeline CLI", () => {
     const verified = await invoke(["verify", file]);
     expect(verified.code).toBe(1);
     expect(verified.stderr).toContain("STRUCTURAL VERIFICATION FAILED cli-run");
+    expect(verified.stderr).toContain("evaluation requirement coverage");
+    expect(verified.stderr).toContain("policy binding unverified event label");
     expect(verified.stderr).toContain("pending checkpoints: release-ready");
   });
 

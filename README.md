@@ -1,12 +1,13 @@
 # Covenant Timeline
 
-Covenant Timeline is an open contract format and verifier for long-running
-agent and software work.
+Covenant Timeline is a portable checkpoint contract and verifier for
+long-running agent and software work.
 
-A timeline contract declares checkpoints, required evidence, evaluation policy,
-and permitted effect requests. An append-only event stream records what
-happened. A deterministic reducer can replay that stream and explain why each
-checkpoint was accepted or rejected.
+A timeline contract declares checkpoints, required evidence claims, and
+permitted effect requests. An append-only event stream records what happened
+and which policy label an evaluator reported. A deterministic reducer replays
+that stream and explains whether the referenced evidence covers each
+checkpoint's declared requirements.
 
 Covenant is the first reference adopter. It is not a required dependency.
 
@@ -77,12 +78,17 @@ See [Getting started](./docs/getting-started.md) for the complete local path.
 
 The first release is limited to:
 
-- temporal contracts and checkpoints;
+- checkpoint contracts;
 - ordered events;
 - content-addressed evidence references;
-- policy-pinned checkpoint decisions;
+- deterministic requirement-coverage decisions with a recorded policy label;
 - idempotent command requests and effect receipts;
 - deterministic replay and verification findings.
+
+Core v0alpha1 does not resolve, execute, authenticate, or contract-bind the
+recorded policy label. The contract bytes pin checkpoint requirements and
+effect templates, not evaluator policy. “Timeline” currently means ordered
+history: the event sequence is the only normative clock.
 
 The reducer is pure:
 
@@ -120,6 +126,9 @@ Not implemented:
 
 - persistent storage or distributed execution;
 - cryptographic evidence verification;
+- contract-bound evaluator policy or policy-artifact verification;
+- timestamps, deadlines, validity windows, or temporal predicates;
+- portable state snapshot hydration;
 - production SDK compatibility guarantees;
 - an independent conforming implementation.
 
@@ -131,7 +140,11 @@ not an independent reducer.
 
 `verification.ok` means the pinned run is structurally complete under its
 declared claims. It does not verify evidence authority, payload possession,
-producer signatures, or real external effects. See the
+producer signatures, evaluator policy, or real external effects. A process
+restart must rebuild state from the exact contract and complete event stream;
+the in-memory `RunState` projection is not a portable continuation snapshot.
+Machine output reports requirement-coverage evaluation and the unverified,
+external policy boundary. See the
 [threat model](./docs/threat-model.md) and
 [production operations guide](./docs/operations.md).
 

@@ -14,11 +14,15 @@ Record these values with every run and operational event:
 - Timeline package and source revision;
 - contract and event-stream digests;
 - schema and conformance revision;
-- adopter profile and policy reference;
+- adopter profile and independently pinned policy bytes or digest;
 - host runtime and adapter version.
 
 Never load policy or an effect template from ambient mutable configuration after
 a run begins.
+
+Core v0alpha1 does not prove that `policyRef` identifies the policy actually
+used. Hosts must bind policy bytes or a versioned policy digest in their own
+profile and treat Timeline's field as an unverified audit label.
 
 ## Safe Metrics
 
@@ -74,6 +78,12 @@ On restart:
 5. append a receipt only after the result is known.
 
 Do not dispatch commands merely because replay reconstructs them.
+
+`RunState` is not a persistence or hydration format. Its exact-contract and
+receipt-identity bindings include private in-process metadata that is lost by
+serialization, object spreading, or reconstruction. Persist the contract and
+accepted event stream. A snapshot may cache replay output, but v0alpha1 cannot
+resume incremental reduction from that snapshot.
 
 ## Incident Response
 

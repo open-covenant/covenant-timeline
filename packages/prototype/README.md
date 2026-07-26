@@ -1,6 +1,6 @@
 # `@covenant-org/timeline`
 
-Deterministic temporal-contract replay and verification for long-running
+Deterministic checkpoint-contract replay and verification for long-running
 software and agent work.
 
 ## Install a released version
@@ -31,6 +31,14 @@ executes an adapter.
 
 `report.verification.scope` is `structural`. Evidence and effect authority are
 external and must be verified by the adopter before production dispatch.
+`policyRef` is an evaluator-supplied label in v0alpha1; the package records it
+but does not resolve, authenticate, or compare it with the contract.
+Machine output reports `evaluation: "requirement-coverage"`,
+`policyAuthority: "external"`, and
+`policyBinding: "unverified-event-label"`.
+
+`RunState` is an in-process projection, not a portable continuation snapshot.
+After a process boundary, replay the exact contract and complete event stream.
 
 ## CLI
 

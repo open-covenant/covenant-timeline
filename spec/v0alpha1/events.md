@@ -2,11 +2,11 @@
 
 Core v0alpha1 accepts three event types:
 
-| Type                   | Payload                                     |
-| ---------------------- | ------------------------------------------- |
-| `evidence.recorded`    | One evidence object                         |
-| `checkpoint.evaluated` | Checkpoint, policy, and evidence references |
-| `receipt.recorded`     | One effect receipt                          |
+| Type                   | Payload                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| `evidence.recorded`    | One evidence object                                        |
+| `checkpoint.evaluated` | Checkpoint, recorded policy label, and evidence references |
+| `receipt.recorded`     | One effect receipt                                         |
 
 Events are append-only. Accepted events MUST NOT be overwritten or renumbered.
 Correction is represented by appending new evidence and re-evaluating the

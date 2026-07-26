@@ -3,13 +3,14 @@
 ## Security Objective
 
 Covenant Timeline must deterministically validate and replay a bounded portable
-run without executing effects, changing pinned policy, or implying authority
-that was not independently established.
+run without executing effects or implying policy or evidence authority that was
+not independently established.
 
 ## Assets
 
 - Contract, event, state, and report integrity.
 - Exact binding between a run and its contract.
+- Accurate representation of the unverified `policyRef` boundary.
 - Command uniqueness and idempotency keys.
 - Evidence payload and effect digests.
 - Historical verification under pinned semantics.
@@ -56,6 +57,7 @@ policy, or compromise the host process.
 | Abuse path                       | Mitigation                                                      | Residual responsibility                                                       |
 | -------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Same-ID contract substitution    | State pins canonical contract digest                            | Host persists the original contract bytes                                     |
+| Misleading policy label          | Specification identifies `policyRef` as unverified              | Profile binds and authenticates actual policy bytes                           |
 | Duplicate effect eligibility     | Accepted checkpoint is final in one run                         | Host dispatches only newly emitted commands                                   |
 | Replay executes an effect        | Core has no adapter or network entrypoint                       | Host separates replay from dispatch                                           |
 | Duplicate or ambiguous JSON keys | Strict parser rejects duplicates, comments, and trailing commas | Non-CLI hosts use `parseJson` or equivalent                                   |
@@ -84,7 +86,7 @@ with regulated or personal data.
 Before any command can affect production, the adopter must:
 
 1. authenticate the event writer;
-2. pin exact contract, schema, package, profile, and policy versions;
+2. pin exact contract, schema, package, profile, and policy bytes or digests;
 3. verify evidence payload bytes against `payloadDigest`;
 4. verify producer signature, authority, freshness, revocation, and scope;
 5. authorize the command independently of structural checkpoint acceptance;

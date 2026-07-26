@@ -2,8 +2,8 @@
 
 ## Product decision
 
-Covenant Timeline will be developed as a thin temporal-contract protocol with
-an embeddable verifier.
+Covenant Timeline will be developed as a thin checkpoint-contract protocol
+with an embeddable verifier.
 
 It will not build a general durable workflow runtime. Existing runtimes and
 databases may host timeline runs through adapters. Covenant is the first
@@ -13,7 +13,7 @@ The first product wedge is verifiable long-running software and agent work:
 
 - declare checkpoints and evidence requirements;
 - ingest audit, commit, CI, review, and delivery evidence;
-- replay decisions under pinned policy;
+- replay deterministic requirement coverage with a recorded policy label;
 - request bounded Covenant effects;
 - prove which receipt resolved each request.
 
@@ -64,7 +64,8 @@ It does not own:
 - The contract and event formats have demonstrated interoperability.
 - Compatibility policy is backed by migration tests.
 - At least two organizations actively maintain implementations or adapters.
-- Operators can explain every accepted decision from pinned policy and evidence.
+- Operators can explain every accepted decision from contract-bound evaluation
+  semantics and authenticated evidence.
 
 Version 1 is adoption-gated, not date-gated.
 
@@ -162,5 +163,5 @@ Pause expansion when:
 - an adapter can execute an effect during replay;
 - evidence cannot be traced to its producer and payload identity;
 - a profile needs vendor-specific behavior in the core;
-- a decision hides missing evidence or policy version;
+- a decision presents an unverified policy label as enforced policy;
 - the core becomes harder to adopt than the runtime it integrates with.

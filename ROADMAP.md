@@ -7,7 +7,7 @@ promises.
 
 Status: complete
 
-- Define Timeline as a temporal-contract verifier, not a workflow runtime.
+- Define Timeline as a checkpoint-contract verifier, not a workflow runtime.
 - Make software and long-running agent work the first profile.
 - Remove universal scoring and premature financial-domain claims.
 - Establish the standalone repository as the only portable source of truth.
@@ -27,7 +27,7 @@ Status: complete
 - Contract validation.
 - Ordered event ingestion.
 - Evidence registration and requirement coverage.
-- Policy-pinned checkpoint decisions.
+- Checkpoint decisions retaining the evaluator's recorded policy label.
 - Command and receipt joins.
 - Stable findings for invalid runs.
 - Deterministic replay.
@@ -92,15 +92,28 @@ Completion evidence:
 
 ## M4: Independent adoption
 
-- External-runtime adapter.
-- Storage interface and portable run archive.
+- One concrete software-delivery authority profile covering payload binding,
+  producer authentication, freshness, revocation, and policy identity.
+- One independently operated adapter for Temporal, Restate, DBOS, or another
+  external runtime.
+- One public longitudinal run spanning real elapsed time, restart, CI, review,
+  effect dispatch, and receipt verification.
+- Contract-bound evaluator identity in a new alpha schema, or removal of the
+  policy label if adopter evidence shows it has no interoperable meaning.
+- Storage interface and portable run archive; snapshot hydration only after an
+  adopter demonstrates that full replay is operationally inadequate.
 - Correction and branch semantics driven by real incidents.
 - Second implementation of the portable core.
-- Threat and privacy models.
 
 Exit criteria:
 
 - One external project operates Timeline without Covenant.
+- One authority profile authenticates real evidence instead of synthetic claim
+  strings.
+- One exported run crosses a real process restart and remains independently
+  verifiable.
+- The policy field is contract-bound or absent; it is never merely trusted
+  because an event supplied it.
 - Both implementations pass the same conformance corpus.
 - Upgrade and migration tests preserve historical verification.
 

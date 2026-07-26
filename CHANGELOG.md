@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed
+
+- Describe Core v0alpha1 as deterministic checkpoint requirement coverage,
+  rather than policy-pinned or temporal evaluation.
+- Document that `policyRef` is an evaluator-supplied, unverified label and that
+  contract-bound policy identity requires a new alpha schema.
+- Report requirement-coverage evaluation and the external, unverified policy
+  boundary in machine and CLI verification output.
+- Document replay from the exact contract and event stream as the only portable
+  restart path; `RunState` is not a hydration format.
+
 ## 0.0.0-alpha.1 - 2026-07-26
 
 ### Added

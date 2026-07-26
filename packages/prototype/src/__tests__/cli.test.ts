@@ -93,7 +93,7 @@ describe("timeline CLI", () => {
 
     expect(result).toEqual({
       code: 0,
-      stdout: "0.0.0-alpha.1\n",
+      stdout: "0.0.0-alpha.2\n",
       stderr: "",
     });
   });

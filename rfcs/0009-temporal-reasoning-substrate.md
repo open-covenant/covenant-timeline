@@ -623,9 +623,9 @@ the governance process.
 
 ## Rollback
 
-While Draft, the v0alpha3 implementation remains experimental and source-only.
-It can be removed without changing released package behavior or historical
-verification.
+While Draft, the v0alpha3 implementation remains an experimental alpha
+surface. It may be removed from a later preview, but published package bytes
+and historical verification remain immutable.
 
 After an alpha release, rollback disables new v0alpha3 admission while
 preserving historical v0alpha3 bytes and the ability to inspect them. It never

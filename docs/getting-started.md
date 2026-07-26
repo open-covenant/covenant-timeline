@@ -1,21 +1,43 @@
 # Getting started
 
-Requirements:
+The package requires Node.js 22 or 24.
 
-- Node.js 22 or 24
-- pnpm 10
+Install the alpha:
 
-Install and verify the repository:
+```sh
+npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
+```
+
+## Run a temporal query
+
+Pass a v0alpha3 run and query to the CLI:
+
+```sh
+npx timeline reason temporal-run.json temporal-query.json --json
+```
+
+The conclusion contains the canonical state and query identities, semantic
+result, and proof receipt. v0alpha3 remains a Draft API while RFC 0009 is under
+review.
+
+## Work from the repository
+
+A source checkout also requires pnpm 10:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm demo
+pnpm temporal:demo
+pnpm timeline reason \
+  conformance/v0alpha3/runs/software-release.json \
+  conformance/v0alpha3/queries/interval-relations.json \
+  --json
 ```
 
-The demo replays a complete software-release run, checks its receipt, and exits
-successfully only when the run structurally verifies.
+The run declares an elapsed-seconds axis, points, proper intervals,
+digest-referenced coordinate and difference assertions, facts, corrections, and
+retractions. The query selects an explicit historical knowledge cut.
 
-## Use the CLI
+## Checkpoint compatibility
 
 The repository includes successful, rejected, incomplete, corrected, and
 malformed run fixtures:
@@ -32,24 +54,6 @@ pnpm timeline verify conformance/v0alpha2/runs/successful.json
 
 Human-readable output is the default. Add `--json` for canonical output with
 the contract, event-stream, and replay-state SHA-256 identities.
-
-## Run an experimental temporal query
-
-v0alpha3 is source-only while RFC 0009 remains Draft:
-
-```sh
-pnpm temporal:demo
-pnpm timeline reason \
-  conformance/v0alpha3/runs/software-release.json \
-  conformance/v0alpha3/queries/interval-relations.json \
-  --json
-```
-
-The run declares an elapsed-seconds axis, points, proper intervals,
-digest-referenced coordinate and difference assertions, facts, corrections, and
-retractions. The query pins an explicit event-prefix knowledge cut. The
-conclusion returns a canonical semantic result and a reasoner-bound proof
-receipt.
 
 See [Model interface](./model-interface.md) for the library loop and the
 boundary between model extraction, authority admission, deterministic

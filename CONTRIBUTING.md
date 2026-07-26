@@ -1,10 +1,24 @@
 # Contributing
 
-## Before starting
+## High-value contributions
 
-Read the [charter](./CHARTER.md), [draft specification](./spec/v0alpha1/),
-and [RFC process](./rfcs/README.md). Open an issue before implementing a
-non-trivial protocol or architecture change.
+Current priorities are:
+
+- an independent implementation of
+  [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md);
+- semantic and proof conformance cases;
+- model-to-IR extraction evaluation and failure analysis;
+- the [civil-time normalization profile](https://github.com/open-covenant/covenant-timeline/issues/20);
+  and
+- real long-running-agent pilots with late evidence, corrections, and restarts.
+
+The
+[second-implementation issue](https://github.com/open-covenant/covenant-timeline/issues/19)
+defines the smallest useful interoperability contribution.
+
+Open an issue before a non-trivial protocol or architecture change. The
+[charter](./CHARTER.md) and [RFC process](./rfcs/README.md) apply when a change
+affects normative semantics, compatibility, security, or governance.
 
 ## Development
 
@@ -24,8 +38,8 @@ include exact validation results.
 ## Change requirements
 
 - Public behavior and schema changes need a compatibility classification.
-- Normative semantics, cryptography, effect boundaries, schemas, compatibility,
-  releases, and governance require an RFC.
+- Normative semantics, cryptography, effect boundaries, and changes to schemas,
+  compatibility policy, release policy, or governance require an RFC.
 - Mechanically testable normative requirements need conformance cases.
 - Failure paths, replay, duplicate delivery, and determinism require tests when
   applicable.

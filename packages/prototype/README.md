@@ -1,61 +1,32 @@
 # `@covenant-org/timeline`
 
-Portable checkpoint verification for long-running software and agent work.
+Portable, proof-carrying temporal reasoning for AI systems.
 
-The npm alpha provides deterministic checkpoint contracts, validation, replay,
-inspection, and CLI workflows. The repository also contains the Draft v0alpha3
-temporal reasoning API.
+An agent schedules a release after a security review. New evidence later shows
+that the review finished after deployment. Timeline reconstructs what the agent
+could conclude before and after the correction and verifies both conclusions
+without rewriting history.
+
+The `0.0.0-alpha.2` preview includes the Draft v0alpha3 temporal API,
+deterministic checkpoint compatibility, and the Timeline CLI.
 
 ## Install
 
 ```sh
-npm install @covenant-org/timeline@0.0.0-alpha.1
+npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
+npx timeline --version
 ```
 
 The package supports Node.js 22 and 24.
 
-## Checkpoint verification
+Timeline is seeking an independent implementation of Draft RFC 0009. See
+[issue #19](https://github.com/open-covenant/covenant-timeline/issues/19) for a
+bounded starting point and conformance target.
 
-```js
-import {
-  evaluateRunDocument,
-  validateRunDocument,
-} from "@covenant-org/timeline";
+## Temporal reasoning
 
-const issues = validateRunDocument(run);
-if (issues.length > 0) throw new Error(JSON.stringify(issues));
-
-const report = evaluateRunDocument(run);
-console.log(report.verification);
-```
-
-Replay is pure. Commands in the report are effect requests; the package never
-executes an adapter. This keeps verification separate from external effects.
-
-### Verification boundary
-
-| Surface            | Guarantee                                                                |
-| ------------------ | ------------------------------------------------------------------------ |
-| Contract and run   | Strict shape validation, ordered replay, and stable findings             |
-| Checkpoint outcome | Deterministic requirement coverage from admitted evidence                |
-| Commands           | Typed effect requests joined to receipts; no in-process dispatch         |
-| Evidence authority | Supplied by the adopting system or an explicit authority profile         |
-| Continuation       | Replay from the exact contract and event stream after a process boundary |
-
-The published alpha verifies requirement coverage from admitted evidence; the
-deploying application authenticates the evidence and policy. Repository
-v0alpha2 adds contract-bound authority profiles and policy digests.
-
-`FileRunArchiveStore` persists the contract and event stream atomically with
-byte limits and concurrent-writer protection. `RunState` is an in-process
-projection; restart recovery replays the portable archive.
-
-## Temporal reasoning preview
-
-Draft v0alpha3 models points, intervals, coordinates, constraints, and facts on
-explicit discrete axes. Knowledge cuts reconstruct the assertions visible at
-any record position, so later corrections, supersessions, and retractions do
-not change earlier answers.
+The following sketch assumes `runInput` and `queryInput` are decoded v0alpha3
+JSON documents:
 
 ```js
 import {
@@ -74,51 +45,95 @@ if (!verifyTemporalConclusionV0Alpha3(run, query, conclusion)) {
 }
 ```
 
-The reference kernel supports consistency, tight difference bounds, three point
-relations, and all 13 Allen interval base relations. It returns canonical
-semantic results with schedules, ordered proof paths, exhaustive relation
-cases, or ordered negative cycles.
+Draft v0alpha3 represents points, proper intervals, coordinates, constraints,
+and facts on explicit discrete axes. Isolated contexts keep actual, planned,
+forecast, and hypothetical state separate. Knowledge cuts reconstruct earlier
+state across later correction, supersession, and retraction.
+
+### How model output becomes checked state
+
+Models extract temporal assertions and queries from source material. The host
+validates their shape, authenticates the evidence, and applies authority policy.
+Schema-valid model output can still omit or misstate the source; Timeline
+reasons only over the records the host accepts.
+
+The
+[model interface](https://github.com/open-covenant/covenant-timeline/blob/main/docs/model-interface.md)
+defines the extraction, admission, reasoning, verification, and response loop.
+
+The reference kernel supports:
+
+- context consistency;
+- tight difference bounds;
+- before, equal, and after point relations;
+- all 13 Allen interval base relations; and
+- schedules, bound paths, relation cases, and negative-cycle proofs.
 
 The solver uses exact integer arithmetic internally. Explicit inputs, finite
-results, and schedule witnesses must fit the JavaScript safe-integer range; a
-required unrepresentable result or exhaustive witness fails closed instead of
-wrapping or silently excluding a possible relation.
+results, and schedule witnesses must fit the JavaScript safe-integer range.
+Resource limits bound events, graph size, proof size, and kernel operations.
 
-Points are coordinate-free identities. Exact or bounded coordinates,
-constraints, facts, and retractions are separate assertions carrying SHA-256
-references to evidence bytes. Deployments provide evidence storage,
-authentication, authority, and admission policy.
+## Checkpoint compatibility
 
-The current profile covers discrete temporal constraints. Civil-time
-normalization, calendar arithmetic, recurrence, completeness-based absence
-queries, and training-time model integration remain future work.
+```js
+import {
+  evaluateRunDocument,
+  validateRunDocument,
+} from "@covenant-org/timeline";
+
+const issues = validateRunDocument(run);
+if (issues.length > 0) throw new Error(JSON.stringify(issues));
+
+const report = evaluateRunDocument(run);
+console.log(report.verification);
+```
+
+| Surface            | Guarantee                                                                |
+| ------------------ | ------------------------------------------------------------------------ |
+| Contract and run   | Strict shape validation, ordered replay, and stable findings             |
+| Checkpoint outcome | Deterministic requirement coverage from admitted evidence                |
+| Commands           | Typed effect requests joined to receipts; no in-process dispatch         |
+| Evidence authority | Supplied by the adopting system or an explicit authority profile         |
+| Continuation       | Replay from the exact contract and event stream after a process boundary |
+
+v0alpha1 records evaluator policy metadata. v0alpha2 adds contract-bound
+authority profiles and policy digests.
+
+Replay is pure. Commands are effect requests, and the package never executes an
+adapter. `FileRunArchiveStore` persists the portable contract and event stream
+with byte limits and concurrent-writer protection.
 
 ## CLI
 
 ```sh
-timeline validate run.json
-timeline replay run.json
-timeline inspect run.json
-timeline verify run.json
-timeline reason temporal-run.json temporal-query.json
-cat run.json | timeline verify -
-timeline --version
+npx timeline validate run.json
+npx timeline replay run.json
+npx timeline inspect run.json
+npx timeline verify run.json
+npx timeline reason temporal-run.json temporal-query.json
+cat run.json | npx timeline verify -
+npx timeline --version
 ```
 
-Add `--json` for canonical JSON output. `verify` exits non-zero when checkpoints
-are pending or rejected, commands are unresolved or failed, or findings exist.
-`reason` returns a v0alpha3 temporal conclusion and proof receipt. Input is
-strict JSON, duplicate keys are rejected, and the CLI reads at most 16 MiB per
-file.
+Add `--json` for canonical JSON output. Input is strict JSON, duplicate keys are
+rejected, and the CLI reads at most 16 MiB per file.
 
-## Release channels
+## Release status
 
-| Surface  | Distribution      | Status                         |
-| -------- | ----------------- | ------------------------------ |
-| v0alpha1 | npm package       | Published alpha                |
-| v0alpha2 | repository source | Contract-bound policy identity |
-| v0alpha3 | repository source | Draft temporal implementation  |
+| Surface  | Distribution | Status                         |
+| -------- | ------------ | ------------------------------ |
+| v0alpha3 | npm alpha    | Draft temporal implementation  |
+| v0alpha2 | npm alpha    | Contract-bound policy identity |
+| v0alpha1 | npm alpha    | Checkpoint compatibility       |
 
-Alpha schemas and APIs may change between releases. See the
+Alpha schemas and APIs may change between releases. v0alpha3 currently covers
+discrete temporal constraints; it does not parse civil timestamps or named time
+zones. Applications must map those values to integer axes under a pinned
+calendar, time-zone database, and ambiguity policy. No shared normalization
+profile ships yet. Recurrence, completeness-based absence queries, and a second
+conforming implementation also remain open.
+
+See the
 [repository README](https://github.com/open-covenant/covenant-timeline#readme)
-for the current roadmap, assurance evidence, and adoption guidance.
+for conformance evidence, operating guidance, and the independent
+implementation call.

@@ -17,6 +17,6 @@ Normative candidate documents:
 - [Projection and reasoning](reasoning.md)
 - [Requirements](requirements.md)
 
-RFC 0009 controls this candidate. Until that RFC completes the repository's
-governance process, v0alpha3 is source-only experimental behavior and not a
-stable conformance target.
+RFC 0009 controls this candidate. The npm alpha distributes the reference
+implementation for evaluation, but v0alpha3 is not a stable or normative
+conformance target while the RFC remains Draft.

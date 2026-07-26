@@ -4,9 +4,8 @@ This roadmap follows one product line: a portable temporal reasoning substrate
 for AI systems. Dates are planning ranges, not release promises.
 
 M0–M4 established the checkpoint protocol and its adoption evidence. v0alpha1
-and v0alpha2 remain immutable compatibility formats, but checkpoints are no
-longer the architecture being extended. The temporal-first v0alpha3 contract
-starts at M5.
+and v0alpha2 remain immutable compatibility formats. v0alpha3 defines the
+temporal product line beginning at M5.
 
 ## M0: Narrow the first release
 
@@ -175,6 +174,8 @@ Status: planned
   retraction.
 - Add valid-time facts and explicit completeness semantics without inferring
   absence from silence.
+- Add a pinned civil-time normalization profile for calendar-based workflows,
+  named time zones, and daylight-saving ambiguity.
 - Define proof profiles and independent proof-verification rules.
 - Add an independent second implementation and property-generated cases checked
   against a solver oracle.

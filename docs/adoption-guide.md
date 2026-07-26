@@ -1,4 +1,4 @@
-# Independent adoption guide
+# Checkpoint compatibility adoption guide
 
 This guide defines the evidence needed to count an M4 adoption. Copying the
 reference adapter or replaying a fixture is useful integration work, but it is

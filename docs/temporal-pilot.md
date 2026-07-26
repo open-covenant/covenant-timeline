@@ -20,14 +20,14 @@ Choose work that naturally contains:
 - a decision that benefits from preserving ambiguity or detecting a
   contradiction.
 
-Software delivery, an experiment run, a research review, or an agent task is
-enough. Do not use regulated or sensitive data in the first public pilot.
+Start with one long-running agent or software-delivery workflow. Do not use
+regulated or sensitive data in the first public pilot.
 
 ## Operator responsibilities
 
 The external operator:
 
-1. pins a Timeline commit containing experimental v0alpha3;
+1. pins `@covenant-org/timeline@0.0.0-alpha.2` or an exact Timeline commit;
 2. defines its subject, axes, origins, units, and scenario contexts;
 3. records points, intervals, coordinate assertions, constraints, and facts
    from its own system;
@@ -91,10 +91,11 @@ operational benefit should be published as such.
 
 ## Start
 
-1. Run `pnpm temporal:demo`.
+1. Install `@covenant-org/timeline@0.0.0-alpha.2` or run
+   `pnpm temporal:demo` from a source checkout.
 2. Read [the model interface](./model-interface.md).
-3. Open a focused proposal on
-   [RFC issue 15](https://github.com/open-covenant/covenant-timeline/issues/15)
-   describing the workflow and expected artifacts.
+3. Comment on the
+   [independent pilot issue](https://github.com/open-covenant/covenant-timeline/issues/21)
+   with the workflow and expected artifacts.
 4. Keep the first integration to one axis mapping, one context, and one query
    family unless the workflow genuinely needs more.

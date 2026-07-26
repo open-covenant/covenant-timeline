@@ -2,17 +2,14 @@
 
 ## North star
 
-Covenant Timeline aims to give AI systems a portable temporal state and a
-proof-producing way to reason over events, intervals, uncertainty, and change.
+Covenant Timeline gives AI systems portable temporal state and a proof-producing
+way to reason over events, intervals, uncertainty, and change. The npm alpha
+combines the Draft v0alpha3 temporal contract and reference kernel with frozen
+v0alpha1 and v0alpha2 checkpoint compatibility APIs.
 
-The released alpha is a deterministic checkpoint ledger with portable replay.
-It does not yet make an LLM understand time. Its only normative clock is event
-sequence, and its only core decision procedure is checkpoint requirement
-coverage.
-
-That contract is now treated as a historical compatibility format, not the
-future product boundary. The temporal-first v0alpha3 contract rewrites the core
-around explicit time while keeping v0alpha1 and v0alpha2 runs verifiable.
+v0alpha3 represents time on explicit axes, reconstructs knowledge at historical
+cuts, and returns checked conclusions without changing existing checkpoint runs
+or state digests.
 
 The intended system is larger:
 
@@ -278,7 +275,8 @@ clinically or scientifically sound.
 
 ## Current boundary
 
-The released npm alpha remains the checkpoint verifier. The temporal-first
-v0alpha3 source implementation is experimental while
-[RFC 0009](../rfcs/0009-temporal-reasoning-substrate.md) is Draft. Existing
-alpha runs and state digests will not be reinterpreted.
+The npm alpha includes the temporal-first v0alpha3 reference implementation and
+the v0alpha1/v0alpha2 checkpoint compatibility APIs. v0alpha3 remains
+experimental while
+[RFC 0009](../rfcs/0009-temporal-reasoning-substrate.md) is Draft. Existing run
+formats and state digests will not be reinterpreted.

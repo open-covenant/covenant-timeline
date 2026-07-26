@@ -1,4 +1,4 @@
-# Independent operator pilot
+# Checkpoint compatibility operator pilot
 
 Covenant Timeline is seeking one independent maintainer or team to operate a
 small, real run outside the Open Covenant organization. The pilot is one
@@ -35,8 +35,8 @@ does not invalidate the pilot; an Open Covenant-operated demo does.
 | Restate, DBOS, or another runtime   | Persist ordered events, call the v0alpha2 reducer, and export the run.    |
 | A service without a workflow engine | Use the atomic archive store and prove recovery across a process restart. |
 
-Until v0alpha2 is released as an npm package, pin an exact Timeline commit. Do
-not depend on a moving branch.
+Pin `@covenant-org/timeline@0.0.0-alpha.2` or an exact Timeline commit. Do not
+depend on a moving branch or mutable distribution tag.
 
 ## Pilot sequence
 

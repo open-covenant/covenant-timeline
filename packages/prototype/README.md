@@ -1,21 +1,20 @@
 # `@covenant-org/timeline`
 
-Experimental temporal reasoning and deterministic checkpoint compatibility for
-long-running software and agent work.
+Portable checkpoint verification for long-running software and agent work.
 
-## Install a released version
+The npm alpha provides deterministic checkpoint contracts, validation, replay,
+inspection, and CLI workflows. The repository also contains the Draft v0alpha3
+temporal reasoning API.
+
+## Install
 
 ```sh
-npm install @covenant-org/timeline@next
+npm install @covenant-org/timeline@0.0.0-alpha.1
 ```
 
 The package supports Node.js 22 and 24.
 
-The published `0.0.0-alpha.1` package contains the v0alpha1 checkpoint
-verifier. v0alpha2 checkpoint policy binding and the temporal-first v0alpha3
-implementation are currently source-only and are not part of that release.
-
-## Library
+## Checkpoint verification
 
 ```js
 import {
@@ -31,33 +30,32 @@ console.log(report.verification);
 ```
 
 Replay is pure. Commands in the report are effect requests; the package never
-executes an adapter.
+executes an adapter. This keeps verification separate from external effects.
 
-`report.verification.scope` is `structural`. Evidence and effect authority are
-external and must be verified by the adopter before production dispatch.
-`policyRef` is an evaluator-supplied label in v0alpha1; the package records it
-but does not resolve, authenticate, or compare it with the contract.
-Machine output reports `evaluation: "requirement-coverage"`,
-`policyAuthority: "external"`, and
-`policyBinding: "unverified-event-label"`.
+### Verification boundary
 
-v0alpha2 checkpoints pin `profile`, `policyRef`, and `policyDigest`. Evaluation
-events contain no policy override, evidence must carry the same binding, and
-machine output reports `policyAuthority: "contract"` and
-`policyBinding: "contract-digest"`. The GitHub profile exports a separate proof
-verifier for evidence admission.
+| Surface            | Guarantee                                                                |
+| ------------------ | ------------------------------------------------------------------------ |
+| Contract and run   | Strict shape validation, ordered replay, and stable findings             |
+| Checkpoint outcome | Deterministic requirement coverage from admitted evidence                |
+| Commands           | Typed effect requests joined to receipts; no in-process dispatch         |
+| Evidence authority | Supplied by the adopting system or an explicit authority profile         |
+| Continuation       | Replay from the exact contract and event stream after a process boundary |
 
-`RunState` is an in-process projection, not a portable continuation snapshot.
-After a process boundary, replay the exact contract and complete event stream.
-`FileRunArchiveStore` persists that portable source atomically without treating
-projected state as a hydration format. It bounds archive bytes and fails closed
-on concurrent writers; see the production operations guide for stale-lock
-recovery.
+The published alpha verifies requirement coverage from admitted evidence; the
+deploying application authenticates the evidence and policy. Repository
+v0alpha2 adds contract-bound authority profiles and policy digests.
 
-## Experimental temporal source
+`FileRunArchiveStore` persists the contract and event stream atomically with
+byte limits and concurrent-writer protection. `RunState` is an in-process
+projection; restart recovery replays the portable archive.
 
-v0alpha3 represents modeled time on explicit discrete axes. Event sequence is
-only the record-time knowledge order.
+## Temporal reasoning preview
+
+Draft v0alpha3 models points, intervals, coordinates, constraints, and facts on
+explicit discrete axes. Knowledge cuts reconstruct the assertions visible at
+any record position, so later corrections, supersessions, and retractions do
+not change earlier answers.
 
 ```js
 import {
@@ -76,7 +74,7 @@ if (!verifyTemporalConclusionV0Alpha3(run, query, conclusion)) {
 }
 ```
 
-The first kernel supports consistency, tight difference bounds, three point
+The reference kernel supports consistency, tight difference bounds, three point
 relations, and all 13 Allen interval base relations. It returns canonical
 semantic results with schedules, ordered proof paths, exhaustive relation
 cases, or ordered negative cycles.
@@ -88,13 +86,12 @@ wrapping or silently excluding a possible relation.
 
 Points are coordinate-free identities. Exact or bounded coordinates,
 constraints, facts, and retractions are separate assertions carrying SHA-256
-references to evidence bytes, so observations can be corrected at later
-knowledge cuts without rewriting history. The host still authenticates those
-bytes and their authority.
+references to evidence bytes. Deployments provide evidence storage,
+authentication, authority, and admission policy.
 
-This is an experimental Draft-RFC surface. It does not authenticate
-model-extracted assertions, provide civil-time or calendar semantics, infer
-causality, or make temporal reasoning native to model weights.
+The current profile covers discrete temporal constraints. Civil-time
+normalization, calendar arithmetic, recurrence, completeness-based absence
+queries, and training-time model integration remain future work.
 
 ## CLI
 
@@ -114,5 +111,14 @@ are pending or rejected, commands are unresolved or failed, or findings exist.
 strict JSON, duplicate keys are rejected, and the CLI reads at most 16 MiB per
 file.
 
-The package is alpha software. Object schemas and APIs may change between alpha
-releases.
+## Release channels
+
+| Surface  | Distribution      | Status                         |
+| -------- | ----------------- | ------------------------------ |
+| v0alpha1 | npm package       | Published alpha                |
+| v0alpha2 | repository source | Contract-bound policy identity |
+| v0alpha3 | repository source | Draft temporal implementation  |
+
+Alpha schemas and APIs may change between releases. See the
+[repository README](https://github.com/open-covenant/covenant-timeline#readme)
+for the current roadmap, assurance evidence, and adoption guidance.

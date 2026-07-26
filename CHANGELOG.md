@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- Add a schema-validated alpha.2 release record bound to the annotated source
+  tag, component manifests, protocol inputs, migration, workflow attempt,
+  registry metadata, release assets, SBOM, and attestations.
+- Add offline release-record validation and a public-state verifier that
+  compares npm and GitHub bytes, verifies the remote annotated tag, delegates
+  Sigstore verification to GitHub CLI, binds provenance and SBOM statements to
+  the recorded release, and runs npm signature checks plus a clean
+  installed-package temporal proof.
+
+### Changed
+
+- Record the alpha.2 token-fallback publication and operator-observed credential
+  cleanup without presenting trusted publishing as an alpha release gate.
+- Move artifact upload to its Node.js 24 action and consolidate SBOM
+  attestation on the supported GitHub attestation action.
+
 ## 0.0.0-alpha.2 - 2026-07-27
 
 ### Added

@@ -1,0 +1,455 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/release-evidence.v1.schema.json",
+  "title": "Covenant Timeline Release Evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "release",
+    "workflow",
+    "components",
+    "registry",
+    "artifact",
+    "attestations",
+    "credentials",
+    "surfaces",
+    "compatibilityPolicy",
+    "migrations",
+    "knownLimitations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.release-evidence.v1"
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "version",
+        "tag",
+        "tagObjectSha",
+        "sourceCommit",
+        "publishedAt",
+        "distTag",
+        "latestAtPublish"
+      ],
+      "properties": {
+        "package": {
+          "const": "@covenant-org/timeline"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^timeline-v[0-9]+\\.[0-9]+\\.[0-9]+(?:-(?:alpha|beta|rc)\\.[0-9]+)?$"
+        },
+        "tagObjectSha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "sourceCommit": {
+          "$ref": "#/$defs/sha1"
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "distTag": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]*$"
+        },
+        "latestAtPublish": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "repositoryId",
+        "repositoryOwnerId",
+        "path",
+        "url",
+        "invocationUrl",
+        "runId",
+        "attempt",
+        "jobId",
+        "artifactId",
+        "environment",
+        "authentication",
+        "provenance"
+      ],
+      "properties": {
+        "repository": {
+          "const": "open-covenant/covenant-timeline"
+        },
+        "repositoryId": {
+          "const": 1312007933
+        },
+        "repositoryOwnerId": {
+          "const": 278660579
+        },
+        "path": {
+          "const": ".github/workflows/release.yml"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "invocationUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "runId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "jobId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "artifactId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "environment": {
+          "const": "npm"
+        },
+        "authentication": {
+          "enum": ["oidc", "token-fallback"]
+        },
+        "provenance": {
+          "const": true
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packageUrl",
+        "tarballUrl",
+        "shasum",
+        "integrity",
+        "fileCount",
+        "unpackedSize",
+        "provenanceUrl"
+      ],
+      "properties": {
+        "packageUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "tarballUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "shasum": {
+          "$ref": "#/$defs/sha1"
+        },
+        "integrity": {
+          "type": "string",
+          "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "unpackedSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "provenanceUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "packedSize", "releaseUrl", "assets"],
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "packedSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "releaseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "assets": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/asset"
+          }
+        }
+      }
+    },
+    "attestations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build", "sbom"],
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/attestation"
+        },
+        "sbom": {
+          "$ref": "#/$defs/attestation"
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assurance",
+        "observedAt",
+        "observationBasis",
+        "trustedPublisherAtPublish",
+        "environmentSecretPostRelease",
+        "tokenPostRelease"
+      ],
+      "properties": {
+        "assurance": {
+          "const": "operator-observed"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observationBasis": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "npm-trusted-publisher-check",
+              "github-environment-secret-list",
+              "npm-token-revocation",
+              "failed-token-reauthentication"
+            ]
+          }
+        },
+        "trustedPublisherAtPublish": {
+          "enum": ["configured", "not-configured"]
+        },
+        "environmentSecretPostRelease": {
+          "enum": ["not-created", "removed"]
+        },
+        "tokenPostRelease": {
+          "enum": ["not-used", "revoked"]
+        }
+      }
+    },
+    "surfaces": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "specification",
+          "requirements",
+          "schemas",
+          "conformance"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^v0alpha[1-9][0-9]*$"
+          },
+          "status": {
+            "enum": ["draft", "compatibility"]
+          },
+          "specification": {
+            "$ref": "#/$defs/sourcePath"
+          },
+          "requirements": {
+            "$ref": "#/$defs/sourcePath"
+          },
+          "schemas": {
+            "$ref": "#/$defs/sourcePath"
+          },
+          "conformance": {
+            "$ref": "#/$defs/sourcePath"
+          }
+        }
+      }
+    },
+    "compatibilityPolicy": {
+      "$ref": "#/$defs/sourcePath"
+    },
+    "migrations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/migration"
+      }
+    },
+    "knownLimitations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/limitation"
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-(?:alpha|beta|rc)\\.[0-9]+)?$"
+    },
+    "sha1": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "sourcePath": {
+      "type": "string",
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\/$)(?:conformance|docs|packages|rfcs|schemas|spec)/[A-Za-z0-9._@/-]+$"
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "bundleSha256",
+        "predicateType",
+        "subjectSha256",
+        "transparencyLogIndex"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "bundleSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "predicateType": {
+          "type": "string",
+          "format": "uri"
+        },
+        "subjectSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "transparencyLogIndex": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "manifest", "distribution"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^@covenant-org/[a-z0-9-]+$"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "manifest": {
+          "$ref": "#/$defs/sourcePath"
+        },
+        "distribution": {
+          "enum": ["npm", "source-only"]
+        }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "specification", "implementation", "note"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "pattern": "^v0alpha[1-9][0-9]*$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^v0alpha[1-9][0-9]*$"
+        },
+        "specification": {
+          "$ref": "#/$defs/sourcePath"
+        },
+        "implementation": {
+          "$ref": "#/$defs/sourcePath"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "limitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reference"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "reference": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "url", "sha256", "size"],
+      "properties": {
+        "kind": {
+          "enum": ["tarball", "checksum", "sbom"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

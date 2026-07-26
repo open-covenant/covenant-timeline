@@ -2,12 +2,12 @@
 
 ## Supported versions
 
-| Surface                 | Bootstrap support                               |
-| ----------------------- | ----------------------------------------------- |
-| `main`                  | Reports accepted; not a production release      |
-| Latest `0.x` prerelease | Best effort                                     |
-| Earlier `0.x`           | Unsupported unless an advisory states otherwise |
-| `1.x`                   | Not released                                    |
+| Surface                                                                                          | Bootstrap support                               |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `main`                                                                                           | Reports accepted; not a production release      |
+| Current: [`0.0.0-alpha.2`](https://www.npmjs.com/package/@covenant-org/timeline/v/0.0.0-alpha.2) | Best effort                                     |
+| Earlier `0.x`                                                                                    | Unsupported unless an advisory states otherwise |
+| `1.x`                                                                                            | Not released                                    |
 
 ## Reporting
 
@@ -31,6 +31,11 @@ disclosure timing is agreed with the reporter.
 - command idempotency and effect boundaries;
 - SDK and adapter trust boundaries;
 - release and dependency supply chain.
+
+Alpha releases may use the documented short-lived, package-scoped token
+fallback. Its environment secret must be removed after the run, the token must
+be revoked, and failed reauthentication must be recorded. Beta and stable
+releases require trusted publishing and environment review.
 
 No bounty exists unless separately announced. Preview releases are not approved
 for production authorization decisions. An evidence digest establishes byte

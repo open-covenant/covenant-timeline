@@ -27,17 +27,21 @@
     "pack:check": "node scripts/check-package.mjs",
     "public-runs:check": "pnpm build && node scripts/longitudinal-github-run.mjs verify --out examples/public-runs/temporal-sdk-typescript-pr-2219.json",
     "release:check": "node scripts/check-release.mjs",
+    "release:evidence:check": "node scripts/check-release-evidence.mjs",
+    "release:evidence:test": "node --test scripts/check-release-evidence.test.mjs",
+    "release:verify-published": "node scripts/verify-published-release.mjs",
     "spec:check": "node scripts/check-spec.mjs",
     "test": "pnpm -r --if-present test",
     "timeline": "node packages/prototype/dist/cli.js",
     "temporal:benchmark": "pnpm build && node scripts/benchmark-temporal.mjs",
     "temporal:demo": "pnpm build && node examples/temporal-reasoning.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm conformance:check && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
+    "jsonc-parser": "3.3.1",
     "prettier": "3.8.3",
     "typescript": "6.0.3",
     "vitest": "^4.1.5"

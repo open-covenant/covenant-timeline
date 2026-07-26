@@ -1,0 +1,162 @@
+{
+  "schema": "covenant.timeline.release-evidence.v1",
+  "release": {
+    "package": "@covenant-org/timeline",
+    "version": "0.0.0-alpha.2",
+    "tag": "timeline-v0.0.0-alpha.2",
+    "tagObjectSha": "5a73a482eb64a4ea13d21b2b9cb5e320f72be308",
+    "sourceCommit": "23116b220a24debe83f7aad3bd8b85a945c655cf",
+    "publishedAt": "2026-07-26T22:50:47.855Z",
+    "distTag": "next",
+    "latestAtPublish": "0.0.0-alpha.1"
+  },
+  "workflow": {
+    "repository": "open-covenant/covenant-timeline",
+    "repositoryId": 1312007933,
+    "repositoryOwnerId": 278660579,
+    "path": ".github/workflows/release.yml",
+    "url": "https://github.com/open-covenant/covenant-timeline/actions/runs/30223008125",
+    "invocationUrl": "https://github.com/open-covenant/covenant-timeline/actions/runs/30223008125/attempts/3",
+    "runId": 30223008125,
+    "attempt": 3,
+    "jobId": 89850944039,
+    "artifactId": 8638028013,
+    "environment": "npm",
+    "authentication": "token-fallback",
+    "provenance": true
+  },
+  "components": [
+    {
+      "name": "@covenant-org/timeline",
+      "version": "0.0.0-alpha.2",
+      "manifest": "packages/prototype/package.json",
+      "distribution": "npm"
+    },
+    {
+      "name": "@covenant-org/timeline-temporal",
+      "version": "0.0.0-alpha.1",
+      "manifest": "packages/temporal-adapter/package.json",
+      "distribution": "source-only"
+    }
+  ],
+  "registry": {
+    "packageUrl": "https://www.npmjs.com/package/@covenant-org/timeline/v/0.0.0-alpha.2",
+    "tarballUrl": "https://registry.npmjs.org/@covenant-org/timeline/-/timeline-0.0.0-alpha.2.tgz",
+    "shasum": "84a46f571e44c50d7869788046b4ffd76f1b3ecc",
+    "integrity": "sha512-CTBTg2nvnJfwKpj4wyzYF07x6h3FJKClBkMz0+mCmrh2+3itccBLii9yKTf6vAH/qT/iGVPaHo40AAuahtemSQ==",
+    "fileCount": 95,
+    "unpackedSize": 506463,
+    "provenanceUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@covenant-org%2ftimeline@0.0.0-alpha.2"
+  },
+  "artifact": {
+    "sha256": "8158da1b49f350056192306e84bf50cbfa3ab21b5848e063b6b4b87da05e9c94",
+    "packedSize": 86013,
+    "releaseUrl": "https://github.com/open-covenant/covenant-timeline/releases/tag/timeline-v0.0.0-alpha.2",
+    "assets": [
+      {
+        "kind": "tarball",
+        "name": "covenant-org-timeline-0.0.0-alpha.2.tgz",
+        "url": "https://github.com/open-covenant/covenant-timeline/releases/download/timeline-v0.0.0-alpha.2/covenant-org-timeline-0.0.0-alpha.2.tgz",
+        "sha256": "8158da1b49f350056192306e84bf50cbfa3ab21b5848e063b6b4b87da05e9c94",
+        "size": 86013
+      },
+      {
+        "kind": "checksum",
+        "name": "covenant-org-timeline-0.0.0-alpha.2.tgz.sha256",
+        "url": "https://github.com/open-covenant/covenant-timeline/releases/download/timeline-v0.0.0-alpha.2/covenant-org-timeline-0.0.0-alpha.2.tgz.sha256",
+        "sha256": "5734fa550e03a3d9cfb253da12e207b514171fe300310c2fd41d0d3810f6906c",
+        "size": 144
+      },
+      {
+        "kind": "sbom",
+        "name": "timeline.spdx.json",
+        "url": "https://github.com/open-covenant/covenant-timeline/releases/download/timeline-v0.0.0-alpha.2/timeline.spdx.json",
+        "sha256": "3697f3e1db0c1f44bfaf7bc64da12a7043185de8fb24ed61d3cd2756c4eb57c4",
+        "size": 2515
+      }
+    ]
+  },
+  "attestations": {
+    "build": {
+      "url": "https://github.com/open-covenant/covenant-timeline/attestations/37203112",
+      "bundleSha256": "47238b11778cd0a85a76b24511781664dbeeb3b854455d76b12bd7df8b44f62d",
+      "predicateType": "https://slsa.dev/provenance/v1",
+      "subjectSha256": "8158da1b49f350056192306e84bf50cbfa3ab21b5848e063b6b4b87da05e9c94",
+      "transparencyLogIndex": 2256622104
+    },
+    "sbom": {
+      "url": "https://github.com/open-covenant/covenant-timeline/attestations/37203113",
+      "bundleSha256": "5f00cb0c99e53509c68369eccc433538506036a2b2d12012507e78f88017b304",
+      "predicateType": "https://spdx.dev/Document/v2.3",
+      "subjectSha256": "8158da1b49f350056192306e84bf50cbfa3ab21b5848e063b6b4b87da05e9c94",
+      "transparencyLogIndex": 2256622122
+    }
+  },
+  "credentials": {
+    "assurance": "operator-observed",
+    "observedAt": "2026-07-26T23:46:13Z",
+    "observationBasis": [
+      "npm-trusted-publisher-check",
+      "github-environment-secret-list",
+      "npm-token-revocation",
+      "failed-token-reauthentication"
+    ],
+    "trustedPublisherAtPublish": "not-configured",
+    "environmentSecretPostRelease": "removed",
+    "tokenPostRelease": "revoked"
+  },
+  "surfaces": [
+    {
+      "id": "v0alpha3",
+      "status": "draft",
+      "specification": "rfcs/0009-temporal-reasoning-substrate.md",
+      "requirements": "spec/v0alpha3/requirements.md",
+      "schemas": "schemas/v0alpha3",
+      "conformance": "conformance/v0alpha3"
+    },
+    {
+      "id": "v0alpha2",
+      "status": "compatibility",
+      "specification": "spec/v0alpha2/README.md",
+      "requirements": "spec/v0alpha2/requirements.md",
+      "schemas": "schemas/v0alpha2",
+      "conformance": "conformance/v0alpha2"
+    },
+    {
+      "id": "v0alpha1",
+      "status": "compatibility",
+      "specification": "spec/v0alpha1/README.md",
+      "requirements": "spec/v0alpha1/requirements.md",
+      "schemas": "schemas/v0alpha1",
+      "conformance": "conformance/v0alpha1"
+    }
+  ],
+  "compatibilityPolicy": "docs/policies/compatibility.md",
+  "migrations": [
+    {
+      "from": "v0alpha1",
+      "to": "v0alpha2",
+      "specification": "spec/v0alpha2/replay-and-migration.md",
+      "implementation": "packages/prototype/src/v0alpha2/migrate.ts",
+      "note": "v0alpha1 runs remain replayable while v0alpha2 adds contract-bound policy identity."
+    }
+  ],
+  "knownLimitations": [
+    {
+      "id": "no-independent-implementation",
+      "reference": "https://github.com/open-covenant/covenant-timeline/issues/19"
+    },
+    {
+      "id": "no-independent-operator",
+      "reference": "https://github.com/open-covenant/covenant-timeline/issues/21"
+    },
+    {
+      "id": "no-civil-time-profile",
+      "reference": "https://github.com/open-covenant/covenant-timeline/issues/20"
+    },
+    {
+      "id": "trusted-publisher-not-configured",
+      "reference": "https://docs.npmjs.com/trusted-publishers/"
+    }
+  ]
+}

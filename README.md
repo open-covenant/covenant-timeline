@@ -1,5 +1,9 @@
 # Covenant Timeline
 
+[![CI](https://github.com/open-covenant/covenant-timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/open-covenant/covenant-timeline/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%40covenant-org%2Ftimeline?label=npm)](https://www.npmjs.com/package/@covenant-org/timeline)
+[![License](https://img.shields.io/github/license/open-covenant/covenant-timeline)](./LICENSE)
+
 Covenant Timeline is a portable checkpoint contract and verifier for
 long-running agent and software work.
 
@@ -11,6 +15,17 @@ deterministic reducer replays the event stream and explains whether referenced
 evidence covers each checkpoint's declared requirements.
 
 Covenant is the first reference adopter. It is not a required dependency.
+
+## Status at a glance
+
+- **Published:** `@covenant-org/timeline@0.0.0-alpha.1` provides the v0alpha1
+  TypeScript library and CLI.
+- **Implemented in source:** contract-bound v0alpha2 policy identity, a
+  collector-signed GitHub evidence profile, atomic run archives, a Temporal
+  restart adapter, a Python reducer, and a public five-day replay archive.
+- **Still required for adoption:** an external organization operating Timeline
+  independently. The Temporal adapter and public archive are maintained here
+  and do not count as independent adoption.
 
 ## Why this exists
 
@@ -42,8 +57,8 @@ Requirements:
 - Node.js 22 or 24
 
 ```sh
-npm install @covenant-org/timeline@next
-timeline --version
+npm install @covenant-org/timeline@0.0.0-alpha.1
+npx timeline --version
 ```
 
 To run the repository demo from source:
@@ -76,6 +91,15 @@ pnpm timeline verify conformance/v0alpha2/runs/successful.json --json
 
 See [Getting started](./docs/getting-started.md) for the complete local path.
 
+The repository also contains independently repeatable evidence for the M4
+reference implementation:
+
+```sh
+pnpm public-runs:check
+pnpm --filter @covenant-org/timeline-temporal test
+pnpm reducer:cross-check
+```
+
 ## Core boundary
 
 The released v0alpha1 core is limited to:
@@ -107,7 +131,7 @@ The reducer is pure:
 Commands request effects. Adapters execute them and return receipts as later
 events. Replay never calls an adapter.
 
-## Current status
+## Implementation status
 
 This repository contains a production-hardened alpha release. That means the
 implementation defends its stated boundary; it does not mean the protocol has

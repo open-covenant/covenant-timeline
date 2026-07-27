@@ -4,8 +4,8 @@ Run Timeline in one external long-running-agent workflow and publish a redacted
 artifact that another process can replay and verify. The result should identify
 one operational benefit, failure, or required contract change.
 
-An operator can run the pilot independently with the npm package. No hosted
-Covenant service or formal partnership is required.
+An operator can run the pilot independently with the local MCP package or the
+library. No hosted Covenant service or formal partnership is required.
 
 Teams that are not ready to operate a workflow can start with the public
 [model-interface v1 smoke benchmark](../benchmarks/model-interface/v1/README.md).
@@ -32,7 +32,9 @@ regulated or sensitive data in the first public pilot.
 
 The external operator:
 
-1. pins `@covenant-org/timeline@0.0.0-alpha.2` or an exact Timeline commit;
+1. pins `@covenant-org/timeline-mcp@0.0.0-alpha.1` for an MCP agent,
+   `@covenant-org/timeline@0.0.0-alpha.2` for a custom host, or an exact
+   Timeline commit;
 2. defines its subject, axes, origins, units, and scenario contexts;
 3. records points, intervals, coordinate assertions, constraints, and facts
    from its own system;
@@ -97,7 +99,8 @@ operational benefit should be published as such.
 
 ## Start
 
-1. Install `@covenant-org/timeline@0.0.0-alpha.2` or run
+1. Connect `@covenant-org/timeline-mcp@0.0.0-alpha.1` to an MCP agent, install
+   `@covenant-org/timeline@0.0.0-alpha.2` in a custom host, or run
    `pnpm temporal:demo` from a source checkout.
 2. Read [the model interface](./model-interface.md). If a model will propose
    records, validate its adapter with the public v1 smoke benchmark.

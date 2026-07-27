@@ -7,6 +7,19 @@ and ask the same temporal question at an earlier or later knowledge cut.
 Timeline returns a deterministic conclusion with a proof receipt that another
 process can verify.
 
+## Try it
+
+Run the installed correction demo without cloning the repository:
+
+```sh
+npx --yes @covenant-org/timeline-mcp@0.0.0-alpha.1 --demo
+```
+
+The command writes an initial claim, a correction, and a retraction to a
+temporary local store, reloads the run from disk, and prints the verified
+conclusions and proof receipts at the original and corrected knowledge cuts.
+The temporary store is removed before the command exits.
+
 ## Connect
 
 Requires Node.js 22 or 24. Add the server to any MCP client that supports local
@@ -31,6 +44,11 @@ stdio servers:
 Use an absolute path on a dedicated local filesystem and restrict the directory
 to the account running the MCP client. Once started, the server exposes only
 stdio and makes no network requests.
+
+The config exposes Timeline's tools; it does not ingest transcripts or traces
+automatically. The reference server admits every structurally valid record
+submitted over its MCP connection. Hosts must control server access and apply
+evidence and admission policy outside the server.
 
 ## Agent workflow
 

@@ -8,6 +8,10 @@ describe("timeline-mcp CLI", () => {
       args: ["--data-dir", "relative/path"],
       message: "--data-dir must be absolute",
     },
+    {
+      args: ["--demo", "--data-dir", "/tmp/timeline"],
+      message: "--demo cannot be combined with --data-dir",
+    },
     { args: ["--unknown"], message: "invalid command-line arguments" },
   ])("rejects invalid startup arguments", async ({ args, message }) => {
     await expect(main(args)).rejects.toThrow(message);

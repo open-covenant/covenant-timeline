@@ -11,6 +11,14 @@ Choose the integration surface that matches the host:
 
 ## Connect an MCP agent
 
+Try the installed correction-and-replay path first:
+
+```sh
+npx --yes @covenant-org/timeline-mcp@0.0.0-alpha.1 --demo
+```
+
+Then add the local server to the agent's MCP configuration:
+
 ```json
 {
   "mcpServers": {
@@ -28,8 +36,11 @@ Choose the integration surface that matches the host:
 ```
 
 The server uses local stdio, makes no network requests, and persists canonical
-append-only runs under the selected data directory. Direct writes are
-structurally valid but unauthenticated. See the
+append-only runs under the selected data directory. It exposes temporal tools;
+it does not ingest transcripts or traces automatically. The reference server
+admits every structurally valid record submitted over its MCP connection. Hosts
+must control server access and apply evidence and admission policy outside the
+server. Direct writes are structurally valid but unauthenticated. See the
 [MCP package guide](../packages/mcp-server/README.md) for its five tools,
 portable run resource, restart semantics, and operating limits.
 

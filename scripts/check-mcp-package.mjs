@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertMcpArchiveEntries,
   parseMcpTarListings,
@@ -146,6 +146,38 @@ try {
     );
   }
 
+  const demo = JSON.parse(
+    run(executable, ["--demo"], { cwd: installDirectory }).trim(),
+  );
+  if (
+    demo.schema !== "covenant.timeline.mcp-demo.v1" ||
+    demo.eventCount !== 6 ||
+    demo.reloadedFromDisk !== true ||
+    demo.before?.conclusion?.result?.minimum !== -100 ||
+    demo.before?.verified !== true ||
+    demo.after?.conclusion?.result?.minimum !== 100 ||
+    demo.after?.verified !== true
+  ) {
+    throw new Error("installed MCP correction demo changed");
+  }
+  const timeline = await import(
+    pathToFileURL(
+      join(
+        installDirectory,
+        "node_modules/@covenant-org/timeline/dist/index.js",
+      ),
+    ).href
+  );
+  const demoRun = timeline.parseRunDocumentV0Alpha3(demo.run);
+  for (const cut of [demo.before, demo.after]) {
+    const query = timeline.parseQueryV0Alpha3(cut.query, demoRun);
+    if (
+      !timeline.verifyTemporalConclusionV0Alpha3(demoRun, query, cut.conclusion)
+    ) {
+      throw new Error("installed MCP demo receipt did not verify");
+    }
+  }
+
   const fixture = await loadCorrectionFixture();
   await writeFile(
     join(installDirectory, "fixture.json"),
@@ -174,7 +206,7 @@ try {
   }
 
   console.log(
-    `MCP package check passed (${mcpArchive}, registry Timeline ${coreVersion}, installed stdio restart, correction replay, and proof verification)`,
+    `MCP package check passed (${mcpArchive}, registry Timeline ${coreVersion}, installed demo, stdio restart, correction replay, and proof verification)`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

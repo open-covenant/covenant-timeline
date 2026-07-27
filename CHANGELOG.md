@@ -50,6 +50,9 @@
 
 ### Added
 
+- Add a zero-setup installed correction demo that reloads the run from disk and
+  emits verifier-checked conclusions and proof receipts for the original and
+  corrected knowledge cuts.
 - Add a local stdio server with five bounded temporal-state tools, portable run
   resources, explicit knowledge cuts, structural-only admission labels,
   optimistic concurrency, canonical append-only persistence, restart recovery,

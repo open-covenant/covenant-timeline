@@ -3,7 +3,7 @@
 [![CI](https://github.com/open-covenant/covenant-timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/open-covenant/covenant-timeline/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/open-covenant/covenant-timeline)](./LICENSE)
 
-**Verifiable temporal state for long-running agents.**
+**Verifiable temporal memory for long-running agents.**
 
 A release agent records that security review finished before deployment. New
 evidence later reverses that order. Timeline preserves both historical views,
@@ -11,16 +11,16 @@ recomputes what follows from the corrected record, and returns a proof receipt
 that another process can check.
 
 ```sh
-npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
+npx --yes @covenant-org/timeline-mcp@0.0.0-alpha.1 --demo
 ```
 
-[Run the correction demo](#see-a-correction-survive-replay) ·
+[Run the correction demo](#replay-an-agent-run-after-a-correction) ·
 [Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
 [Evaluate the model boundary](./docs/model-evaluation.md)
 
-## See a correction survive replay
+## Replay an agent run after a correction
 
 The checked-in example uses one elapsed-time axis and three admitted
 assertions:
@@ -44,8 +44,29 @@ knowledge cuts:
 The transition failure is explicit. Event 5 retracts the superseded assertion
 and restores a bounded answer.
 
-This is the exact corrected conclusion committed in
+These are selected fields from the exact corrected conclusion committed in
 [`conclusions/after.json`](./examples/correction-replay/conclusions/after.json):
+
+```json
+{
+  "result": {
+    "type": "difference.bounds",
+    "status": "bounded",
+    "minimum": 100,
+    "maximum": 100
+  },
+  "receipt": {
+    "reasoner": "covenant.timeline.stn.v0alpha1",
+    "stateDigest": "sha256:5bef7e47e6d7a7b78900ade5c272732afe1a0a2fa453080d90cdeb0fb788c279",
+    "proof": {
+      "kind": "bounds"
+    }
+  }
+}
+```
+
+<details>
+<summary>View the complete verifier-checked conclusion</summary>
 
 <!-- correction-conclusion:start -->
 
@@ -101,6 +122,8 @@ This is the exact corrected conclusion committed in
 
 <!-- correction-conclusion:end -->
 
+</details>
+
 The earlier conclusion remains replayable from the same run at event 3. Both
 receipts pass verification against their projected state and query. From a
 source checkout:
@@ -115,21 +138,6 @@ Explore the
 [`evidence`](./examples/correction-replay/evidence),
 [`queries`](./examples/correction-replay/queries), and
 [`conclusions`](./examples/correction-replay/conclusions).
-
-## What Timeline gives an agent
-
-- **Temporal state across sessions.** Plans, observations, forecasts, and
-  hypothetical alternatives use explicit axes and isolated contexts.
-- **Corrections without rewritten history.** Retractions and supersession
-  change current state while earlier knowledge cuts remain replayable.
-- **Honest uncertainty.** Bounded answers stay bounded; the kernel reports
-  alternatives and contradictions instead of inventing precision.
-- **Portable verification.** Conclusions bind the projected state, query,
-  semantic result, reasoner profile, and proof material by content digest.
-
-Timeline is designed first for agent runs that cross sessions and must absorb
-late or corrected evidence without losing the state that informed earlier
-decisions.
 
 ## Give an MCP agent temporal memory
 
@@ -152,6 +160,11 @@ temporal state durable across agent sessions. Add it to an MCP client:
 }
 ```
 
+This config exposes Timeline's tools; it does not ingest transcripts or traces
+automatically. The reference server admits every structurally valid record
+submitted over its MCP connection. Hosts must control server access and apply
+evidence and admission policy outside the server.
+
 The server lets an agent create and recover runs, append typed records, project
 state at an exact knowledge cut, and request verified temporal conclusions. It
 also exports the complete portable run required for independent receipt
@@ -166,6 +179,21 @@ See the
 [`@covenant-org/timeline-mcp` guide](./packages/mcp-server/README.md)
 for the tool contract, persistence model, recovery procedure, limits, and
 production boundary.
+
+## What Timeline gives an agent
+
+- **Temporal state across sessions.** Plans, observations, forecasts, and
+  hypothetical alternatives use explicit axes and isolated contexts.
+- **Corrections without rewritten history.** Retractions and supersession
+  change current state while earlier knowledge cuts remain replayable.
+- **Honest uncertainty.** Bounded answers stay bounded; the kernel reports
+  alternatives and contradictions instead of inventing precision.
+- **Portable verification.** Conclusions bind the projected state, query,
+  semantic result, reasoner profile, and proof material by content digest.
+
+Timeline is designed first for agent runs that cross sessions and must absorb
+late or corrected evidence without losing the state that informed earlier
+decisions.
 
 ## Use the temporal API
 
@@ -252,7 +280,7 @@ Simple Temporal Network solver. It supports consistency, tight difference
 bounds, before/equal/after point relations, and all 13 Allen interval base
 relations.
 
-## How Timeline fits
+## Why not event sourcing, a temporal database, or Temporal.io?
 
 - **Event sourcing records change; Timeline checks temporal conclusions.**
   Timeline can consume append-only records, but it is not an event store. It
@@ -303,37 +331,30 @@ Before production use, review the
 [threat model](./docs/threat-model.md), and
 [production audit](./docs/production-audit-timeline.md).
 
-## Proving the model boundary
+## Evidence status
 
 The repository includes a public 12-case development suite and a stateless
-OpenAI Responses reference adapter. No model result has been published, and the
-visible corpus does not establish that Timeline outperforms narrative memory.
+OpenAI Responses reference adapter. No external model result has been
+published, so Timeline does not yet claim an accuracy improvement over
+narrative memory. The
+[model evaluation protocol](./docs/model-evaluation.md) defines the benchmark
+required to make that claim.
 
-The next evidence gate is a preregistered blinded benchmark with longer rolling
-histories, controlled paraphrases, distractors, fixed budgets, strict failure
-accounting, and paired analysis. See
-[Model evaluation](./docs/model-evaluation.md) and the
-[roadmap](./ROADMAP.md).
-
-The second gate is one independent long-running-agent pilot that crosses a
-restart, admits delayed or corrected evidence, and publishes a redacted run
-another process can reproduce. The
-[temporal pilot](./docs/temporal-pilot.md) defines the minimum evidence.
-
-Timeline is also seeking a second implementer for the bounded RFC 0009
-conformance target in
-[issue #19](https://github.com/open-covenant/covenant-timeline/issues/19).
+The project is seeking one
+[independent long-running-agent pilot](./docs/temporal-pilot.md) and a
+[second RFC 0009 implementation](https://github.com/open-covenant/covenant-timeline/issues/19).
+The [roadmap](./ROADMAP.md) defines the evidence gates and the 90-day adoption
+review.
 
 ## Relationship to Covenant
 
 Timeline is an independent Apache-2.0 component. It provides the portable
 temporal contract, reference kernel, and verifier.
 
-[Covenant](https://github.com/open-covenant/covenant) is a runtime for teams
-that also need evidence authority, durable execution, scoped capabilities,
-continuity, provenance, and audit. Covenant can admit records into Timeline and
-use verified temporal conclusions in runtime policy; Timeline does not require
-Covenant.
+Teams that also need evidence authority, admission policy, durable execution,
+scoped capabilities, continuity, provenance, and audit can pair Timeline with
+[Covenant](https://github.com/open-covenant/covenant). Other hosts can provide
+those boundaries; Timeline does not require Covenant.
 
 ## Release and repository
 

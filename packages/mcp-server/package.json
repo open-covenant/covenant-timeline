@@ -1,7 +1,7 @@
 {
   "name": "@covenant-org/timeline-mcp",
   "version": "0.0.0-alpha.1",
-  "description": "MCP server for verifiable temporal state in long-running agent workflows.",
+  "description": "MCP server for verifiable temporal memory in long-running agent workflows.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

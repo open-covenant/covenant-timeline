@@ -1641,8 +1641,8 @@ function npmPurl(name, version) {
   return `pkg:npm/${encodeURIComponent(scope)}/${encodeURIComponent(packageName)}@${version}`;
 }
 
-function npmMetadataUrl(name) {
-  return `https://registry.npmjs.org/${name.replace("/", "%2f")}`;
+export function npmMetadataUrl(name) {
+  return `https://registry.npmjs.org/${encodeURIComponent(name)}`;
 }
 
 function workflowIdentity(record) {

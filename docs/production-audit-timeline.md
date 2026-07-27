@@ -175,7 +175,7 @@ graph exhaustion, and temporal-data privacy.
     path produced byte-identical archives from two clean builds;
   - the MCP SPDX test covered the complete seven-package production dependency
     graph; and
-  - 23 release-evidence tests covered closed record shape, exact artifacts,
+  - 24 release-evidence tests covered closed record shape, exact artifacts,
     provenance identity, successful and publication workflow attempts,
     credentials, integration pins, and full-graph SBOM substitution.
 - `pnpm audit` and `pnpm audit --prod` reported no known findings on

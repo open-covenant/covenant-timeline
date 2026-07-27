@@ -21,6 +21,7 @@ import {
   parseMcpTarListings,
 } from "./mcp-package-contents.mjs";
 import {
+  npmMetadataUrl,
   runCommand,
   verifyCertificate,
   verifyChecksumSidecar,
@@ -56,6 +57,13 @@ test("accepts the closed MCP release record shape", () => {
   assert.deepEqual(validateMcpReleaseEvidenceDocument(manifest, fileName), []);
   assert.equal(manifest.release.latestAtPublish, null);
   assert.equal(releaseEvidenceProfile(manifest), mcpReleaseEvidenceProfile);
+});
+
+test("encodes complete npm package paths", () => {
+  assert.equal(
+    npmMetadataUrl("@scope/package/nested"),
+    "https://registry.npmjs.org/%40scope%2Fpackage%2Fnested",
+  );
 });
 
 test("separates the successful workflow attempt from the npm publication attempt", () => {

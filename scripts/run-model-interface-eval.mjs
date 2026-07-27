@@ -1,9 +1,28 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from "node:child_process";
-import { open, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  access,
+  link,
+  open,
+  readFile,
+  realpath,
+  readdir,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { arch, platform } from "node:os";
-import { resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 import { TextDecoder, promisify } from "node:util";
 import {
@@ -42,6 +61,8 @@ import { parseStrictJson } from "./strict-json.mjs";
 
 const defaultCasesPath = "benchmarks/model-interface/v1/cases.jsonl";
 const maxResponseBytes = 256 * 1024;
+const maxRuntimeFileBytes = 64 * 1024 * 1024;
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const execFileAsync = promisify(execFile);
 
 class AdapterError extends Error {
@@ -49,6 +70,13 @@ class AdapterError extends Error {
     super(message);
     this.name = "AdapterError";
     this.code = code;
+  }
+}
+
+class RunSetupError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RunSetupError";
   }
 }
 
@@ -228,8 +256,13 @@ function decodeResponseLines(chunks, bytes) {
 
 export async function runModelInterfaceEval(options) {
   validateRunOptions(options);
+  const outputPath = resolve(options.output);
+  await assertOutputOutsideCheckout(outputPath);
   const validators = await createModelEvalValidators();
   const config = await loadRunConfig(options.config, validators.config);
+  const source = await readSourceState();
+  await assertBenchmarkRevision(config.benchmarkRevision, source.revision);
+  const runtimeDigest = await runtimeStateDigest(options.adapter);
   const corpus = await loadBenchmarkCases(
     options.cases ?? defaultCasesPath,
     validators,
@@ -253,7 +286,6 @@ export async function runModelInterfaceEval(options) {
     await readFile("packages/prototype/package.json", "utf8"),
     "packages/prototype/package.json",
   );
-  const source = await readSourceState();
   const run = {
     config,
     configDigest: contentDigest(config),
@@ -274,16 +306,27 @@ export async function runModelInterfaceEval(options) {
     platform: platform(),
     arch: arch(),
   };
-  const output = await open(options.output, options.overwrite ? "w" : "wx");
+  if (!options.overwrite) await assertOutputAvailable(outputPath);
+  const partialPath = join(
+    dirname(outputPath),
+    `.${basename(outputPath)}.${randomUUID()}.partial`,
+  );
+  const output = await open(partialPath, "wx");
   const total = cases.length * options.arms.length * options.repeats * 3;
   let completed = 0;
+  let outputClosed = false;
   let outputBytes = 0;
+  let preservePartial = false;
+  let published = false;
   let requestNumber = 0;
 
   try {
     for (let repeat = 0; repeat < options.repeats; repeat += 1) {
-      for (const testCase of cases) {
-        for (const arm of options.arms) {
+      for (const [caseIndex, testCase] of cases.entries()) {
+        const armOffset = (repeat + caseIndex) % options.arms.length;
+        for (let armIndex = 0; armIndex < options.arms.length; armIndex += 1) {
+          const arm =
+            options.arms[(armIndex + armOffset) % options.arms.length];
           let memory = "";
           let admittedEvents = [...testCase.setupEvents];
           const knowledgeCuts = [];
@@ -387,6 +430,15 @@ export async function runModelInterfaceEval(options) {
               );
               validateAdapterResponse(response, request, validators);
               result.usage = response.usage ?? null;
+              if (response.error !== undefined) {
+                if (response.error.scope === "run") {
+                  throw new RunSetupError(response.error.message);
+                }
+                throw new ModelEvalError(response.error.message, {
+                  code: response.error.code,
+                  stage: "adapter",
+                });
+              }
 
               if (arm === "direct") {
                 result.answer = response.answer;
@@ -498,6 +550,13 @@ export async function runModelInterfaceEval(options) {
                 result.status = "ok";
               }
             } catch (error) {
+              if (error instanceof RunSetupError) throw error;
+              if (
+                error instanceof AdapterError &&
+                error.code === "adapter.start"
+              ) {
+                throw new RunSetupError(error.message);
+              }
               const failure = classifyFailure(error);
               result.error = {
                 stage: failure.stage,
@@ -547,11 +606,144 @@ export async function runModelInterfaceEval(options) {
         }
       }
     }
-  } finally {
+    await output.sync();
     await output.close();
+    outputClosed = true;
+
+    const finalSource = await readSourceState();
+    if (
+      finalSource.revision !== source.revision ||
+      finalSource.status !== source.status ||
+      finalSource.stateDigest !== source.stateDigest
+    ) {
+      throw new Error(
+        "repository source state changed during the benchmark run",
+      );
+    }
+    if ((await runtimeStateDigest(options.adapter)) !== runtimeDigest) {
+      throw new Error("benchmark runtime files changed during the run");
+    }
+
+    try {
+      if (options.overwrite) {
+        await rename(partialPath, outputPath);
+        published = true;
+      } else {
+        await link(partialPath, outputPath);
+        published = true;
+      }
+    } catch (error) {
+      preservePartial = true;
+      throw new Error(
+        `${error.message}; validated artifact retained at ${partialPath}`,
+        { cause: error },
+      );
+    }
+    if (!options.overwrite) {
+      try {
+        await rm(partialPath);
+      } catch (error) {
+        process.stderr.write(
+          `model-interface benchmark: published ${outputPath}; could not remove ${partialPath}: ${error.message}\n`,
+        );
+      }
+    }
+  } finally {
+    if (!outputClosed) {
+      try {
+        await output.close();
+      } catch (error) {
+        process.stderr.write(
+          `model-interface benchmark: could not close ${partialPath}: ${error.message}\n`,
+        );
+      }
+    }
+    if (!published && !preservePartial) {
+      await rm(partialPath, { force: true });
+    }
   }
 
   return { completed, output: options.output };
+}
+
+async function assertOutputOutsideCheckout(outputPath) {
+  const [checkout, parent] = await Promise.all([
+    realpath(root),
+    realpath(dirname(outputPath)),
+  ]);
+  const target = join(parent, basename(outputPath));
+  const pathFromCheckout = relative(checkout, target);
+  if (
+    pathFromCheckout === "" ||
+    (!pathFromCheckout.startsWith(`..${sep}`) && !isAbsolute(pathFromCheckout))
+  ) {
+    throw new Error("output must be outside the repository checkout");
+  }
+}
+
+async function assertOutputAvailable(path) {
+  try {
+    await access(path);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error(`output already exists: ${path}`);
+}
+
+async function runtimeStateDigest(adapter) {
+  const distRoot = resolve("packages/prototype/dist");
+  const distFiles = await runtimeJavaScriptFiles(distRoot);
+  const scriptFiles = await runtimeJavaScriptFiles(join(root, "scripts"));
+  const adapterFiles = [];
+  for (const [position, value] of adapter.entries()) {
+    if (position === 0 && value === process.execPath) continue;
+    if (position === 0 && !isAbsolute(value) && !value.includes(sep)) continue;
+    const path = resolve(value);
+    try {
+      const metadata = await stat(path);
+      if (!metadata.isFile() || metadata.size > maxRuntimeFileBytes) continue;
+      adapterFiles.push({
+        position,
+        digest: await digestFile(path),
+      });
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  return contentDigest({
+    adapter: adapterFiles,
+    dist: await Promise.all(
+      distFiles.map(async (path) => ({
+        path: relative(distRoot, path).split(sep).join("/"),
+        digest: await digestFile(path),
+      })),
+    ),
+    scripts: await Promise.all(
+      scriptFiles.map(async (path) => ({
+        path: relative(root, path).split(sep).join("/"),
+        digest: await digestFile(path),
+      })),
+    ),
+  });
+}
+
+async function runtimeJavaScriptFiles(directory) {
+  const files = [];
+  const entries = await readdir(directory, { withFileTypes: true });
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await runtimeJavaScriptFiles(path)));
+    } else if (
+      entry.isFile() &&
+      (entry.name.endsWith(".js") || entry.name.endsWith(".mjs"))
+    ) {
+      files.push(path);
+    }
+  }
+  return files;
 }
 
 function validateRunOptions(options) {
@@ -608,23 +800,77 @@ function assertBoundedOption(value, label, maximum) {
 
 async function readSourceState() {
   try {
-    const [{ stdout: revision }, { stdout: status }] = await Promise.all([
-      execFileAsync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
-      execFileAsync(
-        "git",
-        ["status", "--porcelain=v1", "--untracked-files=all"],
-        { encoding: "utf8" },
-      ),
-    ]);
+    const [{ stdout: revision }, { stdout: status }, { stdout: files }] =
+      await Promise.all([
+        execFileAsync("git", ["rev-parse", "HEAD"], {
+          cwd: root,
+          encoding: "utf8",
+        }),
+        execFileAsync(
+          "git",
+          ["status", "--porcelain=v1", "--untracked-files=all"],
+          { cwd: root, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+        ),
+        execFileAsync(
+          "git",
+          ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+          {
+            cwd: root,
+            encoding: "buffer",
+            maxBuffer: 8 * 1024 * 1024,
+          },
+        ),
+      ]);
+    const paths = files
+      .toString("utf8")
+      .split("\0")
+      .filter((path) => path.length > 0)
+      .sort();
     return {
       revision: revision.trim(),
       dirty: status.length > 0,
+      status,
+      stateDigest: contentDigest(
+        await Promise.all(
+          paths.map(async (path) => ({
+            path,
+            digest: await digestFile(join(root, path)),
+          })),
+        ),
+      ),
     };
   } catch {
     return {
       revision: "unavailable",
       dirty: null,
+      status: null,
+      stateDigest: null,
     };
+  }
+}
+
+async function assertBenchmarkRevision(benchmarkRevision, sourceRevision) {
+  if (benchmarkRevision === sourceRevision) return;
+  const resolved = await resolveGitCommit(benchmarkRevision);
+  if (resolved === sourceRevision) return;
+  throw new Error(
+    `run configuration benchmarkRevision ${benchmarkRevision} does not resolve to source revision ${sourceRevision}`,
+  );
+}
+
+async function resolveGitCommit(revision) {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["rev-parse", "--verify", "--end-of-options", `${revision}^{commit}`],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    );
+    return stdout.trim();
+  } catch {
+    return null;
   }
 }
 

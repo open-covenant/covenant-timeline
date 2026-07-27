@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -11,12 +12,17 @@ import {
   loadBenchmarkCases,
   loadRunConfig,
   readJsonLines,
+  validateAdapterResponse,
 } from "./model-interface-eval.mjs";
 import { runModelInterfaceEval } from "./run-model-interface-eval.mjs";
 import { scoreModelInterfaceEval } from "./score-model-interface-eval.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const casesPath = join(root, "benchmarks/model-interface/v1/cases.jsonl");
+const sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+  encoding: "utf8",
+}).trim();
 
 test("the model-interface corpus is kernel-derived and balanced", async () => {
   const validators = await createModelEvalValidators();
@@ -35,7 +41,7 @@ test("run configuration rejects unreported settings", async () => {
   const valid = {
     schema: "covenant.timeline.model-eval.config.v1",
     id: "test-run",
-    benchmarkRevision: "test-revision",
+    benchmarkRevision: sourceRevision,
     adapter: { id: "gold-fixture", version: "1" },
     model: { provider: "test", id: "gold", revision: "1" },
     generation: {
@@ -89,7 +95,7 @@ test("run configuration rejects credential-like parameters", async (t) => {
       `${JSON.stringify({
         schema: "covenant.timeline.model-eval.config.v1",
         id: "test-secret-run",
-        benchmarkRevision: "test-revision",
+        benchmarkRevision: sourceRevision,
         adapter: { id: "test", version: "1" },
         model: { provider: "test", id: "test", revision: "1" },
         generation: {
@@ -109,6 +115,127 @@ test("run configuration rejects credential-like parameters", async (t) => {
   }
 });
 
+test("runner binds benchmarkRevision to the checked-out source", async (t) => {
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-model-eval-revision-"),
+  );
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const configPath = join(temporaryDirectory, "run-config.json");
+  const resultsPath = join(temporaryDirectory, "results.jsonl");
+  await writeConfig(configPath, "revision-mismatch");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.benchmarkRevision = "b".repeat(40);
+  await writeFile(configPath, `${JSON.stringify(config)}\n`, "utf8");
+
+  await assert.rejects(
+    runModelInterfaceEval({
+      adapter: ["not-invoked"],
+      arms: ["direct"],
+      caseIds: ["bounds.deploy-window"],
+      cases: casesPath,
+      config: configPath,
+      output: resultsPath,
+      overwrite: false,
+      repeats: 1,
+      timeoutMs: 1_000,
+    }),
+    /benchmarkRevision .* does not resolve to source revision/,
+  );
+  await assert.rejects(readFile(resultsPath, "utf8"), { code: "ENOENT" });
+});
+
+test("runner accepts a legacy Git ref that resolves to the source", async (t) => {
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-model-eval-ref-"),
+  );
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const adapterPath = join(temporaryDirectory, "gold-adapter.mjs");
+  const configPath = join(temporaryDirectory, "run-config.json");
+  const resultsPath = join(temporaryDirectory, "results.jsonl");
+  await writeConfig(configPath, "legacy-ref");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.benchmarkRevision = "HEAD";
+  await writeFile(configPath, `${JSON.stringify(config)}\n`, "utf8");
+  await writeFile(adapterPath, goldAdapterSource);
+
+  const run = await runModelInterfaceEval({
+    adapter: [process.execPath, adapterPath, casesPath],
+    arms: ["direct"],
+    caseIds: ["bounds.deploy-window"],
+    cases: casesPath,
+    config: configPath,
+    output: resultsPath,
+    overwrite: false,
+    repeats: 1,
+    timeoutMs: 5_000,
+  });
+  assert.equal(run.completed, 3);
+  const score = await scoreModelInterfaceEval({
+    cases: casesPath,
+    results: resultsPath,
+  });
+  assert.equal(score.coverage.complete, true);
+});
+
+test("adapter error envelopes are closed and bounded", async () => {
+  const validators = await createModelEvalValidators();
+  const request = {
+    arm: "direct",
+    requestId: "request-1",
+  };
+  const valid = {
+    schema: "covenant.timeline.model-eval.adapter-error.v1",
+    requestId: "request-1",
+    error: {
+      code: "provider.http-429",
+      message: "provider returned a rate limit response",
+      scope: "observation",
+    },
+  };
+  assert.doesNotThrow(() =>
+    validateAdapterResponse(valid, request, validators),
+  );
+
+  for (const invalid of [
+    {
+      ...valid,
+      schema: "covenant.timeline.model-eval.response.v1",
+    },
+    {
+      ...valid,
+      answer: {
+        type: "context.consistency",
+        status: "consistent",
+      },
+    },
+    {
+      ...valid,
+      error: {
+        ...valid.error,
+        code: "UPPERCASE",
+      },
+    },
+    {
+      ...valid,
+      error: {
+        ...valid.error,
+        message: "x".repeat(481),
+      },
+    },
+    {
+      ...valid,
+      error: {
+        ...valid.error,
+        scope: "case",
+      },
+    },
+  ]) {
+    assert.throws(() => validateAdapterResponse(invalid, request, validators));
+  }
+});
+
 test("gold fixture exercises the runner and scorer end to end", async (t) => {
   const temporaryDirectory = await mkdtemp(
     join(tmpdir(), "covenant-timeline-model-eval-"),
@@ -123,7 +250,7 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
     `${JSON.stringify({
       schema: "covenant.timeline.model-eval.config.v1",
       id: "test-gold-run",
-      benchmarkRevision: "test-revision",
+      benchmarkRevision: sourceRevision,
       adapter: { id: "gold-fixture", version: "1" },
       model: { provider: "test", id: "gold", revision: "1" },
       generation: {
@@ -151,6 +278,23 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
   assert.equal(
     (await readFile(resultsPath, "utf8")).trim().split("\n").length,
     108,
+  );
+  const orderedResults = await readJsonLines(resultsPath);
+  assert.deepEqual(
+    orderedResults.slice(0, 9).map(({ arm }) => arm),
+    [
+      ...Array(3).fill("direct"),
+      ...Array(3).fill("narrative-memory"),
+      ...Array(3).fill("timeline"),
+    ],
+  );
+  assert.deepEqual(
+    orderedResults.slice(9, 18).map(({ arm }) => arm),
+    [
+      ...Array(3).fill("narrative-memory"),
+      ...Array(3).fill("timeline"),
+      ...Array(3).fill("direct"),
+    ],
   );
 
   const score = await scoreModelInterfaceEval({
@@ -276,6 +420,23 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
     }),
     /credentials must be passed through the adapter environment/,
   );
+
+  const revisionMismatchPath = join(
+    temporaryDirectory,
+    "revision-mismatch-results.jsonl",
+  );
+  const revisionMismatch = await readJsonLines(resultsPath);
+  for (const result of revisionMismatch) {
+    result.run.sourceRevision = "b".repeat(40);
+  }
+  await writeResults(revisionMismatchPath, revisionMismatch);
+  await assert.rejects(
+    scoreModelInterfaceEval({
+      cases: casesPath,
+      results: revisionMismatchPath,
+    }),
+    /benchmarkRevision does not match run.sourceRevision/,
+  );
 });
 
 test("empty Timeline extraction cannot pass end-to-end scoring", async (t) => {
@@ -334,7 +495,7 @@ test("semantic state and knowledge cuts tolerate equivalent event encodings", as
     `${JSON.stringify({
       schema: "covenant.timeline.model-eval.config.v1",
       id: "test-equivalent-run",
-      benchmarkRevision: "test-revision",
+      benchmarkRevision: sourceRevision,
       adapter: { id: "equivalent-fixture", version: "1" },
       model: { provider: "test", id: "equivalent", revision: "1" },
       generation: {
@@ -382,7 +543,7 @@ test("runner preserves semantic, memory, and admission failures", async (t) => {
     `${JSON.stringify({
       schema: "covenant.timeline.model-eval.config.v1",
       id: "test-failure-run",
-      benchmarkRevision: "test-revision",
+      benchmarkRevision: sourceRevision,
       adapter: { id: "failure-fixture", version: "1" },
       model: { provider: "test", id: "failure", revision: "1" },
       generation: {
@@ -489,7 +650,7 @@ test("runner rejects more than one adapter response", async (t) => {
     `${JSON.stringify({
       schema: "covenant.timeline.model-eval.config.v1",
       id: "test-extra-output-run",
-      benchmarkRevision: "test-revision",
+      benchmarkRevision: sourceRevision,
       adapter: { id: "extra-output-fixture", version: "1" },
       model: { provider: "test", id: "extra-output", revision: "1" },
       generation: {
@@ -520,7 +681,160 @@ test("runner rejects more than one adapter response", async (t) => {
   );
 });
 
-test("runner classifies adapter start failures", async (t) => {
+test("runner preserves structured adapter failures", async (t) => {
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-model-eval-adapter-error-"),
+  );
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const adapterPath = join(temporaryDirectory, "error-adapter.mjs");
+  const configPath = join(temporaryDirectory, "run-config.json");
+  const resultsPath = join(temporaryDirectory, "results.jsonl");
+  await writeConfig(configPath, "error-envelope");
+  await writeFile(
+    adapterPath,
+    String.raw`
+import { createInterface } from "node:readline";
+
+const input = createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+  terminal: false,
+});
+
+input.on("line", (line) => {
+  const request = JSON.parse(line);
+  process.stdout.write(JSON.stringify({
+    schema: "covenant.timeline.model-eval.adapter-error.v1",
+    requestId: request.requestId,
+    error: {
+      code: "provider.http-429",
+      message: "provider returned a rate limit response",
+      scope: "observation",
+    },
+    usage: {
+      inputTokens: 12,
+      outputTokens: 0,
+      costUsd: null,
+    },
+  }) + "\n");
+});
+`,
+  );
+
+  await runModelInterfaceEval({
+    adapter: [process.execPath, adapterPath],
+    arms: ["direct"],
+    caseIds: ["bounds.deploy-window"],
+    cases: casesPath,
+    config: configPath,
+    output: resultsPath,
+    overwrite: false,
+    repeats: 1,
+    timeoutMs: 5_000,
+  });
+  const results = await readJsonLines(resultsPath);
+  assert.equal(results.length, 3);
+  for (const result of results) {
+    assert.equal(result.status, "error");
+    assert.deepEqual(result.error, {
+      stage: "adapter",
+      code: "provider.http-429",
+      message: "provider returned a rate limit response",
+    });
+    assert.deepEqual(result.usage, {
+      inputTokens: 12,
+      outputTokens: 0,
+      costUsd: null,
+    });
+    assert.equal(typeof result.responseText, "string");
+    assert.equal(typeof result.responseDigest, "string");
+  }
+  const score = await scoreModelInterfaceEval({
+    cases: casesPath,
+    results: resultsPath,
+  });
+  assert.deepEqual(score.arms.direct.answerExactRate, {
+    numerator: 0,
+    denominator: 3,
+    value: 0,
+  });
+
+  const runScopedPath = join(
+    temporaryDirectory,
+    "run-scoped-error-results.jsonl",
+  );
+  const runScoped = await readJsonLines(resultsPath);
+  for (const result of runScoped) {
+    const response = JSON.parse(result.responseText);
+    response.error.scope = "run";
+    result.responseText = canonicalJson(response);
+    result.responseDigest = digestText(result.responseText);
+  }
+  await writeResults(runScopedPath, runScoped);
+  await assert.rejects(
+    scoreModelInterfaceEval({
+      cases: casesPath,
+      results: runScopedPath,
+    }),
+    /stored adapter error must be observation-scoped/,
+  );
+});
+
+test("runner aborts on run-scoped adapter failures", async (t) => {
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-model-eval-run-error-"),
+  );
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const adapterPath = join(temporaryDirectory, "run-error-adapter.mjs");
+  const configPath = join(temporaryDirectory, "run-config.json");
+  const resultsPath = join(temporaryDirectory, "results.jsonl");
+  await writeConfig(configPath, "run-error-envelope");
+  await writeFile(
+    adapterPath,
+    String.raw`
+import { createInterface } from "node:readline";
+
+const input = createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+  terminal: false,
+});
+
+input.on("line", (line) => {
+  const request = JSON.parse(line);
+  process.stdout.write(JSON.stringify({
+    schema: "covenant.timeline.model-eval.adapter-error.v1",
+    requestId: request.requestId,
+    error: {
+      code: "adapter.credentials",
+      message: "adapter credentials are unavailable",
+      scope: "run",
+    },
+  }) + "\n");
+});
+`,
+  );
+
+  await assert.rejects(
+    runModelInterfaceEval({
+      adapter: [process.execPath, adapterPath],
+      arms: ["direct"],
+      caseIds: ["bounds.deploy-window"],
+      cases: casesPath,
+      config: configPath,
+      output: resultsPath,
+      overwrite: false,
+      repeats: 1,
+      timeoutMs: 5_000,
+    }),
+    /adapter credentials are unavailable/,
+  );
+  await assert.rejects(readFile(resultsPath, "utf8"), { code: "ENOENT" });
+});
+
+test("runner aborts on adapter start failures", async (t) => {
   const temporaryDirectory = await mkdtemp(
     join(tmpdir(), "covenant-timeline-model-eval-start-"),
   );
@@ -530,21 +844,153 @@ test("runner classifies adapter start failures", async (t) => {
   const resultsPath = join(temporaryDirectory, "results.jsonl");
   await writeConfig(configPath, "missing-adapter");
 
-  await runModelInterfaceEval({
-    adapter: [join(temporaryDirectory, "does-not-exist")],
-    arms: ["direct"],
-    caseIds: ["bounds.deploy-window"],
-    cases: casesPath,
-    config: configPath,
-    output: resultsPath,
-    overwrite: false,
-    repeats: 1,
-    timeoutMs: 1_000,
-  });
-  const results = await readJsonLines(resultsPath);
-  assert.deepEqual(
-    results.map((result) => result.error?.code),
-    Array(3).fill("adapter.start"),
+  await assert.rejects(
+    runModelInterfaceEval({
+      adapter: [join(temporaryDirectory, "does-not-exist")],
+      arms: ["direct"],
+      caseIds: ["bounds.deploy-window"],
+      cases: casesPath,
+      config: configPath,
+      output: resultsPath,
+      overwrite: false,
+      repeats: 1,
+      timeoutMs: 1_000,
+    }),
+    /adapter process could not start/,
+  );
+  await assert.rejects(readFile(resultsPath, "utf8"), { code: "ENOENT" });
+});
+
+test("runner rejects completed output when runtime files change", async (t) => {
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-model-eval-runtime-change-"),
+  );
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const adapterPath = join(temporaryDirectory, "changing-adapter.mjs");
+  const configPath = join(temporaryDirectory, "run-config.json");
+  const resultsPath = join(temporaryDirectory, "results.jsonl");
+  await writeConfig(configPath, "changing-adapter");
+  await writeFile(
+    adapterPath,
+    String.raw`
+import { appendFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
+
+const input = createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+  terminal: false,
+});
+
+input.on("line", (line) => {
+  const request = JSON.parse(line);
+  appendFileSync(fileURLToPath(import.meta.url), "\n// changed");
+  process.stdout.write(JSON.stringify({
+    schema: "covenant.timeline.model-eval.adapter-error.v1",
+    requestId: request.requestId,
+    error: {
+      code: "provider.http-429",
+      message: "provider returned a rate limit response",
+      scope: "observation",
+    },
+  }) + "\n");
+});
+`,
+  );
+
+  await assert.rejects(
+    runModelInterfaceEval({
+      adapter: [process.execPath, adapterPath],
+      arms: ["direct"],
+      caseIds: ["bounds.deploy-window"],
+      cases: casesPath,
+      config: configPath,
+      output: resultsPath,
+      overwrite: false,
+      repeats: 1,
+      timeoutMs: 5_000,
+    }),
+    /benchmark runtime files changed during the run/,
+  );
+  await assert.rejects(readFile(resultsPath, "utf8"), { code: "ENOENT" });
+
+  const partials = (await readdir(temporaryDirectory)).filter((name) =>
+    name.endsWith(".partial"),
+  );
+  assert.deepEqual(partials, []);
+});
+
+test("runner retains validated output when atomic publication fails", async (t) => {
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-model-eval-publish-failure-"),
+  );
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const adapterPath = join(temporaryDirectory, "occupying-adapter.mjs");
+  const configPath = join(temporaryDirectory, "run-config.json");
+  const resultsPath = join(temporaryDirectory, "results.jsonl");
+  await writeConfig(configPath, "occupying-adapter");
+  await writeFile(
+    adapterPath,
+    String.raw`
+import { writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+
+const input = createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+  terminal: false,
+});
+
+input.on("line", (line) => {
+  const request = JSON.parse(line);
+  try {
+    writeFileSync(new URL("./results.jsonl", import.meta.url), "occupied", {
+      flag: "wx",
+    });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  process.stdout.write(JSON.stringify({
+    schema: "covenant.timeline.model-eval.adapter-error.v1",
+    requestId: request.requestId,
+    error: {
+      code: "provider.http-429",
+      message: "provider returned a rate limit response",
+      scope: "observation",
+    },
+  }) + "\n");
+});
+`,
+  );
+
+  await assert.rejects(
+    runModelInterfaceEval({
+      adapter: [process.execPath, adapterPath],
+      arms: ["direct"],
+      caseIds: ["bounds.deploy-window"],
+      cases: casesPath,
+      config: configPath,
+      output: resultsPath,
+      overwrite: false,
+      repeats: 1,
+      timeoutMs: 5_000,
+    }),
+    /validated artifact retained at /,
+  );
+  assert.equal(await readFile(resultsPath, "utf8"), "occupied");
+
+  const partials = (await readdir(temporaryDirectory)).filter((name) =>
+    name.endsWith(".partial"),
+  );
+  assert.equal(partials.length, 1);
+  assert.equal(
+    (await readFile(join(temporaryDirectory, partials[0]), "utf8"))
+      .trim()
+      .split("\n").length,
+    3,
   );
 });
 
@@ -615,7 +1061,7 @@ async function writeConfig(path, fixture) {
     `${JSON.stringify({
       schema: "covenant.timeline.model-eval.config.v1",
       id: `test-${fixture}-run`,
-      benchmarkRevision: "test-revision",
+      benchmarkRevision: sourceRevision,
       adapter: { id: fixture, version: "1" },
       model: { provider: "test", id: fixture, revision: "1" },
       generation: {

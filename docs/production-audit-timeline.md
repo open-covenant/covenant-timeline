@@ -234,9 +234,11 @@ graph exhaustion, and temporal-data privacy.
 - [ ] **Validate the model boundary.** The versioned harness, corpus, and scorer
       now compare Timeline-assisted reasoning with a narrative-memory baseline
       while preserving invalid output and unsupported definite answers as
-      failures. No external model evaluation has been run, so there is still no
-      controlled evidence that models reliably emit admissible typed assertions
-      and queries or that Timeline improves end-to-end temporal accuracy.
+      failures. A stateless OpenAI Responses reference adapter now provides a
+      directly executable invocation path and preserves provider failures. No
+      external model evaluation has been run, so there is still no controlled
+      evidence that models reliably emit admissible typed assertions and
+      queries or that Timeline improves end-to-end temporal accuracy.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.

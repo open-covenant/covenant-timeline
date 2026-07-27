@@ -265,7 +265,7 @@ Each request has this envelope:
   "config": {
     "schema": "covenant.timeline.model-eval.config.v1",
     "id": "example-model-deterministic",
-    "benchmarkRevision": "source-commit-or-release",
+    "benchmarkRevision": "full-git-source-commit",
     "adapter": {
       "id": "example-adapter",
       "version": "adapter-source-revision"
@@ -334,6 +334,11 @@ must preserve them without paraphrasing, dropping fields, or adding
 case-specific guidance. The mapping must remain fixed across the run and be
 disclosed with a published adapter.
 
+The checked-in OpenAI Responses adapter sends `prompt` unchanged as
+`instructions` and sends one user message containing the canonical JSON bytes
+of `{ "requestId": requestId, "input": input }`. This fixes the path by which
+the model receives the correlation value it must return.
+
 The response envelope contains `schema`, `requestId`, the arm-specific fields
 shown above, and optional usage:
 
@@ -354,6 +359,29 @@ artifacts cannot overflow aggregate scores. Token counts and cost are
 provider-reported observations, not normalized measurements. The runner records
 wall-clock latency independently.
 
+An adapter that reached the provider but could not produce a model response may
+return a protocol-level failure:
+
+```json
+{
+  "schema": "covenant.timeline.model-eval.adapter-error.v1",
+  "requestId": "request-0087",
+  "error": {
+    "code": "provider.http-429",
+    "message": "OpenAI Responses API returned HTTP 429",
+    "scope": "observation"
+  }
+}
+```
+
+`usage` may be included when the provider reported it. Error codes use bounded
+lowercase identifiers and messages are limited to 480 characters.
+Observation-scoped errors are stored and counted at the adapter stage.
+Run-scoped configuration, credential, authorization, and model-selection
+failures abort the run before a result line is recorded. The dedicated
+`adapter-error.v1` discriminator leaves the successful `response.v1` envelope
+unchanged.
+
 Input and output use strict JSON: one object per line, no duplicate keys,
 comments, trailing data, non-finite numbers, or Markdown fences. The runner
 does not retry, extract JSON from prose, synthesize missing fields, renumber
@@ -365,34 +393,22 @@ verification failure remain visible in the result artifact.
 `requestId` is an opaque correlation value. Adapters must echo it exactly and
 must not infer benchmark behavior from its contents.
 
-## Running an adapter
+## Running the OpenAI reference adapter
 
-Create a run configuration as described in
-[Model evaluation](../../../docs/model-evaluation.md), then run:
+The canonical
+[clean-clone quickstart](../../../docs/model-evaluation.md#run-and-score)
+includes POSIX and Windows PowerShell commands. It generates a configuration
+bound to the checked-out source, begins with a three-request smoke, scores that
+artifact immediately, and places the 324-request complete run behind an
+explicit cost and rate-limit check.
 
-```sh
-node scripts/run-model-interface-eval.mjs \
-  --config run-config.json \
-  --output results.jsonl \
-  --repeats 3 \
-  --timeout-ms 120000 \
-  -- ./adapter
-```
-
-Useful filters:
-
-```sh
-node scripts/run-model-interface-eval.mjs \
-  --config run-config.json \
-  --output timeline-results.jsonl \
-  --case correction.shipment-arrival \
-  --arm timeline \
-  -- ./adapter
-```
-
-The command after `--` is executed directly, without a shell. Keep credentials
-inside the adapter environment and exclude them from configuration, results,
-and diagnostics.
+The reference adapter reads only `OPENAI_API_KEY`, calls the default OpenAI
+Responses endpoint once, rejects redirects, sets `store: false`, uses no tools
+or provider conversation, and performs no retry. Its Structured Outputs schemas
+cover all public v1 gold response shapes, but the runner remains authoritative
+for semantic answers, events, queries, evidence visibility, state budgets, and
+proofs. Keep credentials inside the adapter environment and exclude them from
+configuration, results, and diagnostics.
 
 With a fixed seed, repeated observations are stability checks for provider or
 runtime nondeterminism. They are not independent statistical samples and must
@@ -400,9 +416,10 @@ not be reported as such.
 
 ## Failure accounting
 
-Every requested case, arm, repeat, and cut produces one
-`covenant.timeline.model-eval.result.v1` line. A failure is never omitted from
-the denominator. Aggregate scorer output conforms to
+Every completed or observation-scoped case, arm, repeat, and cut produces one
+`covenant.timeline.model-eval.result.v1` line. Observation failures are never
+omitted from the denominator. Run-scoped setup failures abort before publishing
+the output target. Aggregate scorer output conforms to
 [`score.schema.json`](./score.schema.json).
 
 The result distinguishes:
@@ -471,10 +488,15 @@ Missing, timed-out, malformed, and rejected responses remain in applicable
 denominators. Representation-exact assertion F1 is the harmonic mean of its
 precision and recall. Latency reports count, mean, nearest-rank p50, and
 nearest-rank p95; token and cost fields report observed count, total, and mean.
+The runner rotates the configured arm order by case and repeat so a fixed
+slowdown or rate-limit boundary does not always penalize the same arm.
 
 Results must be reported by case family as well as in aggregate. Parse and
 admission failures must remain visible. A smoke run or a result selected from
-multiple attempts does not support a performance claim.
+multiple attempts does not support a performance claim. A run with operational
+provider errors is useful for adapter and capacity diagnosis, but it is not
+model-performance evidence; preserve it and rerun the complete preregistered
+selection after the operational condition is fixed.
 
 ## Reproducibility record
 
@@ -499,9 +521,17 @@ not a permanent model ranking.
 
 A publishable run must record `sourceDirty: false`. Commit the runner, scorer,
 corpus, prompts, and adapter before evaluation; a dirty source revision is
-suitable only for local development. The runner caps each request at 256 KiB
-and the complete JSONL artifact at 128 MiB so the scorer can consume every
-artifact it produces.
+suitable only for local development. The runner requires the output to be
+outside the checkout, stages it beside the target, and publishes it only after
+the full run and final integrity checks for repository source, built Timeline
+kernel, benchmark scripts, and directly named adapter files succeed. External
+adapters must pin and disclose any dependency closure outside those files.
+Incomplete runs handled by the runner and integrity failures leave no output
+target or partial artifact; forced process termination can leave the hidden
+staging file for forensic cleanup. If atomic publication alone fails after
+validation, the completed artifact is retained under its reported `.partial`
+path. The runner caps each request at 256 KiB and the complete JSONL artifact at
+128 MiB so the scorer can consume every artifact it produces.
 
 For every observation, the result retains canonical `requestText` with its
 digest and the exact UTF-8 `responseText` line with its digest. The scorer
@@ -509,7 +539,10 @@ reconstructs and verifies the opaque case ID, prompt, corpus inputs, budgets,
 and rolling continuity from prior results before checking the request bytes. It
 then validates the stored response envelope and checks that the answer, memory,
 usage, events, and query reproduce the structured result fields. This detects
-artifact drift; it is not a provider-side attestation.
+artifact drift; it is not a provider-side attestation. `responseText` is the
+adapter protocol envelope. A provider adapter may parse and canonically encode
+model JSON and append mechanically mapped usage, so it is not the provider's
+raw HTTP response.
 
 ## Interpretation
 

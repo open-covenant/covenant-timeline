@@ -1,0 +1,9 @@
+{
+  "schema": "example.release-evidence.v1",
+  "id": "evidence.deploy",
+  "source": "demo-release-tracker",
+  "claim": {
+    "pointId": "deployed",
+    "coordinateSeconds": 200
+  }
+}

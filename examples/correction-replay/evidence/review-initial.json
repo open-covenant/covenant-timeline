@@ -1,0 +1,9 @@
+{
+  "schema": "example.release-evidence.v1",
+  "id": "evidence.review.initial",
+  "source": "demo-release-tracker",
+  "claim": {
+    "pointId": "review-finished",
+    "coordinateSeconds": 100
+  }
+}

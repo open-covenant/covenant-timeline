@@ -1,0 +1,47 @@
+{
+  "schema": "covenant.timeline.conclusion.v0alpha3",
+  "queryId": "query.review-minus-deploy",
+  "result": {
+    "type": "difference.bounds",
+    "status": "bounded",
+    "minimum": -100,
+    "maximum": -100
+  },
+  "receipt": {
+    "reasoner": "covenant.timeline.stn.v0alpha1",
+    "stateDigest": "sha256:77dadc1042b3c033be66a0005e38b849548f262f91fa23401640b42000509a02",
+    "queryDigest": "sha256:3ad8ced4a2ed976ce8ac9ba18ada60bb839ee3f9ca38a829b0f60b76ea1f54ad",
+    "semanticResultDigest": "sha256:af6701cc1179e25b2b757bb74324ac5cc60b1b6204cec3083ef8a970fa2e34b5",
+    "proof": {
+      "kind": "bounds",
+      "lowerEdges": [
+        {
+          "sourceId": "review.v1",
+          "fromNodeId": "review-finished",
+          "toNodeId": "@origin:utc-seconds",
+          "maximum": -100
+        },
+        {
+          "sourceId": "deploy.v1",
+          "fromNodeId": "@origin:utc-seconds",
+          "toNodeId": "deployed",
+          "maximum": 200
+        }
+      ],
+      "upperEdges": [
+        {
+          "sourceId": "deploy.v1",
+          "fromNodeId": "deployed",
+          "toNodeId": "@origin:utc-seconds",
+          "maximum": -200
+        },
+        {
+          "sourceId": "review.v1",
+          "fromNodeId": "@origin:utc-seconds",
+          "toNodeId": "review-finished",
+          "maximum": 100
+        }
+      ]
+    }
+  }
+}

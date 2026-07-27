@@ -1,114 +1,145 @@
 # Roadmap
 
-Covenant Timeline advances when public evidence resolves a product risk. The
-current risks are the model interface, operational value, and protocol
-portability.
+Timeline succeeds when independent teams use it to give long-running agents
+verifiable temporal state. Work is ranked by the adoption risks that could
+invalidate the product: model extraction, integration cost, operational value,
+and protocol portability.
 
-Release history and completed milestones belong in the
-[changelog](./CHANGELOG.md). This document covers the shipped foundation and
-the next evidence gates.
+Release history belongs in the [changelog](./CHANGELOG.md). This document
+defines the evidence required to keep expanding the standalone project.
 
-## Shipped foundation
+## Available foundation
 
-- **v0alpha1** is the frozen checkpoint contract for deterministic requirement
-  coverage, event replay, commands, and receipts.
-- **v0alpha2** adds contract-bound evaluator identity while preserving
-  v0alpha1 history.
-- **v0alpha3** is the experimental temporal contract defined by
-  [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md). The npm alpha
-  includes explicit axes and contexts, points and intervals, bounded
-  constraints, historical knowledge cuts, typed queries, a deterministic
-  temporal kernel, and independently checkable proof receipts.
+The `0.0.0-alpha.2` npm package includes:
 
-The reference implementation, schemas, conformance cases, CLI, model-facing
-interface, and compatibility suites are available now. They establish a
-working substrate, not adoption or model-quality evidence.
+- explicit metric and ordinal axes;
+- isolated actual, planned, forecast, and hypothetical contexts;
+- points, proper intervals, coordinates, bounded constraints, and temporal
+  facts;
+- correction, supersession, retraction, and historical knowledge cuts;
+- consistency, difference-bounds, point-order, and interval-relation queries;
+- deterministic conclusions with independently checkable proof receipts; and
+- the v0alpha1 and v0alpha2 checkpoint formats as compatibility APIs.
 
-## Current gates
+The schemas, conformance corpus, CLI, reference kernel, correction-and-replay
+example, model interface, and development benchmark are public. They establish
+a working substrate, not adoption or model-quality evidence.
 
-### 1. Model-interface benchmark
+## Evidence gates
+
+### 1. Model reliability
 
 The checked-in
 [model-interface benchmark v1](./benchmarks/model-interface/v1/README.md) is a
-public development and smoke suite. Its 12 visible cases exercise the adapter,
-failure accounting, temporal extraction, rolling state, and scorer across
-direct text, narrative memory, and Timeline. No external model evaluation has
-been run, and no model result has been published.
+12-case development and smoke suite. It exercises direct text, narrative
+memory, and Timeline-backed state with a strict JSONL adapter protocol. The
+repository also includes a stateless OpenAI Responses adapter.
 
-The repository includes a stateless OpenAI Responses reference adapter with
-arm-specific Structured Outputs and explicit provider-failure artifacts. This
-provides a checked-in invocation path. Live provider validation and model
-efficacy evidence remain pending.
+No external model result has been published. The visible corpus is too small
+and too exposed to support a performance claim.
 
-An external v1 run is useful for validating the harness and exposing immediate
-interface failures. It cannot establish a general performance gain because the
-corpus, prompts, and expected structures are public and small.
+The model gate requires a preregistered blinded suite that:
 
-The model gate closes only through a preregistered blinded scale suite that:
-
-- uses opaque case and entity identifiers that do not reveal the tested
-  relation or expected answer;
-- includes distractor evidence and no-op cuts so the model must decide when
-  state should remain unchanged;
-- evaluates controlled paraphrase families without exposing held-out wording
-  during adapter development;
+- uses opaque case and entity identifiers;
+- includes distractors and no-op cuts;
+- evaluates controlled paraphrase families;
 - spans rolling histories from 20 to 200 cuts;
-- fixes context and memory budgets before corpus generation, independently of
-  the gold Timeline serialization;
-- reserves generation seeds and case variants that are unavailable during
-  prompt and adapter development;
-- keeps the model, decoding configuration, retry policy, and structured-output
-  constraints identical across paired arms;
+- fixes context and memory budgets before corpus generation;
+- reserves generation seeds and variants unavailable during adapter
+  development;
+- keeps model, decoding, retry, and structured-output settings identical
+  across paired arms;
 - counts malformed output, admission failures, and unsupported definite
   answers as failures; and
-- reports uncertainty with case-clustered statistical inference so repeated
-  cuts from one case are not treated as independent observations.
+- reports case-clustered uncertainty rather than treating every cut as an
+  independent observation.
 
-The preregistration must name the primary outcome, exclusions, stopping rule,
+The preregistration must fix the primary outcome, exclusions, stopping rule,
 sample size, model configuration, and analysis before results are observed.
 Published results must separate extraction, query, admission, kernel, proof,
-and final-answer errors and include enough blinded-suite metadata for an
-independent reviewer to audit the analysis.
+and final-answer errors.
 
-### 2. External temporal pilot
+### 2. Low-friction agent integration
 
-One operator outside the Timeline project must run the experimental temporal
-contract in a real long-running-agent workflow. The run must cross a restart
-and include delayed evidence, a correction, and a decision where temporal
-state changes the outcome or reduces reconciliation work.
+The next integration surface is a separate local stdio package,
+`@covenant-org/timeline-mcp`. It will keep the portable kernel package
+dependency-light while giving MCP-capable agents durable temporal state through
+five explicit tools:
+
+1. create a run from an exact v0alpha3 contract;
+2. list bounded run metadata after a new session;
+3. append one structurally validated event under optimistic concurrency;
+4. project active state at an explicit knowledge cut; and
+5. reason over an exact query and return a verified conclusion.
+
+The first alpha will require a data directory, retain only evidence digests,
+make no network calls, and classify direct model writes as structurally valid
+but unauthenticated. It will not provide semantic memory search, civil-time
+normalization, remote hosting, or evidence authority.
+
+This gate closes when a clean installed-package test can create a run, append a
+correction, stop the server, restart it, project both historical and current
+state, and obtain verified receipts over stdio on Node.js 22 and 24.
+
+### 3. Independent temporal pilot
+
+One operator outside the project must run Timeline in a real long-running-agent
+workflow. The run must cross a restart, include delayed or corrected evidence,
+and contain a decision where explicit temporal state changes the result or
+reduces reconciliation work.
 
 The [pilot contract](./docs/temporal-pilot.md) requires a redacted export that
-another process can replay and verify. A negative result is acceptable if it
-identifies a wrong abstraction or shows that Timeline adds no operational
+another process can replay and verify. A negative result is useful if it
+identifies the wrong abstraction or shows that Timeline adds no operational
 value.
 
-### 3. Independent implementation
+### 4. Protocol portability
 
 The project is seeking a second implementer of
 [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md). The
 [interoperability issue](https://github.com/open-covenant/covenant-timeline/issues/19)
-defines the smallest useful scope.
+defines a bounded starting point.
 
-This gate requires an independently maintained implementation that agrees with
+The gate requires an independently maintained implementation that agrees with
 the reference implementation on semantic results for the shared corpus and
-verifies its supported proof receipts. It is the evidence that Timeline is a
-portable contract rather than a TypeScript-specific format.
+verifies its supported receipts. This is evidence that Timeline is a portable
+contract rather than a TypeScript-specific format.
 
-## Conditional follow-on work
+## Adoption review
 
-Work after these gates follows observed failures:
+The 90-day adoption window begins after a public release includes all of the
+following:
+
+- the installable temporal API;
+- the correction-and-replay demo;
+- the local MCP integration; and
+- one published blinded model evaluation.
+
+Standalone product expansion continues only if that window produces:
+
+- one independent operator who completes the pilot or publishes an equivalent
+  replayable integration; and
+- qualified adoption signals from at least three independent teams, such as
+  an integration, reproducible implementation feedback, or a conformance
+  attempt.
+
+Repository stars alone do not satisfy either criterion. If the threshold is
+not met, the maintainers will publish the evidence and reassess standalone
+expansion. The portable contract and verifier remain available under
+Apache-2.0 regardless of that decision.
+
+## Work justified by evidence
+
+Follow-on work is driven by observed failures:
 
 - extraction and query errors determine model-interface and repair work;
-- pilot friction determines operational features and any calendar or
-  civil-time requirements;
-- interoperability failures determine specification, proof-profile, and
-  conformance changes; and
-- real upgrade experience determines migration and compatibility tooling.
+- integration friction determines MCP ergonomics and storage limits;
+- pilot evidence determines calendar, civil-time, and operational features;
+- interoperability failures determine specification and conformance changes;
+  and
+- real upgrade experience determines migration tooling.
 
-Beta requires all three gates, completion of the RFC process for the supported
-temporal subset, and security and privacy review of the model, parsing,
-resource, provenance, projection, and proof boundaries.
-
-Model-integrated training, new temporal formalisms, calendar profiles, and
-high-stakes domain profiles remain research or adopter-led work until evidence
-from these gates justifies them.
+No new protocol surface or governance layer is added until one of these gates
+requires it. Beta requires a successful model evaluation, an external pilot, a
+second conforming implementation, and security and privacy review of the
+supported model, parsing, provenance, projection, and proof boundaries.

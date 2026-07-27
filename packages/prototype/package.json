@@ -1,7 +1,7 @@
 {
   "name": "@covenant-org/timeline",
   "version": "0.0.0-alpha.2",
-  "description": "Proof-carrying temporal reasoning for long-running AI systems.",
+  "description": "Verifiable temporal state for long-running agents.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

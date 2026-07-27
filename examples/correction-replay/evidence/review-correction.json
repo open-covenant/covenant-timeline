@@ -1,0 +1,10 @@
+{
+  "schema": "example.release-evidence.v1",
+  "id": "evidence.review.correction",
+  "source": "demo-release-tracker",
+  "corrects": "evidence.review.initial",
+  "claim": {
+    "pointId": "review-finished",
+    "coordinateSeconds": 300
+  }
+}

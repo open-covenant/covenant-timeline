@@ -3,120 +3,137 @@
 [![CI](https://github.com/open-covenant/covenant-timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/open-covenant/covenant-timeline/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/open-covenant/covenant-timeline)](./LICENSE)
 
-Portable, proof-carrying temporal reasoning for AI systems.
+**Verifiable temporal state for long-running agents.**
 
-An agent schedules a release after a security review. Days later, new evidence
-shows that the review finished after deployment. Timeline reconstructs what the
-agent could conclude at each point, incorporates the correction without
-rewriting history, and returns a machine-checkable derivation of what follows
-from the records before and after the correction.
-
-Covenant Timeline is a portable temporal reasoning substrate for model-backed
-applications. Its deterministic kernel reasons over typed temporal records,
-keeps plans and observations in separate contexts, detects contradictions, and
-produces conclusions that can be replayed across processes and runtimes.
-
-[Install and run](#install-and-run) ·
-[Integrate a model](./docs/model-interface.md) ·
-[Run the model benchmark](./docs/model-evaluation.md) ·
-[Build a second implementation](https://github.com/open-covenant/covenant-timeline/issues/19) ·
-[See release status](#release-status)
-
-## Core capabilities
-
-- **Represent** metric and ordinal time, points and intervals, bounded
-  constraints, and isolated actual, planned, forecast, and hypothetical
-  contexts.
-- **Reason** about consistency, tight bounds, point order, and interval
-  relations without inventing precision that the available evidence does not
-  support.
-- **Revise** assertions through correction, supersession, and retraction while
-  reconstructing the active assertions at any earlier point in the run.
-- **Verify** canonical inputs and conclusions using machine-checkable schedules,
-  bound paths, relation cases, or negative cycles.
-
-Every conclusion is bound to the exact projected state, query, semantic result,
-and reasoner profile that produced it.
-
-## How model output becomes checked state
-
-Timeline separates probabilistic interpretation from deterministic inference:
-
-```text
-evidence or narrative
-        │
-        ▼
-model or application proposes temporal records + query
-        │
-        ▼
-host authenticates evidence and admits records
-        │
-        ▼
-deterministic temporal kernel
-        │
-        ▼
-proof | alternatives | contradiction
-        │
-        ▼
-model or application continues from checked state
-```
-
-Models extract dates, intervals, dependencies, and corrections from source
-material. Their assertions remain proposals until the host validates shape,
-provenance, and authority. Timeline then computes what follows from the accepted
-records, and a verifier checks the proof against the same run and query.
-
-The [model interface](./docs/model-interface.md) defines this admission path.
-The [model-interface benchmark](./benchmarks/model-interface/v1/README.md)
-measures extraction, admission, and proof verification separately while
-comparing direct text, narrative memory, and Timeline state.
-
-## Temporal model
-
-| Primitive          | Purpose                                                                  |
-| ------------------ | ------------------------------------------------------------------------ |
-| Axis               | Defines discrete metric or ordinal time with an explicit origin and unit |
-| Context            | Isolates actual, planned, forecast, and hypothetical worlds              |
-| Point and interval | Represents occurrences, boundaries, and periods                          |
-| Assertion          | Adds evidence-bound coordinates, constraints, or temporal facts          |
-| Knowledge cut      | Reconstructs the state visible through a specific record sequence        |
-| Query              | Requests consistency, bounds, point order, or interval relations         |
-| Conclusion         | Returns a content-bound result and a proof receipt                       |
-
-Assertions are append-only records. A correction does not erase history:
-retraction and persistent supersession determine which assertions are active at
-each knowledge cut. Facts can distinguish when something was valid, when it was
-observed, and when it was asserted.
-
-Temporal coordinates live on explicit axes. Record sequence establishes
-knowledge order, while points, intervals, and constraints describe occurrence
-and validity. This makes late observations and corrections reproducible without
-changing earlier answers.
-
-The reference kernel uses exact integer arithmetic and a resource-bounded
-Simple Temporal Network solver. It supports tight difference bounds, three
-point relations, and all 13 Allen interval relations.
-
-## Install and run
-
-Package requirement:
-
-- Node.js 22 or 24
-
-Install the alpha preview:
+A release agent records that security review finished before deployment. New
+evidence later reverses that order. Timeline preserves both historical views,
+recomputes what follows from the corrected record, and returns a proof receipt
+that another process can check.
 
 ```sh
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
-npx timeline --version
 ```
 
-The current preview is
-[`@covenant-org/timeline@0.0.0-alpha.2`](https://www.npmjs.com/package/@covenant-org/timeline/v/0.0.0-alpha.2).
-The corresponding
-[GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/timeline-v0.0.0-alpha.2)
-includes the release tarball, checksum, and SPDX SBOM.
+[Run the correction demo](#see-a-correction-survive-replay) ·
+[Use the library](#use-the-temporal-api) ·
+[Integrate a model](./docs/model-interface.md) ·
+[Evaluate the model boundary](./docs/model-evaluation.md)
 
-The v0alpha3 library separates parsing, reasoning, and verification:
+## See a correction survive replay
+
+The checked-in example uses one elapsed-time axis and three admitted
+assertions:
+
+```text
+review.v1 = 100
+deploy.v1 = 200
+review.v2 = 300
+retract review.v1
+```
+
+The same question—`review-finished - deployed`—is evaluated at three selected
+knowledge cuts:
+
+| Records visible through | Result         | Meaning                                   | Proof sources            |
+| ----------------------- | -------------- | ----------------------------------------- | ------------------------ |
+| Event 3                 | `[-100, -100]` | Review finished 100 seconds before deploy | `review.v1`, `deploy.v1` |
+| Event 4                 | `inconsistent` | Initial and corrected records conflict    | `review.v1`, `review.v2` |
+| Event 5                 | `[100, 100]`   | Review finished 100 seconds after deploy  | `review.v2`, `deploy.v1` |
+
+The transition failure is explicit. Event 5 retracts the superseded assertion
+and restores a bounded answer.
+
+This is the exact corrected conclusion committed in
+[`conclusions/after.json`](./examples/correction-replay/conclusions/after.json):
+
+<!-- correction-conclusion:start -->
+
+```json
+{
+  "schema": "covenant.timeline.conclusion.v0alpha3",
+  "queryId": "query.review-minus-deploy",
+  "result": {
+    "type": "difference.bounds",
+    "status": "bounded",
+    "minimum": 100,
+    "maximum": 100
+  },
+  "receipt": {
+    "reasoner": "covenant.timeline.stn.v0alpha1",
+    "stateDigest": "sha256:5bef7e47e6d7a7b78900ade5c272732afe1a0a2fa453080d90cdeb0fb788c279",
+    "queryDigest": "sha256:210a43a6c1088484beffe5ed2b9fdd40b428cd45a285f7d0060795bc49b1e7e7",
+    "semanticResultDigest": "sha256:d4392f613ebd9c015f0707453bebf85b17e86787ed6433c23342701087284176",
+    "proof": {
+      "kind": "bounds",
+      "lowerEdges": [
+        {
+          "sourceId": "review.v2",
+          "fromNodeId": "review-finished",
+          "toNodeId": "@origin:utc-seconds",
+          "maximum": -300
+        },
+        {
+          "sourceId": "deploy.v1",
+          "fromNodeId": "@origin:utc-seconds",
+          "toNodeId": "deployed",
+          "maximum": 200
+        }
+      ],
+      "upperEdges": [
+        {
+          "sourceId": "deploy.v1",
+          "fromNodeId": "deployed",
+          "toNodeId": "@origin:utc-seconds",
+          "maximum": -200
+        },
+        {
+          "sourceId": "review.v2",
+          "fromNodeId": "@origin:utc-seconds",
+          "toNodeId": "review-finished",
+          "maximum": 300
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- correction-conclusion:end -->
+
+The earlier conclusion remains replayable from the same run at event 3. Both
+receipts pass verification against their projected state and query. From a
+source checkout:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm temporal:correction-demo
+```
+
+Explore the
+[`run`](./examples/correction-replay/run.json),
+[`evidence`](./examples/correction-replay/evidence),
+[`queries`](./examples/correction-replay/queries), and
+[`conclusions`](./examples/correction-replay/conclusions).
+
+## What Timeline gives an agent
+
+- **Temporal state across sessions.** Plans, observations, forecasts, and
+  hypothetical alternatives use explicit axes and isolated contexts.
+- **Corrections without rewritten history.** Retractions and supersession
+  change current state while earlier knowledge cuts remain replayable.
+- **Honest uncertainty.** Bounded answers stay bounded; the kernel reports
+  alternatives and contradictions instead of inventing precision.
+- **Portable verification.** Conclusions bind the projected state, query,
+  semantic result, reasoner profile, and proof material by content digest.
+
+Timeline is designed first for agent runs that cross sessions and must absorb
+late or corrected evidence without losing the state that informed earlier
+decisions.
+
+## Use the temporal API
+
+Timeline requires Node.js 22 or 24. The `0.0.0-alpha.2` package contains the
+temporal API shown here:
 
 ```ts
 import {
@@ -135,166 +152,175 @@ if (!verifyTemporalConclusionV0Alpha3(run, query, conclusion)) {
 }
 ```
 
-`runInput` and `queryInput` are decoded v0alpha3 JSON documents. A conclusion
-contains canonical state and query digests, the semantic result, and the proof
-material required for verification. The
-[model interface](./docs/model-interface.md) defines the admission boundary for
-model-generated assertions.
+`runInput` and `queryInput` are decoded v0alpha3 JSON documents. The library
+separates parsing, reasoning, and verification so a verifier does not need to
+trust the process that produced the conclusion.
 
-To run the repository example and conformance query, install pnpm 10 and use:
+The CLI exposes the same reasoner:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm temporal:demo
-pnpm timeline reason \
-  conformance/v0alpha3/runs/software-release.json \
-  conformance/v0alpha3/queries/difference-bounds.json \
-  --json
+npx timeline reason temporal-run.json temporal-query.json --json
 ```
 
-## Built for long-running agents
+[`@covenant-org/timeline@0.0.0-alpha.2`](https://www.npmjs.com/package/@covenant-org/timeline/v/0.0.0-alpha.2)
+is the recommended entry point. The package also retains the v0alpha1 and
+v0alpha2 checkpoint APIs for compatibility; they are not separate onboarding
+paths.
 
-Timeline is built first for agent work that spans sessions, workers, and
-late-arriving evidence:
+## How it works
 
-- preserve plans, forecasts, and observed execution across process restarts;
-- verify the order and timing of review, build, deployment, and recovery work;
-- replay what the agent could conclude before and after a correction; and
-- carry checked temporal state into the next model call without relying on
-  narrative memory alone.
+```text
+source evidence
+      │
+      ▼
+model or application proposes typed records
+      │
+      ▼
+host authenticates evidence and admits records
+      │
+      ▼
+Timeline projects state at the requested knowledge cut
+      │
+      ▼
+deterministic reasoner returns result + proof receipt
+      │
+      ▼
+another process verifies the conclusion
+```
 
-The same contract can support other domains, but current implementation and
-adoption work are focused on long-running agents and software delivery.
+The model-facing boundary is deliberate. A model can extract dates,
+dependencies, corrections, and queries, but its output remains a proposal.
+The host decides which evidence and assertions are admissible. Timeline reasons
+only over accepted records.
 
-## Adoption path
+The [model interface](./docs/model-interface.md) defines this loop. The
+[model-interface benchmark](./benchmarks/model-interface/v1/README.md) measures
+extraction, admission, query selection, and final answers separately across
+direct text, narrative memory, and Timeline-backed state.
 
-Start by testing the model boundary. The
-[model-interface benchmark](./docs/model-evaluation.md) provides 12 temporal
-scenarios, a vendor-neutral JSONL adapter protocol, strict failure accounting,
-paired scoring across three interfaces, and a stateless OpenAI Responses
-reference adapter. This public v1 suite is a development and smoke benchmark.
-No model result has been published, and the visible corpus does not establish a
-general performance gain. The
-[roadmap](./ROADMAP.md) defines the blinded scale evaluation required to close
-the model-interface gate.
+## Temporal model
 
-Begin with one bounded temporal question:
+| Primitive          | Purpose                                                                   |
+| ------------------ | ------------------------------------------------------------------------- |
+| Axis               | Declares discrete metric or ordinal time with an explicit origin and unit |
+| Context            | Separates actual, planned, forecast, and hypothetical worlds              |
+| Point and interval | Represents occurrences, boundaries, and proper intervals                  |
+| Assertion          | Adds evidence-bound coordinates, constraints, or temporal facts           |
+| Knowledge cut      | Projects the records visible through a selected event                     |
+| Query              | Requests consistency, bounds, point order, or interval relations          |
+| Conclusion         | Returns a content-bound result and proof receipt                          |
 
-1. Export the evidence required to answer the question.
-2. Have a model or application propose typed temporal assertions.
-3. Admit those records under an explicit host policy.
-4. Run a query and retain the conclusion with its proof receipt.
-5. Correct or retract one assertion and replay from a prior knowledge cut.
-6. Restart in a clean process and verify the exported result.
+The reference kernel uses exact integer arithmetic and a resource-bounded
+Simple Temporal Network solver. It supports consistency, tight difference
+bounds, before/equal/after point relations, and all 13 Allen interval base
+relations.
 
-A pilot succeeds when an external operator publishes a redacted run whose
-conclusions another process can reproduce and verify, together with one
-measured benefit, failure, or required contract change.
+## How Timeline fits
 
-Use the [temporal pilot](./docs/temporal-pilot.md) for the executable path and
-the [model interface](./docs/model-interface.md) for the integration contract.
+- **Event sourcing records change; Timeline checks temporal conclusions.**
+  Timeline can consume append-only records, but it is not an event store. It
+  adds typed temporal semantics, historical knowledge cuts, constraint
+  reasoning, and portable proof receipts. See
+  [Fowler's event-sourcing description](https://martinfowler.com/eaaDev/EventSourcing.html).
+- **Bitemporal databases manage temporal data; Timeline produces portable
+  derivations.** Systems such as XTDB index valid time and system time.
+  Timeline does not provide storage or a general database query engine; it can
+  reason over admitted records exported from one. See
+  [XTDB's time model](https://docs.xtdb.com/about/time-in-xtdb.html).
+- **The constraint mathematics is established.** The reference reasoner uses
+  the Simple Temporal Problem formalism introduced by Dechter, Meiri, and
+  Pearl. Timeline's contribution is the surrounding record, projection,
+  canonical identity, bounded execution, and proof contract—not a new temporal
+  algebra. See the
+  [original 1991 paper](<https://doi.org/10.1016/0004-3702(91)90006-6>).
+- **Temporal.io runs durable workflows; Timeline reasons over temporal
+  records.** A workflow may store Timeline records and invoke its kernel, but
+  Timeline does not schedule activities or resume them after failure. The
+  current
+  [Temporal.io adapter](./packages/temporal-adapter)
+  demonstrates restart-safe intake for the v0alpha2 checkpoint compatibility
+  API.
 
-### Build the second implementation
+## Trust and operational boundaries
 
-Timeline is seeking an independent implementation of Draft RFC 0009. The
-smallest useful contribution can begin with projection, consistency, and
-difference bounds in a separately maintained codebase, in any language. See
-[issue #19](https://github.com/open-covenant/covenant-timeline/issues/19) for
-the conformance target, acceptance evidence, and maintainer support.
+A verified receipt establishes that a result follows from the admitted records
+under the identified reasoner profile. It does not establish that the source
+evidence was authentic, that a model extracted it correctly, or that the host
+should have admitted it.
 
-## Assurance
+The kernel currently operates on declared integer axes. Applications using
+calendar dates or named time zones must normalize them before admission under
+an explicit calendar, time-zone database version, and gap/fold ambiguity
+policy, while retaining the original source and its digest. Timeline does not
+yet ship this normalization profile. See
+[RFC 9557](https://www.rfc-editor.org/rfc/rfc9557.html) and the
+[IANA Time Zone Database](https://www.iana.org/time-zones).
 
-- strict runtime validation and versioned JSON Schemas;
-- duplicate-key rejection and bounded processing of untrusted documents;
-- RFC 8785 canonical JSON and SHA-256 content identity;
-- exact-integer temporal reasoning with explicit resource budgets;
-- deterministic projection across historical knowledge cuts;
-- direct verification of schedules, paths, relation cases, and negative cycles;
-- positive, negative, malformed, correction, and substitution conformance
-  fixtures;
-- cross-platform CI on Ubuntu, macOS, and Windows.
+Timeline also does not provide evidence storage, workflow execution, admission
+authority, capability enforcement, or operational audit. Disjunctive temporal
+constraints, dynamic controllability, recurrence, and completeness-based
+absence queries remain outside the current alpha.
 
-Before deployment, review the
-[production audit](./docs/production-audit-timeline.md), the
+Before production use, review the
+[operations guide](./docs/operations.md),
 [threat model](./docs/threat-model.md), and
-the [operations guide](./docs/operations.md).
+[production audit](./docs/production-audit-timeline.md).
 
-## Release status
+## Proving the model boundary
 
-| Surface  | Capability                                               | Distribution      | Status            |
-| -------- | -------------------------------------------------------- | ----------------- | ----------------- |
-| v0alpha3 | Temporal state, queries, conclusions, and proof receipts | npm alpha and CLI | Draft             |
-| v0alpha2 | Contract-bound checkpoint policy identity                | npm alpha and CLI | Compatibility API |
-| v0alpha1 | Checkpoint contracts and deterministic replay            | npm alpha and CLI | Compatibility API |
+The repository includes a public 12-case development suite and a stateless
+OpenAI Responses reference adapter. No model result has been published, and the
+visible corpus does not establish that Timeline outperforms narrative memory.
 
-v0alpha3 is defined by
-[Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md). Its schemas and
-APIs may change while the RFC is Draft. No second conforming temporal
-implementation has yet been demonstrated.
+The next evidence gate is a preregistered blinded benchmark with longer rolling
+histories, controlled paraphrases, distractors, fixed budgets, strict failure
+accounting, and paired analysis. See
+[Model evaluation](./docs/model-evaluation.md) and the
+[roadmap](./ROADMAP.md).
 
-The alpha package includes all three surfaces. See
-[Getting started](./docs/getting-started.md) for package and CLI workflows.
-The npm release includes registry provenance, and the GitHub tarball is covered
-by build and SBOM attestations. The
-[machine-readable release record](./releases/timeline-v0.0.0-alpha.2.json)
-binds the source tag, protocol inputs, workflow, artifacts, SBOM, and
-attestations; the [release policy](./docs/policies/releases.md) defines offline
-and public-state verification. Cryptographic public-state verification requires
-GitHub CLI 2.88 or newer.
+The second gate is one independent long-running-agent pilot that crosses a
+restart, admits delayed or corrected evidence, and publishes a redacted run
+another process can reproduce. The
+[temporal pilot](./docs/temporal-pilot.md) defines the minimum evidence.
 
-## Current scope
-
-| Area                   | Current boundary                                                                                                                                                                                                                                           |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Time model             | Discrete metric and ordinal axes. v0alpha3 does not parse civil timestamps or named time zones; applications must map them to integers under a pinned policy. [No shared profile ships yet.](https://github.com/open-covenant/covenant-timeline/issues/20) |
-| Reasoning              | Simple Temporal Networks and Allen base relations; disjunctive constraints and dynamic controllability are future work                                                                                                                                     |
-| Evidence               | SHA-256 content binding in core; storage, authentication, authority, and admission policy belong to the deployment                                                                                                                                         |
-| Knowledge completeness | Reasons from explicit assertions; completeness-based absence queries are not yet supported                                                                                                                                                                 |
-| Model integration      | Tool and API integration; no training-time or model-architecture integration                                                                                                                                                                               |
-| Interoperability       | TypeScript reference implementation; no second conforming temporal implementation yet                                                                                                                                                                      |
-
-Workflow orchestration, persistence, scheduling, and domain authority remain
-separate services. High-stakes profiles require domain-owned evidence policy,
-privacy review, and evaluation.
+Timeline is also seeking a second implementer for the bounded RFC 0009
+conformance target in
+[issue #19](https://github.com/open-covenant/covenant-timeline/issues/19).
 
 ## Relationship to Covenant
 
-[Covenant](https://github.com/open-covenant/covenant) provides runtime control,
-scoped capabilities, continuity, audit, provenance, and settlement for
-long-running agents. Timeline provides portable temporal state and checked
-temporal conclusions.
+Timeline is an independent Apache-2.0 component. It provides the portable
+temporal contract, reference kernel, and verifier.
 
-```text
-model or runtime ── typed records + query ──► Timeline
-evidence authority ── admitted records ─────► Timeline
-Timeline ── conclusion + proof ─────────────► model or runtime
-Timeline ── verified temporal evidence ─────► Covenant policy and capabilities
-```
+[Covenant](https://github.com/open-covenant/covenant) is a runtime for teams
+that also need evidence authority, durable execution, scoped capabilities,
+continuity, provenance, and audit. Covenant can admit records into Timeline and
+use verified temporal conclusions in runtime policy; Timeline does not require
+Covenant.
 
-Each project can operate independently. The Timeline repository owns the
-portable contract, schemas, reference kernel, and verifier. Covenant owns its
-adapter and runtime policy.
+## Release and repository
 
-## Project map
+v0alpha3 is a Draft contract and may change between alpha releases. No second
+conforming implementation has yet been demonstrated.
 
-| Area              | Entry points                                                                                                                                                                                                                                                     |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model integration | [Model interface](./docs/model-interface.md), [model evaluation](./docs/model-evaluation.md), [benchmark protocol](./benchmarks/model-interface/v1/README.md)                                                                                                    |
-| Contract          | [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md), [`spec/v0alpha3`](./spec/v0alpha3), [`schemas/v0alpha3`](./schemas/v0alpha3), [`conformance/v0alpha3`](./conformance/v0alpha3)                                                                    |
-| Reference code    | [`packages/prototype`](./packages/prototype)                                                                                                                                                                                                                     |
-| Compatibility     | [Temporal.io v0alpha2 checkpoint adapter](./packages/temporal-adapter), [Python v0alpha1/v0alpha2 checkpoint reducer](./implementations/python), [v0alpha2 checkpoint public run](./examples/public-runs), [checkpoint adoption guide](./docs/adoption-guide.md) |
-| Adoption          | [Model-interface benchmark](./benchmarks/model-interface/v1/README.md), [temporal pilot](./docs/temporal-pilot.md), [second-implementation issue](https://github.com/open-covenant/covenant-timeline/issues/19)                                                  |
-| Operations        | [Operations guide](./docs/operations.md), [threat model](./docs/threat-model.md), [production audit](./docs/production-audit-timeline.md)                                                                                                                        |
+The
+[GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/timeline-v0.0.0-alpha.2)
+includes the package tarball, checksum, and SPDX SBOM. The
+[release record](./releases/timeline-v0.0.0-alpha.2.json)
+binds source, protocol inputs, artifacts, registry metadata, and attestations.
 
-## Verify
+| Area              | Entry point                                                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Start             | [Getting started](./docs/getting-started.md)                                                                                            |
+| Model integration | [Model interface](./docs/model-interface.md), [model evaluation](./docs/model-evaluation.md)                                            |
+| Contract          | [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md), [`schemas/v0alpha3`](./schemas/v0alpha3)                                 |
+| Conformance       | [`conformance/v0alpha3`](./conformance/v0alpha3), [second implementation](https://github.com/open-covenant/covenant-timeline/issues/19) |
+| Operations        | [Operations guide](./docs/operations.md), [security](./SECURITY.md)                                                                     |
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm verify
-pnpm temporal:benchmark
-pnpm model-eval:test
 ```
 
-The repository is Apache-2.0 licensed. See
-[Contributing](./CONTRIBUTING.md) and [Security](./SECURITY.md) before opening a
-change or reporting a vulnerability.
+The repository is Apache-2.0 licensed. Contributions are covered by
+[CONTRIBUTING.md](./CONTRIBUTING.md).

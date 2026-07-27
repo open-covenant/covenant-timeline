@@ -1,0 +1,9 @@
+{
+  "schema": "covenant.timeline.query.v0alpha3",
+  "id": "query.review-minus-deploy",
+  "contextId": "actual",
+  "recordedThrough": 4,
+  "type": "difference.bounds",
+  "fromPointId": "deployed",
+  "toPointId": "review-finished"
+}

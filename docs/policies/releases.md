@@ -37,6 +37,14 @@ SBOM, creates GitHub artifact attestations, and publishes from the protected
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) when it is
 configured or a short-lived token fallback when it is not.
 
+The MCP integration is independently versioned as
+`@covenant-org/timeline-mcp` and uses
+`timeline-mcp-v<mcp-package-version>` tags. Its release workflow applies the
+same reproducible-build, checksum, SPDX SBOM, attestation, provenance,
+protected-environment, and authentication requirements. It also runs an
+installed-package stdio smoke that crosses a process restart and independently
+verifies correction receipts before publication.
+
 The `0.0.0-alpha.2` publish used a short-lived granular token fallback because
 trusted publisher linkage was not configured. The workflow produced npm
 provenance and GitHub build and SBOM attestations. After the run, the GitHub
@@ -75,10 +83,14 @@ Before each publish, administrators must verify:
 - trusted publisher linkage to `open-covenant/covenant-timeline`,
   `release.yml`, and the `npm` environment, or a short-lived granular
   `NPM_TOKEN`;
-- tag protection for `timeline-v*`;
+- tag protection for the component pattern (`timeline-v*` for the core package
+  or `timeline-mcp-v*` for the MCP package);
 - token fallback, when used, is limited to `@covenant-org/timeline`, permits
   publish with 2FA bypass, has the shortest practical expiration, exists only
   in the protected environment, and is revoked after the run.
+
+For an MCP release, the token scope is
+`@covenant-org/timeline-mcp` instead.
 
 Workflow presence is not evidence that these external controls are configured.
 Trusted publishing and a required `npm` environment reviewer remain

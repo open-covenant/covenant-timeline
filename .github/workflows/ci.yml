@@ -91,4 +91,9 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm audit
       - run: pnpm release:check
+      - run: pnpm release:mcp:check
       - run: node scripts/generate-sbom.mjs "$RUNNER_TEMP/timeline.spdx.json"
+      - run: >-
+          node scripts/generate-sbom.mjs
+          "$RUNNER_TEMP/timeline-mcp.spdx.json"
+          packages/mcp-server

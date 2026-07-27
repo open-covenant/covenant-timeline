@@ -1,0 +1,68 @@
+{
+  "name": "@covenant-org/timeline-mcp",
+  "version": "0.0.0-alpha.1",
+  "description": "MCP server for verifiable temporal state in long-running agent workflows.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-covenant/covenant-timeline.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/open-covenant/covenant-timeline/tree/main/packages/mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/open-covenant/covenant-timeline/issues"
+  },
+  "keywords": [
+    "agent",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "temporal-reasoning"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "timeline-mcp": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node ../../scripts/clean.mjs dist tsconfig.tsbuildinfo",
+    "coverage": "pnpm run build && vitest run --coverage",
+    "lint": "tsc -p tsconfig.test.json --noEmit",
+    "prepack": "pnpm run clean && pnpm run build",
+    "test": "pnpm run build && vitest run",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@covenant-org/timeline": "workspace:0.0.0-alpha.2",
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0-beta.5",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "sideEffects": false
+}

@@ -29,12 +29,15 @@
     "model-eval:score": "pnpm build && node scripts/score-model-interface-eval.mjs",
     "model-eval:openai-config": "node scripts/create-openai-model-eval-config.mjs",
     "model-eval:test": "pnpm build && node --test scripts/create-openai-model-eval-config.test.mjs scripts/model-interface-eval.test.mjs scripts/openai-responses-model-eval-adapter.test.mjs",
+    "mcp:pack:check": "node scripts/check-mcp-package.mjs",
     "pack:check": "node scripts/check-package.mjs",
     "public-runs:check": "pnpm build && node scripts/longitudinal-github-run.mjs verify --out examples/public-runs/temporal-sdk-typescript-pr-2219.json",
     "release:check": "node scripts/check-release.mjs",
+    "release:mcp:check": "node scripts/check-mcp-release.mjs",
     "release:evidence:check": "node scripts/check-release-evidence.mjs",
-    "release:evidence:test": "node --test scripts/check-release-evidence.test.mjs",
+    "release:evidence:test": "node --test scripts/check-release-evidence.test.mjs scripts/mcp-release-evidence.test.mjs",
     "release:verify-published": "node scripts/verify-published-release.mjs",
+    "sbom:test": "node --test scripts/generate-sbom.test.mjs",
     "spec:check": "node scripts/check-spec.mjs",
     "test": "pnpm -r --if-present test",
     "timeline": "node packages/prototype/dist/cli.js",
@@ -42,7 +45,7 @@
     "temporal:correction-demo": "pnpm build && node examples/correction-replay.mjs",
     "temporal:demo": "pnpm build && node examples/temporal-reasoning.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm examples:test && pnpm model-eval:test && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm examples:test && pnpm model-eval:test && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm sbom:test && pnpm pack:check && pnpm mcp:pack:check"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

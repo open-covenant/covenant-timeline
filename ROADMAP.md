@@ -61,10 +61,9 @@ and final-answer errors.
 
 ### 2. Low-friction agent integration
 
-The next integration surface is a separate local stdio package,
-`@covenant-org/timeline-mcp`. It will keep the portable kernel package
-dependency-light while giving MCP-capable agents durable temporal state through
-five explicit tools:
+The separate local stdio package `@covenant-org/timeline-mcp` keeps the
+portable kernel dependency-light while giving MCP-capable agents durable
+temporal state through five explicit tools:
 
 1. create a run from an exact v0alpha3 contract;
 2. list bounded run metadata after a new session;
@@ -72,14 +71,15 @@ five explicit tools:
 4. project active state at an explicit knowledge cut; and
 5. reason over an exact query and return a verified conclusion.
 
-The first alpha will require a data directory, retain only evidence digests,
-make no network calls, and classify direct model writes as structurally valid
-but unauthenticated. It will not provide semantic memory search, civil-time
+The first alpha requires a data directory, retains only evidence digests, makes
+no network calls, and classifies direct model writes as structurally valid but
+unauthenticated. It does not provide semantic memory search, civil-time
 normalization, remote hosting, or evidence authority.
 
-This gate closes when a clean installed-package test can create a run, append a
-correction, stop the server, restart it, project both historical and current
-state, and obtain verified receipts over stdio on Node.js 22 and 24.
+The installed-package check creates a run, appends a correction, stops the
+server, restarts it, projects both historical and current state, and verifies
+both receipts over stdio. This gate closes after the tagged artifact passes
+that check on Node.js 22 and 24 and is published to npm.
 
 ### 3. Independent temporal pilot
 

@@ -171,9 +171,10 @@ adoption work are focused on long-running agents and software delivery.
 Start by testing the model boundary. The
 [model-interface benchmark](./docs/model-evaluation.md) provides 12 temporal
 scenarios, a vendor-neutral JSONL adapter protocol, strict failure accounting,
-and paired scoring across three interfaces. This public v1 suite is a
-development and smoke benchmark. No model result has been published, and the
-visible corpus does not establish a general performance gain. The
+paired scoring across three interfaces, and a stateless OpenAI Responses
+reference adapter. This public v1 suite is a development and smoke benchmark.
+No model result has been published, and the visible corpus does not establish a
+general performance gain. The
 [roadmap](./ROADMAP.md) defines the blinded scale evaluation required to close
 the model-interface gate.
 

@@ -90,6 +90,14 @@ export async function scoreModelInterfaceEval({
     if (contentDigest(result.run.config) !== result.run.configDigest) {
       throw new Error(`${label}: configDigest does not match run.config`);
     }
+    if (
+      /^[0-9a-f]{40,64}$/u.test(result.run.config.benchmarkRevision) &&
+      result.run.config.benchmarkRevision !== result.run.sourceRevision
+    ) {
+      throw new Error(
+        `${label}: benchmarkRevision does not match run.sourceRevision`,
+      );
+    }
   }
   if (results[0].run.corpusDigest !== corpusDigest) {
     throw new Error("results were produced from a different corpus");
@@ -531,6 +539,22 @@ function validateRawResponse(result, validators, label) {
   }
   if (!canonicalEqual(response.usage ?? null, result.usage)) {
     throw new Error(`${label}: usage does not match stored response`);
+  }
+  if (response.error !== undefined) {
+    if (response.error.scope !== "observation") {
+      throw new Error(
+        `${label}: stored adapter error must be observation-scoped`,
+      );
+    }
+    if (
+      result.status !== "error" ||
+      result.error.stage !== "adapter" ||
+      result.error.code !== response.error.code ||
+      result.error.message !== response.error.message
+    ) {
+      throw new Error(`${label}: adapter error does not match stored response`);
+    }
+    return;
   }
   if (result.arm === "direct") {
     if (result.status !== "ok") {

@@ -35,6 +35,11 @@ failure accounting, temporal extraction, rolling state, and scorer across
 direct text, narrative memory, and Timeline. No external model evaluation has
 been run, and no model result has been published.
 
+The repository includes a stateless OpenAI Responses reference adapter with
+arm-specific Structured Outputs and explicit provider-failure artifacts. This
+provides a checked-in invocation path. Live provider validation and model
+efficacy evidence remain pending.
+
 An external v1 run is useful for validating the harness and exposing immediate
 interface failures. It cannot establish a general performance gain because the
 corpus, prompts, and expected structures are public and small.

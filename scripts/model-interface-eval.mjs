@@ -21,6 +21,8 @@ export const CASE_SCHEMA = "covenant.timeline.model-eval.case.v1";
 export const CONFIG_SCHEMA = "covenant.timeline.model-eval.config.v1";
 export const REQUEST_SCHEMA = "covenant.timeline.model-eval.request.v1";
 export const RESPONSE_SCHEMA = "covenant.timeline.model-eval.response.v1";
+export const ADAPTER_ERROR_SCHEMA =
+  "covenant.timeline.model-eval.adapter-error.v1";
 export const RESULT_SCHEMA = "covenant.timeline.model-eval.result.v1";
 export const CONTINUITY_BUDGET_BYTES = 4 * 1024;
 export const MAX_REPEATS = 20;
@@ -65,6 +67,7 @@ const schemaFiles = [
   "conclusion.schema.json",
 ];
 const identifierPattern = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
+const adapterErrorCodePattern = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 const maxConfigBytes = 64 * 1024;
 const maxCorpusBytes = 8 * 1024 * 1024;
 const credentialKeyPattern =
@@ -436,6 +439,27 @@ export function assertValid(validator, value, label) {
 export function validateAdapterResponse(response, request, validators) {
   assertRecord(response, "adapter response");
   const common = ["schema", "requestId"];
+  if (response.schema === ADAPTER_ERROR_SCHEMA) {
+    assertExactKeys(response, [...common, "error"], "adapter response", [
+      "usage",
+    ]);
+    if (response.requestId !== request.requestId) {
+      throw new ModelEvalError("adapter response: requestId mismatch", {
+        code: "response.request-id",
+      });
+    }
+    if (response.usage !== undefined) {
+      assertResponseValid(
+        validators.usage,
+        response.usage,
+        "adapter response.usage",
+        "response.usage",
+      );
+    }
+    validateAdapterError(response.error);
+    return;
+  }
+
   const fields =
     request.arm === "direct"
       ? [...common, "answer"]
@@ -462,7 +486,6 @@ export function validateAdapterResponse(response, request, validators) {
       "response.usage",
     );
   }
-
   if (request.arm === "direct" || request.arm === "narrative-memory") {
     assertResponseValid(
       validators.semanticResult,
@@ -498,6 +521,40 @@ export function validateAdapterResponse(response, request, validators) {
       response.query,
       "adapter response.query",
       "response.query",
+    );
+  }
+}
+
+function validateAdapterError(error) {
+  assertRecord(error, "adapter response.error");
+  assertExactKeys(
+    error,
+    ["code", "message", "scope"],
+    "adapter response.error",
+  );
+  if (
+    typeof error.code !== "string" ||
+    !adapterErrorCodePattern.test(error.code)
+  ) {
+    throw new ModelEvalError(
+      "adapter response.error.code: must be a valid error code",
+      { code: "response.error" },
+    );
+  }
+  if (
+    typeof error.message !== "string" ||
+    error.message.length === 0 ||
+    Array.from(error.message).length > 480
+  ) {
+    throw new ModelEvalError(
+      "adapter response.error.message: must use 1 through 480 characters",
+      { code: "response.error" },
+    );
+  }
+  if (!["observation", "run"].includes(error.scope)) {
+    throw new ModelEvalError(
+      "adapter response.error.scope: must be observation or run",
+      { code: "response.error" },
     );
   }
 }

@@ -8,6 +8,11 @@
   cases, paired direct, narrative-memory, and Timeline arms, a one-shot JSONL adapter
   protocol, strict admission and capacity limits, replayable request and
   response artifacts, paired scoring, and adversarial harness tests.
+- Add a stateless OpenAI Responses benchmark adapter with model-revision
+  verification, arm-specific Structured Outputs, mock-provider conformance
+  tests, a separate adapter-error protocol, and source-bound configuration
+  generation. Counterbalance arm order, bind runs to unchanged source/runtime
+  bytes, and retain validated paid artifacts when atomic publication fails.
 - Add a schema-validated alpha.2 release record bound to the annotated source
   tag, component manifests, protocol inputs, migration, workflow attempt,
   registry metadata, release assets, SBOM, and attestations.

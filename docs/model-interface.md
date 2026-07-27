@@ -126,8 +126,8 @@ reasoning rather than merely changing the prompt.
 This API implements the tool-integrated layer described in the
 [temporal reasoning vision](./temporal-reasoning-vision.md).
 
-The benchmark keeps model output unmodified across this boundary: the host does
-not renumber events, replace identifiers, repair references, or synthesize
-missing assertions. See the
+The benchmark keeps model-authored semantic fields unmodified across this
+boundary: the host does not renumber events, replace identifiers, repair
+references, or synthesize missing assertions. See the
 [benchmark protocol](../benchmarks/model-interface/v1/README.md) for the exact
 one-shot JSONL adapter contract and failure accounting.

@@ -137,8 +137,8 @@ graph exhaustion, and temporal-data privacy.
 - Hardened replay benchmark on Node.js 24.14.0, Darwin arm64:
   - 50,000 events: 316.35, 325.36, and 346.56 ms.
   - median: 325.36 ms.
-- M3 Covenant adapter and offline run evidence recorded in the repository
-  roadmap and merged integration history.
+- M3 Covenant adapter and offline run evidence recorded in conformance fixtures
+  and merged integration history.
 - Public M4 archive: Temporal TypeScript SDK pull request 2219 spanned 426,092
   source seconds, crossed separate local collector processes, and replayed to
   state digest
@@ -231,11 +231,12 @@ graph exhaustion, and temporal-data privacy.
 - [x] **Document the threat and trust model.** State assets, trust boundaries,
       attacker capabilities, replay/effect abuse paths, privacy constraints,
       and adopter obligations.
-- [ ] **Validate the model boundary.** No controlled evaluation yet shows that
-      models can extract admissible typed assertions and queries reliably, or
-      that Timeline improves end-to-end temporal accuracy over a comparable
-      narrative-memory baseline. Invalid output and unsupported definite answers
-      must count as failures, not receive manual repair.
+- [ ] **Validate the model boundary.** The versioned harness, corpus, and scorer
+      now compare Timeline-assisted reasoning with a narrative-memory baseline
+      while preserving invalid output and unsupported definite answers as
+      failures. No external model evaluation has been run, so there is still no
+      controlled evidence that models reliably emit admissible typed assertions
+      and queries or that Timeline improves end-to-end temporal accuracy.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.
@@ -358,21 +359,25 @@ Recommended host metrics:
 
 ## Recommended Architecture Changes
 
-1. Obtain one externally operated integration using the published adoption
-   evidence contract.
-2. Move one adapter or reducer under independent maintenance before any beta
-   interoperability claim.
-3. Exercise accepted-decision correction and branch semantics only from a real
+1. Run an external model through the public smoke harness, then complete the
+   preregistered blinded scale evaluation before any efficacy claim.
+2. Obtain one externally operated temporal pilot using the published pilot
+   contract.
+3. Add an independently maintained implementation of the temporal RFC before
+   any beta interoperability claim.
+4. Exercise accepted-decision correction and branch semantics only from a real
    incident; do not invent an untested branch protocol.
-4. Add an eligible protected-environment reviewer and npm trusted publishing
+5. Add an eligible protected-environment reviewer and npm trusted publishing
    before beta or stable; retain the tested short-lived fallback for alpha.
-5. Exercise deprecation and historical verification before declaring rollback
+6. Exercise deprecation and historical verification before declaring rollback
    operational.
-6. Add portable snapshot hydration only if independent measurements require it.
+7. Add portable snapshot hydration only if independent measurements require it.
 
 ## Test Coverage Gaps
 
-- No independently operated adapter or independently maintained reducer result.
+- No external model evaluation or blinded scale-suite result.
+- No independently operated temporal pilot.
+- No independently maintained temporal implementation.
 - No production deployment evidence in the public archive.
 - No accepted-decision supersession or branch corpus.
 - No external workload measurement beyond the five-day archive's small event
@@ -385,11 +390,13 @@ Recommended host metrics:
 ## Action Plan
 
 1. Preserve v0alpha1 replay and the v0alpha2 migration corpus on every release.
-2. Use the independent-adoption template to verify one external runtime without
-   weakening the evidence standard.
-3. Transfer or reimplement one adapter or reducer under independent governance.
-4. Record real correction incidents before specifying branch semantics.
-5. Configure protected-environment review and exercise OIDC before beta or
+2. Publish one external v1 smoke run and preregister the blinded scale
+   evaluation defined in the roadmap.
+3. Complete one external temporal pilot with replayable evidence.
+4. Support a separately maintained temporal implementation through the shared
+   conformance target.
+5. Record real correction incidents before specifying branch semantics.
+6. Configure protected-environment review and exercise OIDC before beta or
    stable, without making those external controls an alpha release gate.
-6. Exercise package deprecation and historical verification as a rollback
+7. Exercise package deprecation and historical verification as a rollback
    drill.

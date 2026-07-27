@@ -1,0 +1,516 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/benchmarks/model-interface/v1/result.schema.json",
+  "title": "Covenant Timeline model-interface benchmark result",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "runConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "benchmarkRevision",
+        "adapter",
+        "model",
+        "generation"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.model-eval.config.v1"
+        },
+        "id": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+        },
+        "benchmarkRevision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "adapter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+            },
+            "version": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "id", "revision"],
+          "properties": {
+            "provider": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+            },
+            "id": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "generation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["temperature", "seed", "maxOutputTokens", "parameters"],
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "minimum": 0
+            },
+            "seed": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxOutputTokens": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "runMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config",
+        "configDigest",
+        "corpusDigest",
+        "promptDigests",
+        "selection",
+        "timelineVersion",
+        "sourceRevision",
+        "sourceDirty",
+        "node",
+        "platform",
+        "arch"
+      ],
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/runConfig"
+        },
+        "configDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "corpusDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "promptDigests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["direct", "narrative-memory", "timeline"],
+          "properties": {
+            "direct": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+            },
+            "narrative-memory": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+            },
+            "timeline": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+            }
+          }
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["arms", "cases", "repeats", "timeoutMs"],
+          "properties": {
+            "arms": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": ["direct", "narrative-memory", "timeline"]
+              }
+            },
+            "cases": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+              }
+            },
+            "repeats": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600000
+            }
+          }
+        },
+        "timelineVersion": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceRevision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceDirty": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "platform": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "arch": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "costUsd"],
+      "properties": {
+        "inputTokens": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTokens": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "costUsd": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "code", "message"],
+      "properties": {
+        "stage": {
+          "enum": [
+            "adapter",
+            "protocol",
+            "admission",
+            "query",
+            "reasoning",
+            "memory"
+          ]
+        },
+        "code": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "run",
+    "requestId",
+    "requestText",
+    "requestDigest",
+    "responseText",
+    "responseDigest",
+    "caseId",
+    "family",
+    "arm",
+    "repeat",
+    "cut",
+    "traits",
+    "status",
+    "answer",
+    "proposedEvents",
+    "proposedQuery",
+    "admitted",
+    "conclusion",
+    "proofVerified",
+    "memory",
+    "memoryBytes",
+    "memoryBudgetBytes",
+    "stateBytes",
+    "stateBudgetBytes",
+    "usage",
+    "latencyMs",
+    "error"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-eval.result.v1"
+    },
+    "benchmark": {
+      "const": "model-interface-v1"
+    },
+    "run": {
+      "$ref": "#/$defs/runMetadata"
+    },
+    "requestId": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+    },
+    "requestText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 262144
+    },
+    "requestDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "responseText": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 262144
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "responseDigest": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "caseId": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+    },
+    "family": {
+      "enum": [
+        "bounded-indeterminate",
+        "planned-actual-isolation",
+        "delayed-observation-historical-cuts",
+        "correction-supersession-retraction",
+        "contradictions",
+        "interval-relations"
+      ]
+    },
+    "arm": {
+      "enum": ["direct", "narrative-memory", "timeline"]
+    },
+    "repeat": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 19
+    },
+    "cut": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "traits": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+      }
+    },
+    "status": {
+      "enum": ["ok", "error"]
+    },
+    "answer": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json#/$defs/semanticResult"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proposedEvents": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "https://covenant-timeline.org/schemas/v0alpha3/event.schema.json"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proposedQuery": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/query.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "admitted": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "conclusion": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proofVerified": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "memory": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "memoryBytes": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "memoryBudgetBytes": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stateBytes": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stateBudgetBytes": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "usage": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/usage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "latencyMs": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "error": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/error"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

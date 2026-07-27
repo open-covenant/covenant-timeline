@@ -4,6 +4,10 @@
 
 ### Added
 
+- Add the model-interface v1 development benchmark: 12 kernel-derived temporal
+  cases, paired direct, narrative-memory, and Timeline arms, a one-shot JSONL adapter
+  protocol, strict admission and capacity limits, replayable request and
+  response artifacts, paired scoring, and adversarial harness tests.
 - Add a schema-validated alpha.2 release record bound to the annotated source
   tag, component manifests, protocol inputs, migration, workflow attempt,
   registry metadata, release assets, SBOM, and attestations.
@@ -15,6 +19,9 @@
 
 ### Changed
 
+- Refocus the public roadmap on model reliability, an external temporal pilot,
+  and an independently maintained implementation, with a blinded scale
+  evaluation required before any model-performance claim.
 - Record the alpha.2 token-fallback publication and operator-observed credential
   cleanup without presenting trusted publishing as an alpha release gate.
 - Move artifact upload to its Node.js 24 action and consolidate SBOM

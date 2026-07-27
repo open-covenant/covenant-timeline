@@ -46,6 +46,18 @@
 - Move artifact upload to its Node.js 24 action and consolidate SBOM
   attestation on the supported GitHub attestation action.
 
+## @covenant-org/timeline-mcp 0.0.0-alpha.1 - 2026-07-27
+
+### Added
+
+- Add a local stdio server with five bounded temporal-state tools, portable run
+  resources, explicit knowledge cuts, structural-only admission labels,
+  optimistic concurrency, canonical append-only persistence, restart recovery,
+  and installed-package correction-and-proof verification.
+- Add a separate reproducible MCP release workflow with checksum, SPDX SBOM,
+  GitHub build and SBOM attestations, npm provenance, OIDC publishing, and the
+  documented alpha token fallback.
+
 ## 0.0.0-alpha.2 - 2026-07-27
 
 ### Added

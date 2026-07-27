@@ -6,12 +6,13 @@ const manifest = JSON.parse(
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const workflow = await readFile(".github/workflows/release.yml", "utf8");
 const refName = process.env.GITHUB_REF_NAME;
+const tagArgument = process.argv[2];
 const tag =
-  process.argv.find((argument) => argument.startsWith("timeline-v")) ??
-  (refName?.startsWith("timeline-v") ? refName : undefined);
+  tagArgument ?? (refName?.startsWith("timeline-v") ? refName : undefined);
 const expectedTag = `timeline-v${manifest.version}`;
 const errors = [];
 
+if (process.argv.length > 3) errors.push("unexpected release check arguments");
 if (manifest.name !== "@covenant-org/timeline") {
   errors.push("unexpected package name");
 }
@@ -50,6 +51,12 @@ if (
   !workflow.includes("--provenance")
 ) {
   errors.push("release workflow must support token fallback with provenance");
+}
+if (workflow.includes("workflow_dispatch:")) {
+  errors.push("release workflow must be tag-triggered only");
+}
+if (!workflow.includes('git cat-file -t "$GITHUB_REF_NAME"')) {
+  errors.push("release workflow must require an annotated tag");
 }
 
 if (errors.length > 0) {

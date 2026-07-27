@@ -2,6 +2,39 @@
 
 Timeline requires Node.js 22 or 24.
 
+Choose the integration surface that matches the host:
+
+- use `@covenant-org/timeline-mcp` when an MCP-capable agent needs local
+  temporal state across sessions; or
+- use `@covenant-org/timeline` when an application owns persistence,
+  admission, and the model loop directly.
+
+## Connect an MCP agent
+
+```json
+{
+  "mcpServers": {
+    "covenant-timeline": {
+      "command": "npx",
+      "args": [
+        "--yes",
+        "@covenant-org/timeline-mcp@0.0.0-alpha.1",
+        "--data-dir",
+        "/path/to/private/timeline-data"
+      ]
+    }
+  }
+}
+```
+
+The server uses local stdio, makes no network requests, and persists canonical
+append-only runs under the selected data directory. Direct writes are
+structurally valid but unauthenticated. See the
+[MCP package guide](../packages/mcp-server/README.md) for its five tools,
+portable run resource, restart semantics, and operating limits.
+
+## Install the library
+
 ```sh
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```

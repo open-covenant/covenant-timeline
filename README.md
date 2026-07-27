@@ -15,6 +15,7 @@ npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
 [Run the correction demo](#see-a-correction-survive-replay) ·
+[Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
 [Evaluate the model boundary](./docs/model-evaluation.md)
@@ -129,6 +130,42 @@ Explore the
 Timeline is designed first for agent runs that cross sessions and must absorb
 late or corrected evidence without losing the state that informed earlier
 decisions.
+
+## Give an MCP agent temporal memory
+
+`@covenant-org/timeline-mcp` runs as a local stdio server and keeps typed
+temporal state durable across agent sessions. Add it to an MCP client:
+
+```json
+{
+  "mcpServers": {
+    "covenant-timeline": {
+      "command": "npx",
+      "args": [
+        "--yes",
+        "@covenant-org/timeline-mcp@0.0.0-alpha.1",
+        "--data-dir",
+        "/path/to/private/timeline-data"
+      ]
+    }
+  }
+}
+```
+
+The server lets an agent create and recover runs, append typed records, project
+state at an exact knowledge cut, and request verified temporal conclusions. It
+also exports the complete portable run required for independent receipt
+verification.
+
+Direct MCP writes are structurally validated but unauthenticated. Evidence
+payloads remain outside the server, and every append requires the current
+whole-run digest for optimistic concurrency. The process exposes no network
+transport.
+
+See the
+[`@covenant-org/timeline-mcp` guide](./packages/mcp-server/README.md)
+for the tool contract, persistence model, recovery procedure, limits, and
+production boundary.
 
 ## Use the temporal API
 
@@ -313,6 +350,7 @@ binds source, protocol inputs, artifacts, registry metadata, and attestations.
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Start             | [Getting started](./docs/getting-started.md)                                                                                            |
 | Model integration | [Model interface](./docs/model-interface.md), [model evaluation](./docs/model-evaluation.md)                                            |
+| Agent integration | [`@covenant-org/timeline-mcp`](./packages/mcp-server/README.md)                                                                         |
 | Contract          | [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md), [`schemas/v0alpha3`](./schemas/v0alpha3)                                 |
 | Conformance       | [`conformance/v0alpha3`](./conformance/v0alpha3), [second implementation](https://github.com/open-covenant/covenant-timeline/issues/19) |
 | Operations        | [Operations guide](./docs/operations.md), [security](./SECURITY.md)                                                                     |

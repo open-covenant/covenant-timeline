@@ -1,12 +1,12 @@
-name: release
+name: release MCP server
 
 on:
   push:
     tags:
-      - "timeline-v*"
+      - "timeline-mcp-v*"
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-mcp-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
     environment: npm
     permissions:
       attestations: write
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,7 +40,7 @@ jobs:
 
       - run: npm install --global npm@12.0.1
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
+      - run: node scripts/check-mcp-release.mjs "$GITHUB_REF_NAME"
       - run: test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
       - run: git merge-base --is-ancestor HEAD origin/main
       - run: pnpm verify
@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p 'require("./packages/prototype/package.json").version')"
+          version="$(node -p 'require("./packages/mcp-server/package.json").version')"
           dist_tag="latest"
           if [[ "$version" == *-* ]]; then
             dist_tag="next"
@@ -60,15 +60,15 @@ jobs:
           echo "dist-tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       - id: artifact
-        name: Build reproducible package
+        name: Build reproducible MCP package
         shell: bash
         run: |
           set -euo pipefail
-          first="$RUNNER_TEMP/release-first"
-          second="$RUNNER_TEMP/release-second"
+          first="$RUNNER_TEMP/release-mcp-first"
+          second="$RUNNER_TEMP/release-mcp-second"
           mkdir -p "$first" "$second"
-          pnpm --dir packages/prototype pack --pack-destination "$first"
-          pnpm --dir packages/prototype pack --pack-destination "$second"
+          pnpm --dir packages/mcp-server pack --pack-destination "$first"
+          pnpm --dir packages/mcp-server pack --pack-destination "$second"
           archive="$(find "$first" -maxdepth 1 -name '*.tgz' -print -quit)"
           comparison="$(find "$second" -maxdepth 1 -name '*.tgz' -print -quit)"
           test -n "$archive"
@@ -83,14 +83,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sbom="$RUNNER_TEMP/timeline.spdx.json"
+          sbom="$RUNNER_TEMP/timeline-mcp.spdx.json"
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
-            node scripts/generate-sbom.mjs "$sbom"
+            node scripts/generate-sbom.mjs "$sbom" packages/mcp-server
           echo "path=$sbom" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: timeline-release
+          name: timeline-mcp-release
           if-no-files-found: error
           path: |
             ${{ steps.artifact.outputs.archive }}
@@ -106,11 +106,57 @@ jobs:
           subject-path: ${{ steps.artifact.outputs.archive }}
           sbom-path: ${{ steps.sbom.outputs.path }}
 
+      - name: Retain release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ steps.artifact.outputs.archive }}"
+          checksum="${{ steps.artifact.outputs.checksum }}"
+          sbom="${{ steps.sbom.outputs.path }}"
+          version="$(node -p 'require("./packages/mcp-server/package.json").version')"
+          release_flags=()
+          if [[ "$version" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              "$archive" "$checksum" "$sbom" --clobber
+            if [[ "$version" == *-* ]]; then
+              gh release edit "$GITHUB_REF_NAME" --prerelease
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$archive" "$checksum" "$sbom" \
+              --verify-tag \
+              --title "@covenant-org/timeline-mcp $version" \
+              "${release_flags[@]}" \
+              --notes "Installable alpha release of Covenant Timeline's local stdio MCP server."
+          fi
+
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: >-
-          npm publish "${{ steps.artifact.outputs.archive }}"
-          --access public
-          --provenance
-          --tag "${{ steps.metadata.outputs.dist-tag }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="@covenant-org/timeline-mcp"
+          version="$(node -p 'require("./packages/mcp-server/package.json").version')"
+          archive="${{ steps.artifact.outputs.archive }}"
+          published="$RUNNER_TEMP/published-mcp.tgz"
+
+          if tarball_url="$(npm view "$package@$version" dist.tarball --json 2>/dev/null)"; then
+            tarball_url="${tarball_url%\"}"
+            tarball_url="${tarball_url#\"}"
+            curl --fail --location --silent --show-error \
+              --output "$published" "$tarball_url"
+            cmp "$archive" "$published"
+            echo "$package@$version is already published with identical bytes"
+          else
+            npm publish "$archive" \
+              --access public \
+              --provenance \
+              --tag "${{ steps.metadata.outputs.dist-tag }}"
+          fi

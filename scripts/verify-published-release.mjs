@@ -1,11 +1,27 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { validateReleaseEvidenceFile } from "./check-release-evidence.mjs";
+import {
+  assertMcpArchiveEntries,
+  parseMcpTarListings,
+} from "./mcp-package-contents.mjs";
+import {
+  mcpReleaseEvidenceProfile,
+  releaseEvidenceProfile,
+} from "./release-evidence-profiles.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -34,6 +50,7 @@ export async function verifyPublishedRelease(manifestPath) {
     manifestPath,
   );
   const { release, workflow, registry, artifact } = record;
+  const profile = releaseEvidenceProfile(record);
   const apiRoot = `https://api.github.com/repos/${workflow.repository}`;
 
   const [
@@ -45,7 +62,7 @@ export async function verifyPublishedRelease(manifestPath) {
     remoteTagRef,
     registryTarball,
   ] = await Promise.all([
-    fetchJson("https://registry.npmjs.org/@covenant-org%2ftimeline"),
+    fetchJson(npmMetadataUrl(profile.package)),
     fetchJson(
       `${apiRoot}/actions/runs/${workflow.runId}/attempts/${workflow.attempt}`,
       githubHeaders,
@@ -116,7 +133,7 @@ export async function verifyPublishedRelease(manifestPath) {
     npmAttestations,
   );
 
-  const smoke = await verifyCleanInstall(record);
+  const smoke = await verifyCleanInstall(record, registryTarball);
   return {
     package: `${release.package}@${release.version}`,
     sourceCommit: release.sourceCommit,
@@ -175,6 +192,7 @@ export function verifyRegistryMetadata(record, metadata) {
 
 export function verifyWorkflowRun(record, run) {
   const { release, workflow } = record;
+  const profile = releaseEvidenceProfile(record);
   assertEqual(run.id, workflow.runId, "workflow run ID");
   assertEqual(run.run_attempt, workflow.attempt, "workflow attempt");
   assertEqual(run.status, "completed", "workflow status");
@@ -182,7 +200,7 @@ export function verifyWorkflowRun(record, run) {
   assertEqual(run.head_sha, release.sourceCommit, "workflow source commit");
   assertEqual(run.head_branch, release.tag, "workflow source tag");
   assertEqual(run.event, "push", "workflow event");
-  assertEqual(run.name, "release", "workflow name");
+  assertEqual(run.name, profile.workflowName, "workflow name");
   assertEqual(run.path, workflow.path, "workflow path");
   assertEqual(run.repository?.id, workflow.repositoryId, "repository ID");
   assertEqual(
@@ -194,19 +212,21 @@ export function verifyWorkflowRun(record, run) {
 
 export function verifyWorkflowJob(record, job) {
   const { release, workflow } = record;
+  const profile = releaseEvidenceProfile(record);
   assertEqual(job.id, workflow.jobId, "workflow job ID");
   assertEqual(job.run_id, workflow.runId, "job run ID");
   assertEqual(job.run_attempt, workflow.attempt, "job run attempt");
   assertEqual(job.head_sha, release.sourceCommit, "job source commit");
-  assertEqual(job.name, "publish", "workflow job name");
-  assertEqual(job.workflow_name, "release", "job workflow name");
+  assertEqual(job.name, profile.jobName, "workflow job name");
+  assertEqual(job.workflow_name, profile.workflowName, "job workflow name");
   assertEqual(job.conclusion, "success", "workflow job conclusion");
 }
 
 export function verifyWorkflowArtifact(record, value) {
   const { release, workflow } = record;
+  const profile = releaseEvidenceProfile(record);
   assertEqual(value.id, workflow.artifactId, "workflow artifact ID");
-  assertEqual(value.name, "timeline-release", "workflow artifact name");
+  assertEqual(value.name, profile.artifactName, "workflow artifact name");
   assert(
     typeof value.expired === "boolean",
     "workflow artifact expiry state is missing",
@@ -322,6 +342,10 @@ export function verifyChecksumSidecar(record, text) {
 }
 
 export function verifySbom(record, sbom) {
+  if (record.schema === mcpReleaseEvidenceProfile.schema) {
+    return verifyMcpSbom(record, sbom);
+  }
+
   const published = record.components.find(
     ({ distribution }) => distribution === "npm",
   );
@@ -477,6 +501,207 @@ export function verifySbom(record, sbom) {
   assert(
     isDeepStrictEqual(actualRelationships, expectedRelationships),
     "SBOM dependency relationships do not match the published package",
+  );
+}
+
+export function verifyMcpSbom(record, sbom) {
+  const { release, integration } = record;
+  const coreComponent = record.components.find(
+    ({ name }) => name === "@covenant-org/timeline",
+  );
+  assert(coreComponent, "MCP release record has no Timeline component");
+  const coreManifest = gitJson(release.sourceCommit, coreComponent.manifest);
+  const expectedCreated = new Date(
+    Number(
+      runCommand("git", ["show", "-s", "--format=%ct", release.sourceCommit], {
+        cwd: root,
+      }).trim(),
+    ) * 1_000,
+  )
+    .toISOString()
+    .replace(".000Z", "Z");
+  const serverVersion = integration.runtimePins["@modelcontextprotocol/server"];
+  const expectedPackages = new Map([
+    [release.package, release.version],
+    [
+      "@covenant-org/timeline",
+      integration.runtimePins["@covenant-org/timeline"],
+    ],
+    ["@modelcontextprotocol/core", serverVersion],
+    ["@modelcontextprotocol/server", serverVersion],
+    ["zod", integration.runtimePins.zod],
+    ...Object.entries(coreManifest.dependencies ?? {}),
+  ]);
+
+  assertEqual(sbom.spdxVersion, "SPDX-2.3", "SBOM version");
+  assertEqual(sbom.dataLicense, "CC0-1.0", "SBOM data license");
+  assertEqual(sbom.SPDXID, "SPDXRef-DOCUMENT", "SBOM document ID");
+  assertEqual(
+    sbom.name,
+    `${release.package}-${release.version}`,
+    "SBOM document name",
+  );
+  assertEqual(
+    sbom.documentNamespace,
+    `https://github.com/open-covenant/covenant-timeline/sbom/${release.sourceCommit}/${release.version}/${mcpReleaseEvidenceProfile.sbomNamespaceSuffix}`,
+    "SBOM namespace",
+  );
+  assertEqual(
+    sbom.creationInfo?.created,
+    expectedCreated,
+    "SBOM creation time",
+  );
+  assert(
+    isDeepStrictEqual(sbom.creationInfo?.creators, [
+      "Organization: Open Covenant",
+    ]),
+    "SBOM creators do not match the release policy",
+  );
+
+  assert(Array.isArray(sbom.packages), "SBOM packages must be an array");
+  assertEqual(
+    sbom.packages.length,
+    expectedPackages.size,
+    "SBOM package count",
+  );
+  const packagesByKey = new Map();
+  const packagesById = new Map();
+  const purls = new Set();
+  for (const value of sbom.packages) {
+    const key = packageKey(value.name, value.versionInfo);
+    assert(!packagesByKey.has(key), `duplicate SBOM package ${key}`);
+    assert(
+      !packagesById.has(value.SPDXID),
+      `duplicate SBOM package ID ${value.SPDXID}`,
+    );
+    assertEqual(
+      value.SPDXID,
+      spdxPackageId(value.name, value.versionInfo),
+      `SBOM package ${key} ID`,
+    );
+    assertEqual(
+      value.filesAnalyzed,
+      false,
+      `SBOM package ${key} filesAnalyzed`,
+    );
+    assertEqual(
+      value.downloadLocation,
+      "NOASSERTION",
+      `SBOM package ${key} download location`,
+    );
+    assert(
+      typeof value.licenseDeclared === "string" &&
+        value.licenseDeclared.length > 0,
+      `SBOM package ${key} has no declared license`,
+    );
+    assert(
+      typeof value.licenseConcluded === "string" &&
+        value.licenseConcluded.length > 0,
+      `SBOM package ${key} has no concluded license`,
+    );
+    const purlRefs = (value.externalRefs ?? []).filter(
+      ({ referenceCategory, referenceType }) =>
+        referenceCategory === "PACKAGE-MANAGER" && referenceType === "purl",
+    );
+    assertEqual(purlRefs.length, 1, `SBOM package ${key} purl count`);
+    const purl = purlRefs[0].referenceLocator;
+    assertEqual(
+      purl,
+      npmPurl(value.name, value.versionInfo),
+      `SBOM package ${key} purl`,
+    );
+    assert(!purls.has(purl), `duplicate SBOM purl ${purl}`);
+    purls.add(purl);
+    packagesByKey.set(key, value);
+    packagesById.set(value.SPDXID, value);
+  }
+
+  for (const [name, version] of expectedPackages) {
+    assert(
+      packagesByKey.has(packageKey(name, version)),
+      `SBOM package ${name}@${version} is missing`,
+    );
+  }
+  const rootPackage = packagesByKey.get(
+    packageKey(release.package, release.version),
+  );
+  assertEqual(
+    rootPackage.licenseDeclared,
+    "Apache-2.0",
+    "SBOM root package license",
+  );
+  assertEqual(
+    rootPackage.licenseConcluded,
+    "Apache-2.0",
+    "SBOM root concluded license",
+  );
+
+  const idFor = (name, version) =>
+    packagesByKey.get(packageKey(name, version)).SPDXID;
+  const timelineVersion = integration.runtimePins["@covenant-org/timeline"];
+  const zodVersion = integration.runtimePins.zod;
+  const expectedRelationships = new Set([
+    relationshipKey({
+      spdxElementId: "SPDXRef-DOCUMENT",
+      relationshipType: "DESCRIBES",
+      relatedSpdxElement: rootPackage.SPDXID,
+    }),
+    dependencyRelationship(
+      rootPackage.SPDXID,
+      idFor("@covenant-org/timeline", timelineVersion),
+    ),
+    dependencyRelationship(
+      rootPackage.SPDXID,
+      idFor("@modelcontextprotocol/server", serverVersion),
+    ),
+    dependencyRelationship(rootPackage.SPDXID, idFor("zod", zodVersion)),
+    ...Object.entries(coreManifest.dependencies ?? {}).map(([name, version]) =>
+      dependencyRelationship(
+        idFor("@covenant-org/timeline", timelineVersion),
+        idFor(name, version),
+      ),
+    ),
+    dependencyRelationship(
+      idFor("@modelcontextprotocol/server", serverVersion),
+      idFor("@modelcontextprotocol/core", serverVersion),
+    ),
+    dependencyRelationship(
+      idFor("@modelcontextprotocol/server", serverVersion),
+      idFor("zod", zodVersion),
+    ),
+    dependencyRelationship(
+      idFor("@modelcontextprotocol/core", serverVersion),
+      idFor("zod", zodVersion),
+    ),
+  ]);
+
+  assert(
+    Array.isArray(sbom.relationships),
+    "SBOM relationships must be an array",
+  );
+  assertEqual(
+    sbom.relationships.length,
+    expectedRelationships.size,
+    "SBOM relationship count",
+  );
+  const actualRelationships = new Set();
+  for (const relationship of sbom.relationships) {
+    assert(
+      relationship.spdxElementId === "SPDXRef-DOCUMENT" ||
+        packagesById.has(relationship.spdxElementId),
+      `unknown SBOM relationship source ${relationship.spdxElementId}`,
+    );
+    assert(
+      packagesById.has(relationship.relatedSpdxElement),
+      `unknown SBOM relationship target ${relationship.relatedSpdxElement}`,
+    );
+    const key = relationshipKey(relationship);
+    assert(!actualRelationships.has(key), `duplicate SBOM relationship ${key}`);
+    actualRelationships.add(key);
+  }
+  assert(
+    isDeepStrictEqual(actualRelationships, expectedRelationships),
+    "SBOM dependency relationships do not match the MCP production graph",
   );
 }
 
@@ -636,7 +861,7 @@ async function verifyCryptographicAttestations(
       npmResult.attestation?.bundle,
       "npm provenance",
     );
-    verifyCertificate(record, npmResult);
+    verifyCertificate(record, npmResult, publicationInvocationUrl(record));
     verifyTransparencyLog(npmResult, undefined, "npm provenance");
     verifyNpmProvenanceStatement(
       record,
@@ -741,9 +966,14 @@ function verifySigstoreBundle(
   return results[0];
 }
 
-function verifyCertificate(record, result) {
+export function verifyCertificate(
+  record,
+  result,
+  invocationUrl = record.workflow.invocationUrl,
+) {
   const certificate = result.verificationResult?.signature?.certificate;
   const identity = workflowIdentity(record);
+  const profile = releaseEvidenceProfile(record);
   const tagRef = `refs/tags/${record.release.tag}`;
   const repositoryUrl = `https://github.com/${record.workflow.repository}`;
 
@@ -752,7 +982,7 @@ function verifyCertificate(record, result) {
     ["subjectAlternativeName", identity],
     ["githubWorkflowTrigger", "push"],
     ["githubWorkflowSHA", record.release.sourceCommit],
-    ["githubWorkflowName", "release"],
+    ["githubWorkflowName", profile.workflowName],
     ["githubWorkflowRepository", record.workflow.repository],
     ["githubWorkflowRef", tagRef],
     ["buildSignerURI", identity],
@@ -769,7 +999,7 @@ function verifyCertificate(record, result) {
     ["buildConfigURI", identity],
     ["buildConfigDigest", record.release.sourceCommit],
     ["buildTrigger", "push"],
-    ["runInvocationURI", record.workflow.invocationUrl],
+    ["runInvocationURI", invocationUrl],
     ["sourceRepositoryVisibilityAtSigning", "public"],
   ]) {
     assertEqual(
@@ -890,6 +1120,7 @@ function verifyNpmProvenanceStatement(
     "https://github.com/actions/runner/github-hosted",
     false,
     "npm provenance",
+    publicationInvocationUrl(record),
   );
 }
 
@@ -900,6 +1131,7 @@ function verifyWorkflowProvenance(
   builderId,
   requireRunnerEnvironment,
   label,
+  invocationUrl = record.workflow.invocationUrl,
 ) {
   const definition = predicate?.buildDefinition;
   const tagRef = `refs/tags/${record.release.tag}`;
@@ -960,12 +1192,19 @@ function verifyWorkflowProvenance(
   );
   assertEqual(
     predicate?.runDetails?.metadata?.invocationId,
-    record.workflow.invocationUrl,
+    invocationUrl,
     `${label} invocation`,
   );
 }
 
-async function verifyCleanInstall(record) {
+async function verifyCleanInstall(record, tarball) {
+  const profile = releaseEvidenceProfile(record);
+  return profile.smoke === "mcp"
+    ? verifyCleanMcpInstall(record, tarball)
+    : verifyCleanCoreInstall(record);
+}
+
+async function verifyCleanCoreInstall(record) {
   const base = await mkdtemp(join(tmpdir(), "timeline-release-verify-"));
   const directory = join(base, "workspace with spaces");
   try {
@@ -1049,6 +1288,182 @@ async function verifyCleanInstall(record) {
   } finally {
     await rm(base, { recursive: true, force: true });
   }
+}
+
+async function verifyCleanMcpInstall(record, tarball) {
+  const base = await mkdtemp(join(tmpdir(), "timeline-mcp-release-verify-"));
+  const directory = join(base, "workspace with spaces");
+  const dataDirectory = join(base, "data");
+  try {
+    await Promise.all([mkdir(directory), mkdir(dataDirectory)]);
+    const npmrc = join(base, "npmrc");
+    const globalNpmrc = join(base, "global-npmrc");
+    await writeFile(
+      join(directory, "package.json"),
+      `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
+      "utf8",
+    );
+    await writeFile(
+      npmrc,
+      [
+        "registry=https://registry.npmjs.org/",
+        "@covenant-org:registry=https://registry.npmjs.org/",
+        "@modelcontextprotocol:registry=https://registry.npmjs.org/",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await writeFile(globalNpmrc, "", "utf8");
+    const npmEnvironment = sanitizedNpmEnvironment({
+      NPM_CONFIG_USERCONFIG: npmrc,
+      NPM_CONFIG_GLOBALCONFIG: globalNpmrc,
+      NPM_CONFIG_CACHE: join(base, "npm-cache"),
+      NPM_CONFIG_REGISTRY: "https://registry.npmjs.org/",
+    });
+    const archive = join(base, requiredAsset(record, "tarball").name);
+    await writeFile(archive, tarball);
+    inspectMcpArchive(archive, record.registry.unpackedSize);
+    const clientVersion =
+      record.integration.runtimePins["@modelcontextprotocol/server"];
+    runCommand(
+      npmExecutable(),
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--save-exact",
+        "--registry=https://registry.npmjs.org/",
+        `@modelcontextprotocol/client@${clientVersion}`,
+        archive,
+      ],
+      { cwd: directory, env: npmEnvironment, inheritEnv: false },
+    );
+
+    const installed = join(
+      directory,
+      "node_modules",
+      "@covenant-org",
+      "timeline-mcp",
+    );
+    await Promise.all(
+      [
+        "LICENSE",
+        "README.md",
+        "dist/cli.js",
+        "dist/index.js",
+        "dist/index.js.map",
+        "dist/index.d.ts",
+        "dist/index.d.ts.map",
+      ].map((file) => access(join(installed, file))),
+    );
+    const installedManifest = parseStrictJson(
+      await readFile(join(installed, "package.json"), "utf8"),
+      "installed MCP package manifest",
+    );
+    assert(
+      isDeepStrictEqual(
+        sortedObject(installedManifest.dependencies ?? {}),
+        sortedObject(record.integration.runtimePins),
+      ),
+      "installed MCP dependencies do not match the release record",
+    );
+    assert(
+      !Object.values(installedManifest.dependencies ?? {}).some((version) =>
+        String(version).startsWith("workspace:"),
+      ),
+      "installed MCP package retained a workspace dependency",
+    );
+
+    const executable = join(
+      directory,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "timeline-mcp.cmd" : "timeline-mcp",
+    );
+    const version = runCommand(executable, ["--version"], {
+      cwd: directory,
+    }).trim();
+    assertEqual(version, record.release.version, "installed MCP CLI version");
+
+    const fixture = await loadCorrectionFixture();
+    await writeFile(
+      join(directory, "fixture.json"),
+      `${JSON.stringify(fixture)}\n`,
+      "utf8",
+    );
+    await copyFile(
+      join(root, "scripts/mcp-installed-smoke.mjs"),
+      join(directory, "smoke.mjs"),
+    );
+    const smoke = parseStrictJson(
+      runCommand(
+        process.execPath,
+        [join(directory, "smoke.mjs"), dataDirectory],
+        { cwd: directory },
+      ).trim(),
+      "installed MCP smoke result",
+    );
+    assertEqual(smoke.before, -100, "installed MCP historical conclusion");
+    assertEqual(smoke.after, 100, "installed MCP corrected conclusion");
+    assertEqual(
+      smoke.events,
+      fixture.events.length,
+      "installed MCP event count",
+    );
+    assertEqual(smoke.proofs, true, "installed MCP proof verification");
+    assertEqual(smoke.stderr, "", "installed MCP stderr");
+
+    runCommand(
+      npmExecutable(),
+      ["audit", "signatures", "--registry=https://registry.npmjs.org/"],
+      { cwd: directory, env: npmEnvironment, inheritEnv: false },
+    );
+    return { version, ...smoke, signatures: true };
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+}
+
+function inspectMcpArchive(path, expectedUnpackedSize) {
+  assertMcpArchiveEntries(
+    parseMcpTarListings(
+      runCommand("tar", ["-tzf", path], { env: tarEnvironment() }),
+      runCommand("tar", ["-tvzf", path], { env: tarEnvironment() }),
+    ),
+    { expectedUnpackedSize },
+  );
+}
+
+async function loadCorrectionFixture() {
+  const run = parseStrictJson(
+    await readFile(join(root, "examples/correction-replay/run.json"), "utf8"),
+    "correction replay run",
+  );
+  const before = parseStrictJson(
+    await readFile(
+      join(root, "examples/correction-replay/queries/before.json"),
+      "utf8",
+    ),
+    "correction replay before query",
+  );
+  const after = parseStrictJson(
+    await readFile(
+      join(root, "examples/correction-replay/queries/after.json"),
+      "utf8",
+    ),
+    "correction replay after query",
+  );
+  return {
+    contract: run.contract,
+    events: run.events.map(({ schema, sequence, ...event }) => event),
+    before: omitSchema(before),
+    after: omitSchema(after),
+  };
+}
+
+function omitSchema({ schema, ...value }) {
+  return value;
 }
 
 async function fetchJson(url, headers = {}) {
@@ -1199,6 +1614,25 @@ function relationshipKey(value) {
   ].join("\0");
 }
 
+function dependencyRelationship(source, target) {
+  return relationshipKey({
+    spdxElementId: source,
+    relationshipType: "DEPENDS_ON",
+    relatedSpdxElement: target,
+  });
+}
+
+function packageKey(name, version) {
+  return `${name}@${version}`;
+}
+
+function spdxPackageId(name, version) {
+  return `SPDXRef-Package-${`${name}-${version}`.replace(
+    /[^A-Za-z0-9.-]/g,
+    "-",
+  )}`;
+}
+
 function npmPurl(name, version) {
   if (!name.startsWith("@")) {
     return `pkg:npm/${encodeURIComponent(name)}@${version}`;
@@ -1207,8 +1641,30 @@ function npmPurl(name, version) {
   return `pkg:npm/${encodeURIComponent(scope)}/${encodeURIComponent(packageName)}@${version}`;
 }
 
+function npmMetadataUrl(name) {
+  return `https://registry.npmjs.org/${name.replace("/", "%2f")}`;
+}
+
 function workflowIdentity(record) {
   return `https://github.com/${record.workflow.repository}/${record.workflow.path}@refs/tags/${record.release.tag}`;
+}
+
+function publicationInvocationUrl(record) {
+  const attempt =
+    record.schema === "covenant.timeline.mcp-release-evidence.v1"
+      ? record.workflow.publicationAttempt
+      : record.workflow.attempt;
+  return `https://github.com/${record.workflow.repository}/actions/runs/${record.workflow.runId}/attempts/${attempt}`;
+}
+
+function sortedObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function tarEnvironment() {
+  return { ...process.env, LANG: "C", LC_ALL: "C" };
 }
 
 function hash(bytes, algorithm, encoding) {

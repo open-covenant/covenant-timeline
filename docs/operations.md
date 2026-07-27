@@ -2,16 +2,23 @@
 
 ## Deployment Boundary
 
-The package is a pure Node.js library and CLI. It opens no port, owns no
-database, starts no background task, and executes no command. Production
-availability, persistence, authorization, and effect dispatch belong to the
-adopter runtime.
+The core package is a pure Node.js library and CLI. It opens no port, owns no
+database, starts no background task, and executes no command.
+
+`@covenant-org/timeline-mcp` is an optional long-running local stdio process. It
+opens no port and makes no network request, but it owns canonical run files in
+an explicit data directory while the MCP client is connected. It is a
+single-host reference store, not a remote or multi-tenant service.
+
+Production authorization and effect dispatch always belong to the adopter
+runtime.
 
 ## Required Pins
 
 Record these values with every run and operational event:
 
 - Timeline package and source revision;
+- MCP server package and store-envelope version when used;
 - contract and event-stream digests;
 - schema and conformance revision;
 - adopter profile and independently pinned policy bytes or digest;
@@ -66,6 +73,17 @@ These are availability controls, not protocol maxima. Adopters should lower
 them to match their workload and isolate expensive verification from request
 threads.
 
+The MCP server applies lower defaults:
+
+- 256 locally stored runs;
+- 2,000 events and 4 MiB per stored run;
+- 1 MiB per incoming MCP message;
+- 32 axes and contexts;
+- 512 points, 256 intervals, and 1,024 assertions;
+- 4,096 solver edges and 2,000,000 operations per request.
+
+The MCP limits are enforced independently from the broader core defaults.
+
 ## Dispatch and Recovery
 
 Persist the event and resulting state before dispatching a newly emitted
@@ -97,6 +115,31 @@ exclusive `.lock` file containing only a schema, process ID, and creation time.
 After an unclean process exit, confirm that no writer with that process ID is
 active before removing a stale lock. Never automate lock removal by age alone.
 
+### MCP persistence and recovery
+
+Give the MCP server a dedicated absolute data-directory path on a local
+filesystem. On POSIX, the server creates its directory and files with owner-only
+modes; an existing parent or data directory must already have suitable access
+controls. On Windows, configure a user-private ACL. Do not place the reference
+store on NFS, SMB, or another shared filesystem.
+
+Each append requires the current whole-run digest. The server validates the
+complete candidate run, writes canonical bytes to a private temporary file,
+syncs it, and atomically replaces the stored envelope under an exclusive lock.
+Exact event-ID retries are idempotent even if the supplied digest is stale.
+
+After `timeline.mcp.store.indeterminate`, reload the run before retrying because
+the write may have committed. After an unclean exit, verify that no writer is
+active before removing either a run lock or `.catalog.lock`; the server never
+steals locks based on age. A crash before replacement can also leave a hidden
+`.tmp` file. Once every writer is stopped, that uncommitted temporary file may
+be removed.
+
+Back up the canonical `.json` files only while the server is stopped or through
+a filesystem snapshot that preserves point-in-time consistency. A restored
+file is accepted only if its canonical envelope, run identity, revision, and
+whole-run digest all verify.
+
 ## Incident Response
 
 - Stop dispatch while preserving read-only replay.
@@ -127,6 +170,12 @@ For a release tag:
    the current remote tag, workflow identity, and registry metadata;
 6. retain the machine-readable release record and rollback or deprecation
    instructions.
+
+The MCP package uses independent tags named
+`timeline-mcp-v<mcp-package-version>`. Its workflow runs the full repository
+verification, builds the MCP tarball twice, checks installed stdio restart and
+proof behavior, emits a separate checksum and SPDX SBOM, creates GitHub build
+and SBOM attestations, and publishes with npm provenance.
 
 An alpha release may use the documented short-lived token fallback. Record the
 authentication path, remove the environment secret after the run, revoke the

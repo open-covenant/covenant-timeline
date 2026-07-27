@@ -17,6 +17,14 @@ envelopes and derives claims; the public corpus includes a five-day source run;
 the Temporal adapter survives a worker restart against a real local server; and
 the Python reducer agrees with the TypeScript corpus.
 
+The local MCP alpha adds a bounded stdio integration for the temporal
+substrate. It persists canonical runs across process restarts, uses
+whole-run-digest compare-and-swap for appends, replays corrections at explicit
+knowledge cuts, and returns receipts verified before they leave the server.
+Its package and release paths reproduce and inspect exact archive bytes, include
+the full production dependency graph in the SBOM, and distinguish npm
+publication from a later successful workflow retry.
+
 This is still a production-hardened alpha, not an independently proven
 production protocol. The Temporal.io adapter and Python checkpoint reducer are
 maintained in this repository. The external project represented by the public
@@ -42,9 +50,9 @@ This audit treats "production ready" as two separate gates:
    an independently maintained implementation verifies the same runs, and
    release governance is independently exercised.
 
-The first gate is achievable in this repository. The second requires external
-adopters and independently exercised governance and must remain an explicit
-blocker until observed.
+The current repository satisfies the first gate for local alpha use. The second
+requires external adopters and independently exercised governance and remains
+an explicit blocker until observed.
 
 ## Temporal-first v0alpha3 addendum
 
@@ -121,12 +129,13 @@ graph exhaustion, and temporal-data privacy.
     conversations; the rule applies to administrators and blocks force pushes
     and deletion;
   - the active `Protect timeline release tags` ruleset prevents updates and
-    deletion of `timeline-v*` tags without a bypass actor;
+    deletion of `timeline-v*` and `timeline-mcp-v*` tags without a bypass
+    actor;
   - Dependabot security updates, secret scanning, and push protection were
     enabled during this audit;
   - immutable Actions SHA enforcement was enabled during this audit;
-  - the `npm` environment permits only `timeline-v*` tags and contains no npm
-    token secret, but it has no required reviewer;
+  - the `npm` environment permits only `timeline-v*` and `timeline-mcp-v*` tags
+    and contains no npm token secret, but it has no required reviewer;
   - trusted publisher linkage remains unconfigured; alpha.2 used a short-lived
     scoped token fallback, after which the environment secret was removed, the
     token was revoked, and an authentication check confirmed it no longer
@@ -153,6 +162,26 @@ graph exhaustion, and temporal-data privacy.
     functions, and 85.42% lines; and
   - a 500-point, 499-constraint chain returned bounds `499..998`, verified its
     receipt, and measured a 31.42 ms median on Node.js 24.14.0.
+- Local MCP alpha verification on 2026-07-27:
+  - 22 store, server, CLI, stdio-limit, restart, correction, and receipt tests
+    passed;
+  - coverage measured 88.80% statements, 79.16% branches, 96.96% functions,
+    and 90.88% lines;
+  - the installed archive smoke used the registry-published core package,
+    crossed a server restart, replayed the pre-correction and corrected cuts,
+    and independently verified both receipts;
+  - the archive allowlist rejected extra members, non-regular entries, and more
+    than 8 MiB of aggregate member bytes before installation, and the release
+    path produced byte-identical archives from two clean builds;
+  - the MCP SPDX test covered the complete seven-package production dependency
+    graph; and
+  - 23 release-evidence tests covered closed record shape, exact artifacts,
+    provenance identity, successful and publication workflow attempts,
+    credentials, integration pins, and full-graph SBOM substitution.
+- `pnpm audit` and `pnpm audit --prod` reported no known findings on
+  2026-07-27. The MCP integration uses the split Model Context Protocol v2
+  packages at exact `2.0.0-beta.5` versions; beta API stability remains an
+  explicit upgrade risk.
 
 ## Critical Issues (P0 - Block Release)
 
@@ -181,8 +210,9 @@ graph exhaustion, and temporal-data privacy.
       fallback.
 - [x] **Protect `main` and release tags.** `main` now requires the seven observed
       first-party checks and pull-request flow with administrator enforcement;
-      force pushes and deletion are disabled. `timeline-v*` tags cannot be
-      updated or deleted under the active no-bypass ruleset.
+      force pushes and deletion are disabled. `timeline-v*` and
+      `timeline-mcp-v*` tags cannot be updated or deleted under the active
+      no-bypass ruleset.
 - [x] **Establish registry package authority.**
       `@covenant-org/timeline@0.0.0-alpha.2` was published from the protected
       release tag with npm provenance, GitHub build and SBOM attestations, and
@@ -231,6 +261,11 @@ graph exhaustion, and temporal-data privacy.
 - [x] **Document the threat and trust model.** State assets, trust boundaries,
       attacker capabilities, replay/effect abuse paths, privacy constraints,
       and adopter obligations.
+- [x] **Provide a bounded agent integration.** The local stdio MCP server
+      exposes five explicit tools and one portable run resource, persists
+      canonical runs with crash-aware replacement and writer locks, bounds
+      messages, runs, events, bytes, graph work, and proof output, and labels
+      direct writes as unauthenticated.
 - [ ] **Validate the model boundary.** The versioned harness, corpus, and scorer
       now compare Timeline-assisted reasoning with a narrative-memory baseline
       while preserving invalid output and unsupported definite answers as
@@ -268,6 +303,10 @@ graph exhaustion, and temporal-data privacy.
       and require `npm` environment reviewers. This is preferred supply-chain
       hardening for beta and stable releases; the short-lived token path remains
       acceptable for alpha releases.
+- [ ] **Stabilize the MCP SDK dependency.** The server pins the split v2 SDK
+      exactly and its current dependency graph audits cleanly, but the selected
+      SDK release is still a beta. Re-evaluate the pin when a compatible stable
+      v2 release is available.
 
 ## Low Priority (P3 - Technical Debt)
 
@@ -297,6 +336,7 @@ graph exhaustion, and temporal-data privacy.
 - Profile-specific collector output entering evidence admission.
 - Commands leaving the pure reducer for an effect adapter.
 - Receipts returning from an effect adapter.
+- Local MCP messages and files entering the reference store.
 - GitHub Actions publishing to npm.
 
 ### Principal Risks
@@ -311,9 +351,15 @@ graph exhaustion, and temporal-data privacy.
   not a network call performed by generic replay.
 - A collector key compromise remains authoritative until the host loads policy
   bytes that bind a revocation list containing that key.
-- Repeated accepted evaluations create multiple executable commands.
 - Claims are declarative and can be self-asserted unless a host validates
   producer authority and payload integrity.
+- Direct MCP writes can admit structurally valid but false model output unless
+  the host authenticates evidence and applies an admission policy.
+- A process with write access to the MCP data directory can replace or delete
+  run files; canonicalization and digests detect malformed or internally
+  inconsistent records, not host compromise.
+- The reference MCP file store coordinates one local filesystem. Shared network
+  filesystems and multiple machines require a different persistence adapter.
 - Receipt status and effect digest are declarations unless the host validates
   them against the external system.
 - Duplicate JSON keys and unbounded input create ambiguity and denial-of-service
@@ -342,6 +388,13 @@ restart; it does not pretend that a process-local projection is a portable
 snapshot. Trend storage and snapshot hydration should wait for an independent
 host to demonstrate need.
 
+The MCP reference store separately limits a run to 2,000 events and 4 MiB,
+limits a directory to 256 runs, and limits incoming protocol messages to
+1 MiB. Every append validates the complete candidate run and uses the current
+whole-run digest as its compare-and-swap token. These limits make local alpha
+behavior bounded; they are not throughput claims for a remote or multi-tenant
+service.
+
 ## Observability Assessment
 
 The generic library is correctly free of implicit logging and network calls.
@@ -363,8 +416,8 @@ Recommended host metrics:
 
 1. Run an external model through the public smoke harness, then complete the
    preregistered blinded scale evaluation before any efficacy claim.
-2. Obtain one externally operated temporal pilot using the published pilot
-   contract.
+2. Publish the local MCP alpha, then obtain one externally operated temporal
+   pilot using the published pilot contract.
 3. Add an independently maintained implementation of the temporal RFC before
    any beta interoperability claim.
 4. Exercise accepted-decision correction and branch semantics only from a real
@@ -388,6 +441,9 @@ Recommended host metrics:
   the supported maximum remains subsecond locally.
 - OIDC trusted publishing and a required `npm` environment reviewer remain
   unconfigured.
+- No public registry or provenance evidence for the MCP package has been
+  recorded yet; local package and release checks do not substitute for that
+  release evidence.
 
 ## Action Plan
 

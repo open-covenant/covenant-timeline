@@ -4,6 +4,10 @@
 
 ### Added
 
+- Add a checked correction-and-replay example with before, inconsistent
+  transition, and after knowledge cuts; content-bound evidence documents; exact
+  conclusion fixtures; verifier-checked proofs; and a repository command that
+  reproduces the complete artifact.
 - Add the model-interface v1 development benchmark: 12 kernel-derived temporal
   cases, paired direct, narrative-memory, and Timeline arms, a one-shot JSONL adapter
   protocol, strict admission and capacity limits, replayable request and
@@ -24,6 +28,16 @@
 
 ### Changed
 
+- Lead the repository and npm package with the long-running-agent correction
+  workflow, one installable temporal API, the actual proof receipt, and explicit
+  distinctions from event sourcing, bitemporal databases, established STN
+  mathematics, and Temporal.io.
+- Define civil-time normalization and derivation-versus-evidence trust as
+  deployment boundaries, and present older checkpoint surfaces only as
+  compatibility APIs.
+- Rank a local stdio MCP integration after the model benchmark, define its
+  unauthenticated admission boundary, and add a 90-day evidence threshold for
+  continued standalone product expansion.
 - Refocus the public roadmap on model reliability, an external temporal pilot,
   and an independently maintained implementation, with a blinded scale
   evaluation required before any model-performance claim.

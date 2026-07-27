@@ -2,7 +2,7 @@
   "name": "covenant-timeline",
   "version": "0.0.0",
   "private": true,
-  "description": "Temporal reasoning research program and checkpoint verifier for AI systems.",
+  "description": "Verifiable temporal state for long-running agents.",
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.31.0",
@@ -20,6 +20,7 @@
     "replay:benchmark": "pnpm build && node scripts/benchmark-replay.mjs",
     "coverage:check": "pnpm -r --if-present coverage",
     "demo": "pnpm build && node packages/prototype/dist/cli.js verify conformance/v0alpha1/runs/successful.json",
+    "examples:test": "pnpm build && node --test scripts/correction-replay.test.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "github-profile:check": "pnpm build && node scripts/check-github-profile.mjs",
@@ -38,9 +39,10 @@
     "test": "pnpm -r --if-present test",
     "timeline": "node packages/prototype/dist/cli.js",
     "temporal:benchmark": "pnpm build && node scripts/benchmark-temporal.mjs",
+    "temporal:correction-demo": "pnpm build && node examples/correction-replay.mjs",
     "temporal:demo": "pnpm build && node examples/temporal-reasoning.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm model-eval:test && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm examples:test && pnpm model-eval:test && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

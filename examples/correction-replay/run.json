@@ -1,0 +1,113 @@
+{
+  "schema": "covenant.timeline.run.v0alpha3",
+  "contract": {
+    "schema": "covenant.timeline.contract.v0alpha3",
+    "id": "release.correction-replay.v1",
+    "subject": {
+      "kind": "repository",
+      "id": "example/service"
+    },
+    "axes": [
+      {
+        "id": "utc-seconds",
+        "kind": "metric",
+        "unit": "second",
+        "origin": "release-42.utc-origin.v1"
+      }
+    ],
+    "contexts": [
+      {
+        "id": "actual",
+        "mode": "actual"
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event.review-declared",
+      "sequence": 0,
+      "type": "point.declared",
+      "point": {
+        "id": "review-finished",
+        "contextId": "actual",
+        "axisId": "utc-seconds"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event.deploy-declared",
+      "sequence": 1,
+      "type": "point.declared",
+      "point": {
+        "id": "deployed",
+        "contextId": "actual",
+        "axisId": "utc-seconds"
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event.review-v1",
+      "sequence": 2,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "review.v1",
+        "contextId": "actual",
+        "pointId": "review-finished",
+        "coordinate": {
+          "minimum": 100,
+          "maximum": 100
+        },
+        "evidenceRefs": [
+          "sha256:155e2d17af309f2d48f0e669612dedc1bbd0dbed16cd91083785d052f7dd0f48"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event.deploy-v1",
+      "sequence": 3,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "deploy.v1",
+        "contextId": "actual",
+        "pointId": "deployed",
+        "coordinate": {
+          "minimum": 200,
+          "maximum": 200
+        },
+        "evidenceRefs": [
+          "sha256:109ee5e9cd3589220dbabc26c0d5905569a91b2801a9b233ce140f12ed125a07"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event.review-v2",
+      "sequence": 4,
+      "type": "coordinate.asserted",
+      "assertion": {
+        "id": "review.v2",
+        "contextId": "actual",
+        "pointId": "review-finished",
+        "coordinate": {
+          "minimum": 300,
+          "maximum": 300
+        },
+        "evidenceRefs": [
+          "sha256:51566a984160fde3e4aa679dc27fa6003a46fe1579900de074f978105fcd15da"
+        ]
+      }
+    },
+    {
+      "schema": "covenant.timeline.event.v0alpha3",
+      "id": "event.review-v1-retracted",
+      "sequence": 5,
+      "type": "assertion.retracted",
+      "assertionId": "review.v1",
+      "evidenceRefs": [
+        "sha256:51566a984160fde3e4aa679dc27fa6003a46fe1579900de074f978105fcd15da"
+      ]
+    }
+  ]
+}

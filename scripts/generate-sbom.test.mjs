@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import test from "node:test";
 
-const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
 
 for (const packageDirectory of ["packages/prototype", "packages/mcp-server"]) {
@@ -15,7 +13,7 @@ for (const packageDirectory of ["packages/prototype", "packages/mcp-server"]) {
     const output = join(directory, "sbom.json");
 
     try {
-      await run(
+      run(
         process.execPath,
         ["scripts/generate-sbom.mjs", output, packageDirectory],
         {
@@ -70,8 +68,8 @@ for (const packageDirectory of ["packages/prototype", "packages/mcp-server"]) {
 }
 
 async function resolvedGraph(packageName) {
-  const { stdout } = await run(
-    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+  const stdout = run(
+    command("pnpm"),
     [
       "--filter",
       packageName,
@@ -104,4 +102,25 @@ async function resolvedGraph(packageName) {
 
   await visit(listedRoot);
   return { packages, relationships };
+}
+
+function command(name) {
+  return process.platform === "win32" ? `${name}.cmd` : name;
+}
+
+function run(executable, args, options = {}) {
+  const result = spawnSync(executable, args, {
+    ...options,
+    encoding: "utf8",
+    shell: process.platform === "win32" && executable.endsWith(".cmd"),
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      [result.error?.message, result.stdout, result.stderr]
+        .filter(Boolean)
+        .join("\n")
+        .trim(),
+    );
+  }
+  return result.stdout;
 }

@@ -3,8 +3,12 @@
 This guide describes the experimental v0alpha3 interface between a language
 model and Covenant Timeline's deterministic temporal kernel.
 
-The model extracts meaning. Timeline checks temporal consequences. Neither
-operation authenticates the source.
+The model proposes a temporal representation, Timeline checks its consequences,
+and the host authenticates source evidence before admitting records.
+
+For adapter development and a controlled smoke comparison with direct prompting
+and narrative memory, use the public
+[model-interface v1 benchmark](./model-evaluation.md).
 
 ```text
 source material
@@ -54,8 +58,8 @@ The first kernel supports:
 | `interval.relations`  | possible relations from the 13 Allen interval base relations |
 
 Each query carries `recordedThrough`. `null` means the empty event prefix; an
-integer includes events through that sequence. There is no ambient “now” or
-implicit latest cut.
+integer includes events through that sequence. This field explicitly selects
+the knowledge cut for every query.
 
 ## TypeScript loop
 
@@ -119,7 +123,11 @@ Measure failures separately:
 This separation is required to tell whether Timeline improves temporal
 reasoning rather than merely changing the prompt.
 
-Using this API as a tool is tool-integrated temporal reasoning. Calling it
-inside a constrained generation loop is inference-integrated temporal
-reasoning. Neither warrants a claim that temporal reasoning is native to model
-weights.
+This API implements the tool-integrated layer described in the
+[temporal reasoning vision](./temporal-reasoning-vision.md).
+
+The benchmark keeps model output unmodified across this boundary: the host does
+not renumber events, replace identifiers, repair references, or synthesize
+missing assertions. See the
+[benchmark protocol](../benchmarks/model-interface/v1/README.md) for the exact
+one-shot JSONL adapter contract and failure accounting.

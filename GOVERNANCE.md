@@ -1,10 +1,13 @@
 # Governance
 
-## Current stage
+## Bootstrap stage
 
-Covenant Timeline is in bootstrap governance. Open Covenant controls repository
-administration and appoints the initial maintainers. Normative decisions,
-rejected alternatives, and material dissent are recorded publicly.
+Open Covenant administers the repository and appoints maintainers during
+bootstrap. The project does not present this arrangement as neutral multi-party
+governance.
+
+Normative decisions, rejected alternatives, and material dissent are recorded
+publicly.
 
 ## Roles
 
@@ -13,33 +16,30 @@ rejected alternatives, and material dissent are recorded publicly.
 - **Maintainer:** merges changes and stewards protocol quality.
 - **Release steward:** prepares and verifies releases.
 - **Security responder:** handles private reports and coordinated disclosure.
-- **Technical Steering Committee:** inactive until the charter transition gate.
 
-An author cannot be the sole approver of normative, security, release,
-cryptographic, or effect-boundary changes once a second eligible reviewer
-exists. During single-maintainer bootstrap, self-approval must be disclosed and
-cannot freeze a stable rule.
-
-Appointments, removals, employment conflicts, material sponsorship, and funding
-that could affect decisions are disclosed publicly.
+Appointments, removals, employment conflicts, material sponsorship, and
+funding that could affect decisions are disclosed publicly.
 
 ## Decisions
 
-Routine implementation changes require maintainer review. Normative semantics,
-schemas, canonicalization, cryptography, effect boundaries, compatibility,
-releases, and governance require an RFC.
+Routine implementation, documentation, benchmark, fixture, and adapter changes
+use normal pull-request review.
 
-Security and cryptography RFCs also require an eligible reviewer before
+An RFC is required for normative semantics, schemas, canonicalization,
+cryptography, effect boundaries, compatibility policy, release policy, or
+governance. Security and cryptography RFCs require an eligible reviewer before
 acceptance. Emergency private fixes are permitted, followed by an advisory or
 retrospective decision record after disclosure.
 
-## Steering transition
+An author cannot be the sole approver of a normative, security, release,
+cryptographic, or effect-boundary change once a second eligible reviewer
+exists. Self-approved normative changes remain provisional until a second
+eligible maintainer reviews them.
 
-After the charter thresholds are satisfied, an accepted RFC may activate a
-Technical Steering Committee. It must have an odd number of at least three
-members, no organization may hold more than half the seats, and each member has
-one vote. Normal decisions use a simple majority; charter and governance
-changes require two thirds.
+## Governance transition
 
-Maintainers may move to emeritus status after six months without implementation,
-review, release, governance, or incident-response work, following public notice.
+The transition conditions are defined in the [project charter](./CHARTER.md).
+Once they are satisfied, participating maintainers and implementers may propose
+a neutral decision-making body through an RFC. Its membership and voting rules
+should reflect the contributors who exist at that time rather than a committee
+designed in advance.

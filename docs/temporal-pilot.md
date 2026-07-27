@@ -1,11 +1,16 @@
 # Independent temporal pilot
 
-This pilot is the smallest credible external operation of experimental
-v0alpha3. It is for a maintainer, model developer, or runtime team willing to
-use Timeline in one real workflow and publish redacted evidence.
+Run Timeline in one external long-running-agent workflow and publish a redacted
+artifact that another process can replay and verify. The result should identify
+one operational benefit, failure, or required contract change.
 
-It does not require a partnership, hosted Covenant service, or production
-authorization.
+An operator can run the pilot independently with the npm package. No hosted
+Covenant service or formal partnership is required.
+
+Teams that are not ready to operate a workflow can start with the public
+[model-interface v1 smoke benchmark](../benchmarks/model-interface/v1/README.md).
+The [roadmap](../ROADMAP.md) defines how that development suite, this pilot, and
+independent implementation evidence fit together.
 
 ## Candidate workflow
 
@@ -81,7 +86,8 @@ The pilot passes when:
 - another process can reproduce each semantic result from exported bytes;
 - every supplied proof receipt verifies;
 - an earlier knowledge cut remains unchanged after a later correction;
-- record sequence is never presented as occurrence time;
+- reported occurrence times come from admitted temporal assertions rather than
+  record arrival order;
 - ambiguous results remain ambiguous; and
 - the operator identifies at least one concrete benefit, failure, or required
   contract change.
@@ -93,7 +99,8 @@ operational benefit should be published as such.
 
 1. Install `@covenant-org/timeline@0.0.0-alpha.2` or run
    `pnpm temporal:demo` from a source checkout.
-2. Read [the model interface](./model-interface.md).
+2. Read [the model interface](./model-interface.md). If a model will propose
+   records, validate its adapter with the public v1 smoke benchmark.
 3. Comment on the
    [independent pilot issue](https://github.com/open-covenant/covenant-timeline/issues/21)
    with the workflow and expected artifacts.

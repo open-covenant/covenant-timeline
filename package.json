@@ -24,6 +24,9 @@
     "format:check": "prettier --check .",
     "github-profile:check": "pnpm build && node scripts/check-github-profile.mjs",
     "lint": "pnpm -r --if-present lint",
+    "model-eval:run": "pnpm build && node scripts/run-model-interface-eval.mjs",
+    "model-eval:score": "pnpm build && node scripts/score-model-interface-eval.mjs",
+    "model-eval:test": "pnpm build && node --test scripts/model-interface-eval.test.mjs",
     "pack:check": "node scripts/check-package.mjs",
     "public-runs:check": "pnpm build && node scripts/longitudinal-github-run.mjs verify --out examples/public-runs/temporal-sdk-typescript-pr-2219.json",
     "release:check": "node scripts/check-release.mjs",
@@ -36,7 +39,7 @@
     "temporal:benchmark": "pnpm build && node scripts/benchmark-temporal.mjs",
     "temporal:demo": "pnpm build && node examples/temporal-reasoning.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
+    "verify": "pnpm format:check && pnpm boundary:check && pnpm spec:check && pnpm release:evidence:check && pnpm release:evidence:test && pnpm conformance:check && pnpm model-eval:test && pnpm github-profile:check && pnpm public-runs:check && pnpm lint && pnpm typecheck && pnpm coverage:check && pnpm pack:check"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

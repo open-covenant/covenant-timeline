@@ -8,7 +8,8 @@ Portable, proof-carrying temporal reasoning for AI systems.
 An agent schedules a release after a security review. Days later, new evidence
 shows that the review finished after deployment. Timeline reconstructs what the
 agent could conclude at each point, incorporates the correction without
-rewriting history, and returns a verifiable proof for both conclusions.
+rewriting history, and returns a machine-checkable derivation of what follows
+from the records before and after the correction.
 
 Covenant Timeline is a portable temporal reasoning substrate for model-backed
 applications. Its deterministic kernel reasons over typed temporal records,
@@ -17,6 +18,7 @@ produces conclusions that can be replayed across processes and runtimes.
 
 [Install and run](#install-and-run) ·
 [Integrate a model](./docs/model-interface.md) ·
+[Run the model benchmark](./docs/model-evaluation.md) ·
 [Build a second implementation](https://github.com/open-covenant/covenant-timeline/issues/19) ·
 [See release status](#release-status)
 
@@ -64,11 +66,10 @@ material. Their assertions remain proposals until the host validates shape,
 provenance, and authority. Timeline then computes what follows from the accepted
 records, and a verifier checks the proof against the same run and query.
 
-Kernel correctness and extraction quality are separate concerns. Production
-evaluations should measure unsupported assertions, missing assertions, and
-source-link errors independently from proof verification. The
-[model interface](./docs/model-interface.md) defines the complete admission
-path.
+The [model interface](./docs/model-interface.md) defines this admission path.
+The [model-interface benchmark](./benchmarks/model-interface/v1/README.md)
+measures extraction, admission, and proof verification separately while
+comparing direct text, narrative memory, and Timeline state.
 
 ## Temporal model
 
@@ -167,6 +168,15 @@ adoption work are focused on long-running agents and software delivery.
 
 ## Adoption path
 
+Start by testing the model boundary. The
+[model-interface benchmark](./docs/model-evaluation.md) provides 12 temporal
+scenarios, a vendor-neutral JSONL adapter protocol, strict failure accounting,
+and paired scoring across three interfaces. This public v1 suite is a
+development and smoke benchmark. No model result has been published, and the
+visible corpus does not establish a general performance gain. The
+[roadmap](./ROADMAP.md) defines the blinded scale evaluation required to close
+the model-interface gate.
+
 Begin with one bounded temporal question:
 
 1. Export the evidence required to answer the question.
@@ -176,9 +186,9 @@ Begin with one bounded temporal question:
 5. Correct or retract one assertion and replay from a prior knowledge cut.
 6. Restart in a clean process and verify the exported result.
 
-A pilot succeeds when the same admitted run and query produce the same
-conclusion digest, the proof passes a separate verification call, and actual,
-planned, forecast, and hypothetical records remain isolated.
+A pilot succeeds when an external operator publishes a redacted run whose
+conclusions another process can reproduce and verify, together with one
+measured benefit, failure, or required contract change.
 
 Use the [temporal pilot](./docs/temporal-pilot.md) for the executable path and
 the [model interface](./docs/model-interface.md) for the integration contract.
@@ -187,7 +197,7 @@ the [model interface](./docs/model-interface.md) for the integration contract.
 
 Timeline is seeking an independent implementation of Draft RFC 0009. The
 smallest useful contribution can begin with projection, consistency, and
-difference bounds in any language other than TypeScript. See
+difference bounds in a separately maintained codebase, in any language. See
 [issue #19](https://github.com/open-covenant/covenant-timeline/issues/19) for
 the conformance target, acceptance evidence, and maintainer support.
 
@@ -268,11 +278,11 @@ adapter and runtime policy.
 
 | Area              | Entry points                                                                                                                                                                                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model integration | [Model interface](./docs/model-interface.md), [temporal pilot](./docs/temporal-pilot.md), [temporal reasoning vision](./docs/temporal-reasoning-vision.md)                                                                                                       |
+| Model integration | [Model interface](./docs/model-interface.md), [model evaluation](./docs/model-evaluation.md), [benchmark protocol](./benchmarks/model-interface/v1/README.md)                                                                                                    |
 | Contract          | [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md), [`spec/v0alpha3`](./spec/v0alpha3), [`schemas/v0alpha3`](./schemas/v0alpha3), [`conformance/v0alpha3`](./conformance/v0alpha3)                                                                    |
 | Reference code    | [`packages/prototype`](./packages/prototype)                                                                                                                                                                                                                     |
 | Compatibility     | [Temporal.io v0alpha2 checkpoint adapter](./packages/temporal-adapter), [Python v0alpha1/v0alpha2 checkpoint reducer](./implementations/python), [v0alpha2 checkpoint public run](./examples/public-runs), [checkpoint adoption guide](./docs/adoption-guide.md) |
-| Adoption          | [Temporal pilot](./docs/temporal-pilot.md), [second-implementation issue](https://github.com/open-covenant/covenant-timeline/issues/19)                                                                                                                          |
+| Adoption          | [Model-interface benchmark](./benchmarks/model-interface/v1/README.md), [temporal pilot](./docs/temporal-pilot.md), [second-implementation issue](https://github.com/open-covenant/covenant-timeline/issues/19)                                                  |
 | Operations        | [Operations guide](./docs/operations.md), [threat model](./docs/threat-model.md), [production audit](./docs/production-audit-timeline.md)                                                                                                                        |
 
 ## Verify
@@ -281,6 +291,7 @@ adapter and runtime policy.
 pnpm install --frozen-lockfile
 pnpm verify
 pnpm temporal:benchmark
+pnpm model-eval:test
 ```
 
 The repository is Apache-2.0 licensed. See

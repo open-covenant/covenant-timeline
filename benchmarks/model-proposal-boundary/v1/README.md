@@ -1,8 +1,8 @@
 # Model-proposal boundary benchmark v1
 
 This benchmark tests whether a language model can turn temporal evidence into a
-compiler-valid `TemporalModelProposalV1`. The host supplies opaque handles and a
-request-scoped output schema. Covenant Timeline compiles a valid proposal into
+compiler-valid `TemporalModelProposalV1`. The host supplies request-scoped
+handles and an output schema. Covenant Timeline compiles a valid proposal into
 candidate events and a candidate query, reasons over the candidate run, and
 verifies the resulting proof receipt.
 
@@ -58,11 +58,13 @@ run. The failed proposal is never repaired or silently rewritten.
 
 The model input contains:
 
-- an opaque request ID, outside `input`;
+- a request-scoped request ID, outside `input`;
 - the natural-language question;
 - current evidence records;
-- uniformly generated, opaque reference handles with model-visible labels;
-- active assertions and completed knowledge cuts from the rolling run; and
+- uniformly generated reference handles with model-visible labels;
+- active assertions with request-scoped targets, labels or meanings, contexts,
+  and proposal-shaped bounds, plus completed knowledge cuts from the rolling
+  run; and
 - the exact provider output schema generated from the host-owned run and
   catalogs.
 
@@ -90,9 +92,10 @@ request, prompt interpolation, provider schema, or prior messages.
 Reference catalogs are built uniformly from the contract, declared temporal
 objects, controlled entity labels, and rolling run. They must not be selected
 or named using a gold event, gold query, expected bound, or expected result.
-Evidence IDs and handles are opaque stable identifiers. The schema generator
-receives the same host later supplied to the compiler and may not inspect
-evaluator metadata.
+Evidence IDs and handles are stable within one request. Reference-handle
+prefixes identify their type and construction order; they do not encode gold
+events, bounds, queries, or answers. The schema generator receives the same
+host later supplied to the compiler and may not inspect evaluator metadata.
 
 Every adapter request is independent. The adapters send no client-side
 conversation, thread, tool state, or prior response across observations.

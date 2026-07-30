@@ -19,7 +19,7 @@ const cases = (await readFile(casesPath, "utf8"))
   .map(JSON.parse);
 const casesById = new Map(cases.map((testCase) => [testCase.id, testCase]));
 
-test("opaque proposal boundary reproduces every gold trajectory", () => {
+test("request-scoped proposal boundary reproduces every gold trajectory", () => {
   let evaluatedCuts = 0;
 
   for (const testCase of cases) {

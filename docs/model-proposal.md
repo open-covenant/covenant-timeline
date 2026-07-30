@@ -311,10 +311,11 @@ quote limits, catalog resolution, range ordering, proposal bytes and depth, and
 candidate construction. A provider accepting the schema is not evidence that
 its output is safe to admit.
 
-Supersession choices are grouped by assertion kind to keep provider grammars
-bounded. The compiler still requires the selected assertion to match the
-change's context and target; a category-valid but incompatible choice rejects
-the complete proposal.
+Supersession choices are grouped by compatible target. A coordinate change can
+select only active coordinate assertions for the same point and context; a
+constraint change can select only active constraints with the same oriented
+point pair and context. The compiler repeats those checks and remains
+authoritative.
 
 The
 [candidate schema](../schemas/model-proposal/v1/candidate.schema.json) validates

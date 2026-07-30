@@ -793,13 +793,18 @@ function validateModelProposalOutputReferencePair(
 
 interface ModelProposalOutputScope {
   readonly activeAssertionHandles: readonly string[];
-  readonly constraintAssertionHandles: readonly string[];
-  readonly coordinateAssertionHandles: readonly string[];
+  readonly constraintTargets: readonly ModelProposalOutputTargetGroup[];
+  readonly coordinateTargets: readonly ModelProposalOutputTargetGroup[];
   readonly currentEvidenceIds: readonly string[];
   readonly cutHandles: readonly string[];
   readonly referenceHandles: Readonly<
     Record<TemporalModelReferenceCatalogEntryV1["type"], readonly string[]>
   >;
+}
+
+interface ModelProposalOutputTargetGroup {
+  readonly assertionHandles: readonly string[];
+  readonly targetHandles: readonly string[];
 }
 
 function buildModelProposalOutputSchema(
@@ -978,31 +983,109 @@ function collectModelProposalOutputScope(
   }
 
   const activeAssertionHandles: string[] = [];
-  const constraintAssertionHandles: string[] = [];
-  const coordinateAssertionHandles: string[] = [];
+  const activeAssertions: {
+    readonly assertion: AssertionRecord;
+    readonly handle: string;
+  }[] = [];
   for (const [handle, assertionId] of prepared.catalogs.assertions) {
     if (!prepared.activeAssertions.has(assertionId)) continue;
     const assertion = prepared.assertions.get(assertionId);
     if (!assertion) continue;
     activeAssertionHandles.push(handle);
-    if (assertion.kind === "constraint") {
-      constraintAssertionHandles.push(handle);
-    } else if (assertion.kind === "coordinate") {
-      coordinateAssertionHandles.push(handle);
-    }
+    activeAssertions.push({ assertion, handle });
   }
   activeAssertionHandles.sort(compareStrings);
-  constraintAssertionHandles.sort(compareStrings);
-  coordinateAssertionHandles.sort(compareStrings);
+  activeAssertions.sort((left, right) =>
+    compareStrings(left.handle, right.handle),
+  );
 
   return {
     activeAssertionHandles,
-    constraintAssertionHandles,
-    coordinateAssertionHandles,
+    constraintTargets: groupModelProposalOutputTargets(
+      prepared,
+      activeAssertions,
+      "difference",
+    ),
+    coordinateTargets: groupModelProposalOutputTargets(
+      prepared,
+      activeAssertions,
+      "point",
+    ),
     currentEvidenceIds,
     cutHandles: [...prepared.catalogs.cuts.keys()].sort(compareStrings),
     referenceHandles,
   };
+}
+
+function groupModelProposalOutputTargets(
+  prepared: PreparedModelProposalHost,
+  activeAssertions: readonly {
+    readonly assertion: AssertionRecord;
+    readonly handle: string;
+  }[],
+  type: "difference" | "point",
+): readonly ModelProposalOutputTargetGroup[] {
+  const groups = new Map<
+    string,
+    { assertionHandles: string[]; targetHandles: string[] }
+  >();
+  const references = [...prepared.catalogs.references]
+    .filter(([, reference]) => reference.type === type)
+    .sort(([left], [right]) => compareStrings(left, right));
+
+  for (const [targetHandle, reference] of references) {
+    const assertionHandles = activeAssertions
+      .filter(({ assertion }) =>
+        modelProposalAssertionMatchesTarget(
+          assertion,
+          reference,
+          prepared.declarations,
+        ),
+      )
+      .map(({ handle }) => handle);
+    const key = canonicalJson(assertionHandles);
+    const group = groups.get(key);
+    if (group) {
+      group.targetHandles.push(targetHandle);
+    } else {
+      groups.set(key, {
+        assertionHandles,
+        targetHandles: [targetHandle],
+      });
+    }
+  }
+
+  return [...groups.values()].map(({ assertionHandles, targetHandles }) => ({
+    assertionHandles: Object.freeze([...assertionHandles]),
+    targetHandles: Object.freeze([...targetHandles]),
+  }));
+}
+
+function modelProposalAssertionMatchesTarget(
+  assertion: AssertionRecord,
+  reference: TemporalModelReferenceCatalogEntryV1,
+  declarations: Declarations,
+): boolean {
+  if (reference.type === "point") {
+    const point = declarations.points.get(reference.pointId);
+    return (
+      point !== undefined &&
+      assertion.kind === "coordinate" &&
+      assertion.contextId === point.contextId &&
+      assertion.pointId === reference.pointId
+    );
+  }
+  if (reference.type === "difference") {
+    const from = declarations.points.get(reference.fromPointId);
+    return (
+      from !== undefined &&
+      assertion.kind === "constraint" &&
+      assertion.contextId === from.contextId &&
+      assertion.fromPointId === reference.fromPointId &&
+      assertion.toPointId === reference.toPointId
+    );
+  }
+  return false;
 }
 
 function modelProposalChangeSchemas(
@@ -1042,54 +1125,48 @@ function modelProposalChangeSchemas(
   ]);
 
   const changes: JsonValue[] = [];
-  if (scope.referenceHandles.point.length > 0) {
+  for (const target of scope.coordinateTargets) {
     const revisions: JsonValue[] = [
       modelProposalSchemaObject({
         type: modelProposalSchemaLiteral("keep"),
       }),
     ];
-    if (scope.coordinateAssertionHandles.length > 0) {
+    if (target.assertionHandles.length > 0) {
       revisions.push(
         modelProposalSchemaObject({
           type: modelProposalSchemaLiteral("supersede"),
-          assertionHandle: modelProposalSchemaEnum(
-            scope.coordinateAssertionHandles,
-          ),
+          assertionHandle: modelProposalSchemaEnum(target.assertionHandles),
         }),
       );
     }
     changes.push(
       modelProposalSchemaObject({
         type: modelProposalSchemaLiteral("coordinate"),
-        pointHandle: modelProposalSchemaEnum(scope.referenceHandles.point),
+        pointHandle: modelProposalSchemaEnum(target.targetHandles),
         bounds: modelProposalSchemaReference("bounds"),
         supports: modelProposalSchemaReference("supports"),
         revision: modelProposalSchemaVariants(revisions),
       }),
     );
   }
-  if (scope.referenceHandles.difference.length > 0) {
+  for (const target of scope.constraintTargets) {
     const revisions: JsonValue[] = [
       modelProposalSchemaObject({
         type: modelProposalSchemaLiteral("keep"),
       }),
     ];
-    if (scope.constraintAssertionHandles.length > 0) {
+    if (target.assertionHandles.length > 0) {
       revisions.push(
         modelProposalSchemaObject({
           type: modelProposalSchemaLiteral("supersede"),
-          assertionHandle: modelProposalSchemaEnum(
-            scope.constraintAssertionHandles,
-          ),
+          assertionHandle: modelProposalSchemaEnum(target.assertionHandles),
         }),
       );
     }
     changes.push(
       modelProposalSchemaObject({
         type: modelProposalSchemaLiteral("constraint"),
-        differenceHandle: modelProposalSchemaEnum(
-          scope.referenceHandles.difference,
-        ),
+        differenceHandle: modelProposalSchemaEnum(target.targetHandles),
         bounds: modelProposalSchemaReference("bounds"),
         supports: modelProposalSchemaReference("supports"),
         revision: modelProposalSchemaVariants(revisions),

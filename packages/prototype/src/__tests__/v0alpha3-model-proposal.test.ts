@@ -331,6 +331,30 @@ describe("v0alpha3 model proposal output schema", () => {
     );
   });
 
+  it("exposes only target-compatible supersession handles", () => {
+    const schema = createTemporalModelProposalOutputSchemaV1(schemaHost());
+    const definitions = jsonObject(schema.$defs);
+    const change = jsonObject(definitions.change);
+    const variants = Array.isArray(change.anyOf)
+      ? change.anyOf.map(jsonObject)
+      : [change];
+
+    expect(changeVariant(variants, "pointHandle", "point-start-alias")).toEqual(
+      {
+        targetHandles: ["point-start", "point-start-alias"],
+        assertionHandles: ["current-start"],
+      },
+    );
+    expect(changeVariant(variants, "pointHandle", "point-planned")).toEqual({
+      targetHandles: ["point-planned"],
+      assertionHandles: ["planned-coordinate"],
+    });
+    expect(changeVariant(variants, "differenceHandle", "duration")).toEqual({
+      targetHandles: ["duration"],
+      assertionHandles: ["current-duration"],
+    });
+  });
+
   it("removes unavailable variants and caps provider grammar expansion", () => {
     const queryOnlyHost: TemporalModelProposalHostV1 = {
       ...host(),
@@ -1505,6 +1529,43 @@ function jsonObject(value: JsonValue): Readonly<Record<string, JsonValue>> {
   expect(typeof value).toBe("object");
   expect(Array.isArray(value)).toBe(false);
   return value as Readonly<Record<string, JsonValue>>;
+}
+
+function changeVariant(
+  variants: readonly Readonly<Record<string, JsonValue>>[],
+  targetKey: "differenceHandle" | "pointHandle",
+  targetHandle: string,
+): {
+  readonly assertionHandles: readonly JsonValue[];
+  readonly targetHandles: readonly JsonValue[];
+} {
+  for (const variant of variants) {
+    const properties = jsonObject(variant.properties);
+    if (!Object.hasOwn(properties, targetKey)) continue;
+    const targetHandles = jsonObject(properties[targetKey]).enum;
+    if (
+      !Array.isArray(targetHandles) ||
+      !targetHandles.includes(targetHandle)
+    ) {
+      continue;
+    }
+    const revision = jsonObject(properties.revision);
+    const revisionVariants = Array.isArray(revision.anyOf)
+      ? revision.anyOf.map(jsonObject)
+      : [revision];
+    const supersede = revisionVariants.find((entry) => {
+      const revisionProperties = jsonObject(entry.properties);
+      return (
+        jsonObject(revisionProperties.type).enum as readonly JsonValue[]
+      ).includes("supersede");
+    });
+    const assertionHandles = supersede
+      ? jsonObject(jsonObject(supersede.properties).assertionHandle).enum
+      : [];
+    expect(Array.isArray(assertionHandles)).toBe(true);
+    return { assertionHandles, targetHandles };
+  }
+  throw new Error(`missing change variant for ${targetHandle}`);
 }
 
 function deeplyFrozen(value: unknown): boolean {

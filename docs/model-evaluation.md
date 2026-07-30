@@ -394,8 +394,9 @@ Lead reports with paired answer-accuracy `timelineVsNarrativeMemory` and
 
 Representation-exact assertion metrics compare the chosen typed event encoding
 after alpha-renaming model-owned IDs. `projectedStateExactRate` compares the
-normalized active assertions, evidence references, and temporal consequences
-of candidate and gold state. `endToEndExactRate` additionally requires the
+normalized active assertion and evidence-reference atoms in candidate and gold
+state. It does not claim equivalence between every consequence of their
+temporal constraint graphs. `endToEndExactRate` additionally requires the
 answer, query, admission, and proof to match. Query exactness maps raw
 `recordedThrough` sequences to benchmark knowledge-cut ordinals before
 comparison. Publish paired answer accuracy and Timeline end-to-end extraction

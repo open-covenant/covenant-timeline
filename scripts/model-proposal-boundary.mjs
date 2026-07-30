@@ -520,7 +520,9 @@ function activeAssertionView(run, assertionHandles, referenceScope, testCase) {
         handle,
         type: "coordinate",
         target,
-        bounds: assertion.coordinate,
+        label: entityLabel(testCase, assertion.pointId),
+        context: referenceScope.contextHandleById.get(context.id),
+        bounds: proposalBounds(assertion.coordinate),
       });
     }
     for (const assertion of state.constraints) {
@@ -536,14 +538,9 @@ function activeAssertionView(run, assertionHandles, referenceScope, testCase) {
         handle,
         type: "constraint",
         target,
-        bounds: {
-          ...(assertion.constraint.minimum === undefined
-            ? {}
-            : { minimum: assertion.constraint.minimum }),
-          ...(assertion.constraint.maximum === undefined
-            ? {}
-            : { maximum: assertion.constraint.maximum }),
-        },
+        meaning: `${entityLabel(testCase, assertion.constraint.toPointId)} minus ${entityLabel(testCase, assertion.constraint.fromPointId)}`,
+        context: referenceScope.contextHandleById.get(context.id),
+        bounds: proposalBounds(assertion.constraint),
       });
     }
     for (const assertion of state.facts) {
@@ -567,6 +564,19 @@ function activeAssertionView(run, assertionHandles, referenceScope, testCase) {
   }
   return assertions.sort((left, right) =>
     left.handle.localeCompare(right.handle, "en"),
+  );
+}
+
+function proposalBounds({ minimum, maximum }) {
+  if (minimum !== undefined && maximum !== undefined) {
+    return minimum === maximum
+      ? { type: "exact", value: minimum }
+      : { type: "closed-range", minimum, maximum };
+  }
+  if (minimum !== undefined) return { type: "lower-bound", minimum };
+  if (maximum !== undefined) return { type: "upper-bound", maximum };
+  throw new ModelProposalBoundaryError(
+    "active assertion must expose at least one temporal bound",
   );
 }
 

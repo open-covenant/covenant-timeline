@@ -27,7 +27,7 @@ const cases = (
 const testCase = cases.find(({ id }) => id === "bounds.deploy-window");
 assert.ok(testCase);
 
-test("model input exposes opaque references without benchmark answers", () => {
+test("model input exposes request-scoped references without benchmark answers", () => {
   const { observation, referenceScope } = createFixture();
   const inputKeys = collectKeys(observation.input);
 
@@ -179,6 +179,27 @@ test("a schema-valid proposal compiles, applies, and earns exact metrics", () =>
   });
   assert.deepEqual(result.trajectory.knowledgeCuts, [
     { handle: "cut-001", cutIndex: 0, recordedThrough: 2 },
+  ]);
+
+  const next = createBoundaryObservation({
+    testCase,
+    cut: testCase.cuts[1],
+    trajectory: result.trajectory,
+    referenceScope: fixture.referenceScope,
+    requestId: "request-002",
+  });
+  assert.deepEqual(next.input.priorState.assertions, [
+    {
+      handle: "assertion-001",
+      type: "coordinate",
+      target: pointHandle(fixture.referenceScope, "window-open"),
+      label: "release window opening",
+      context: requiredReference(
+        fixture.referenceScope,
+        ({ type, contextId }) => type === "context" && contextId === "actual",
+      ).handle,
+      bounds: { type: "exact", value: 10 },
+    },
   ]);
 });
 

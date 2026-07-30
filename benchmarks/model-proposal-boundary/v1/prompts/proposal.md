@@ -7,10 +7,12 @@ only these fields:
 
 - `input.question` is the question your query must answer;
 - `input.evidence` contains the current records and their evidence IDs;
-- `input.references` describes the opaque handles available for points,
+- `input.references` describes the request-scoped handles available for points,
   differences, relations, and temporal contexts; and
 - `input.priorState` contains active assertions and completed knowledge cuts
-  from earlier observations in this case.
+  from earlier observations in this case. Active assertions include their
+  request-scoped target, human-readable label or meaning, context, and bounds
+  in the same shape used by proposal changes.
 
 Return one `covenant.timeline.model-proposal.v1` object that conforms exactly to
 the supplied response schema. Use only handles and evidence IDs exposed by that
@@ -19,6 +21,9 @@ schema. Set the response `requestId` to the top-level request ID.
 Propose only atomic temporal claims stated by current evidence. Preserve the
 form in which each fact was recorded:
 
+- `changes` transcribes current evidence; `query` requests a computation. Never
+  put a computed query answer in `changes` unless current evidence directly
+  states it;
 - if evidence gives coordinates for two points, emit one `coordinate` change
   for each stated point; do not subtract them or replace them with a derived
   `constraint`;
@@ -35,8 +40,10 @@ form in which each fact was recorded:
 
 Do not infer a claim that the evidence does not state, estimate a missing
 bound, merge contexts, or use evidence outside the current input. Emit each
-supported fact exactly once. `changes` may be empty when current evidence
-contains no temporal claim.
+supported fact exactly once in this response. A superseded assertion must have
+the same assertion type and target handle as its replacement. If no compatible
+active assertion exists, use `keep` and ignore unrelated assertions. `changes`
+may be empty when current evidence contains no temporal claim.
 
 Every change needs at least one support. A support quote must be an exact,
 contiguous, non-empty substring of the selected current evidence text. Keep the

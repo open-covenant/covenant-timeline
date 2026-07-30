@@ -4,7 +4,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import Ajv2020 from "ajv/dist/2020.js";
-import { compileTemporalModelProposalV1 } from "../packages/prototype/dist/index.js";
+import {
+  TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1,
+  compileTemporalModelProposalV1,
+  createTemporalModelProposalOutputSchemaV1,
+} from "../packages/prototype/dist/index.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const proposalSchemaId =
@@ -63,6 +67,36 @@ const proposal = {
     targetHandle: "review-to-deploy",
     knowledgeCut: { type: "current" },
   },
+};
+const proposalHost = {
+  run,
+  expectedRequestId: requestId,
+  evidenceCatalog: [
+    {
+      id: "correction-log",
+      status: "current",
+      text: `Correction received Thursday. ${quote}`,
+    },
+    {
+      id: "obsolete-log",
+      status: "stale",
+      text: "Deployment delay was 3,600 seconds.",
+    },
+  ],
+  referenceCatalog: [
+    {
+      type: "difference",
+      handle: "review-to-deploy",
+      fromPointId: "review-start",
+      toPointId: "deploy-start",
+    },
+  ],
+  assertionCatalog: [
+    {
+      handle: "current-review-to-deploy",
+      assertionId: "constraint.deploy-delay.v2",
+    },
+  ],
 };
 const documentedProposal = readMarkedJson(
   documentation,
@@ -181,31 +215,7 @@ test("proposal schema rejects unknown fields, missing fields, and excess input",
 });
 
 test("compiler output conforms to the candidate schema", () => {
-  const candidate = compileTemporalModelProposalV1(proposal, {
-    run,
-    expectedRequestId: requestId,
-    evidenceCatalog: [
-      {
-        id: "correction-log",
-        status: "current",
-        text: `Correction received Thursday. ${quote}`,
-      },
-    ],
-    referenceCatalog: [
-      {
-        type: "difference",
-        handle: "review-to-deploy",
-        fromPointId: "review-start",
-        toPointId: "deploy-start",
-      },
-    ],
-    assertionCatalog: [
-      {
-        handle: "current-review-to-deploy",
-        assertionId: "constraint.deploy-delay.v2",
-      },
-    ],
-  });
+  const candidate = compileTemporalModelProposalV1(proposal, proposalHost);
 
   assertValid(validateCandidate, candidate);
   assert.deepEqual(documentedCandidate, candidate);
@@ -234,6 +244,36 @@ test("compiler output conforms to the candidate schema", () => {
     },
   };
   assertInvalid(validateCandidate, declaration);
+});
+
+test("request-scoped output schema validates without leaking source data", () => {
+  const outputSchema = createTemporalModelProposalOutputSchemaV1(proposalHost);
+  const validateOutput = ajv.compile(outputSchema);
+
+  assertStructuredOutputObjectsAreClosed(outputSchema);
+  assertProviderSchemaDialect(outputSchema);
+  assertProviderEnumLimits(outputSchema);
+  assertValid(validateOutput, proposal);
+  assertInvalid(validateOutput, {
+    ...proposal,
+    requestId: "another-request",
+  });
+  assertInvalid(validateOutput, {
+    ...proposal,
+    changes: [
+      {
+        ...proposal.changes[0],
+        supports: [{ evidenceId: "obsolete-log", quote }],
+      },
+    ],
+  });
+
+  const encoded = JSON.stringify(outputSchema);
+  assert.equal(encoded.includes("Correction received Thursday"), false);
+  assert.equal(encoded.includes("3,600 seconds"), false);
+  assert.equal(encoded.includes("constraint.deploy-delay.v2"), false);
+  assert.equal(encoded.includes('"maxLength"'), false);
+  assert.deepEqual(outputSchema.$defs.safeInteger, { type: "integer" });
 });
 
 async function readJson(path) {
@@ -271,6 +311,103 @@ function assertStructuredOutputObjectsAreClosed(schema) {
       );
     }
     Object.values(value).forEach(visit);
+  }
+}
+
+function assertProviderEnumLimits(schema) {
+  let enumValues = 0;
+
+  visit(schema);
+  assert.ok(
+    enumValues <= TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxEnumValues,
+  );
+
+  function visit(value) {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value.enum)) {
+      enumValues += value.enum.length;
+      if (
+        value.enum.length >
+        TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.stringEnumCharacterThreshold
+      ) {
+        const characters = value.enum.reduce(
+          (total, entry) =>
+            total + (typeof entry === "string" ? Array.from(entry).length : 0),
+          0,
+        );
+        assert.ok(
+          characters <=
+            TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxStringEnumCharacters,
+        );
+      }
+    }
+    Object.values(value).forEach(visit);
+  }
+}
+
+function assertProviderSchemaDialect(schema) {
+  const keywords = new Set([
+    "$defs",
+    "$ref",
+    "additionalProperties",
+    "anyOf",
+    "enum",
+    "items",
+    "maxItems",
+    "minItems",
+    "properties",
+    "required",
+    "type",
+  ]);
+  let propertyCount = 0;
+  let stringCharacters = 0;
+
+  assert.equal(schema.type, "object");
+  assert.equal(Object.hasOwn(schema, "anyOf"), false);
+  visit(schema, "$", 1);
+  assert.ok(propertyCount <= 5_000);
+  assert.ok(stringCharacters <= 120_000);
+
+  function visit(value, path, depth) {
+    assert.ok(depth <= 10, `${path} exceeds provider nesting depth`);
+    assert.equal(
+      value !== null && typeof value === "object" && !Array.isArray(value),
+      true,
+      `${path} must be a schema object`,
+    );
+    for (const key of Object.keys(value)) {
+      assert.equal(keywords.has(key), true, `${path} uses ${key}`);
+    }
+    if (value.type === "object") {
+      propertyCount += Object.keys(value.properties).length;
+      for (const [name, child] of Object.entries(value.properties)) {
+        stringCharacters += Array.from(name).length;
+        visit(child, `${path}.properties.${name}`, depth + 1);
+      }
+    }
+    if (value.$defs) {
+      for (const [name, child] of Object.entries(value.$defs)) {
+        stringCharacters += Array.from(name).length;
+        visit(child, `${path}.$defs.${name}`, depth);
+      }
+    }
+    if (value.items) visit(value.items, `${path}.items`, depth + 1);
+    if (value.anyOf) {
+      value.anyOf.forEach((child, index) =>
+        visit(child, `${path}.anyOf[${index}]`, depth),
+      );
+    }
+    if (value.enum) {
+      stringCharacters += value.enum.reduce(
+        (total, entry) =>
+          total + (typeof entry === "string" ? Array.from(entry).length : 0),
+        0,
+      );
+    }
   }
 }
 

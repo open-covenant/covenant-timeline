@@ -21,8 +21,10 @@ export {
 } from "./kernel.js";
 export {
   DEFAULT_TEMPORAL_MODEL_PROPOSAL_LIMITS_V1,
+  TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1,
   TemporalModelProposalErrorV1,
   compileTemporalModelProposalV1,
+  createTemporalModelProposalOutputSchemaV1,
   verifyTemporalModelProposalCandidateV1,
   type TemporalModelAssertionCatalogEntryV1,
   type TemporalModelCandidateProvenanceV1,
@@ -39,6 +41,7 @@ export {
   type TemporalModelProposalIssueV1,
   type TemporalModelProposalLimitOptionsV1,
   type TemporalModelProposalLimitsV1,
+  type TemporalModelProposalOutputSchemaV1,
   type TemporalModelProposalRevisionV1,
   type TemporalModelProposalSupportV1,
   type TemporalModelProposalV1,

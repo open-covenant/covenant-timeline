@@ -17,10 +17,19 @@ import { parseStrictJson } from "./strict-json.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const templatePath = join(
-  root,
-  "benchmarks/model-interface/v1/configs/ollama.example.json",
-);
+const templatePaths = new Map([
+  [
+    "model-interface-v1",
+    join(root, "benchmarks/model-interface/v1/configs/ollama.example.json"),
+  ],
+  [
+    "model-proposal-boundary-v1",
+    join(
+      root,
+      "benchmarks/model-proposal-boundary/v1/configs/ollama.example.json",
+    ),
+  ],
+]);
 const sourceRevisionPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const modelPattern = /^[a-z0-9][a-z0-9._:/-]{0,199}$/iu;
 const modelDigestPattern = /^sha256:[0-9a-f]{64}$/u;
@@ -30,6 +39,7 @@ const cloudModelPattern = /(?:^|[:/-])cloud$/iu;
 const thinkingLevels = new Set(["low", "medium", "high"]);
 
 function parseArguments(args) {
+  let benchmark = "model-interface-v1";
   let digest;
   let model;
   let output;
@@ -39,6 +49,7 @@ function parseArguments(args) {
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (
+      argument === "--benchmark" ||
       argument === "--digest" ||
       argument === "--model" ||
       argument === "--output" ||
@@ -49,7 +60,8 @@ function parseArguments(args) {
       if (value === undefined || value.startsWith("--")) {
         throw new Error(`${argument} requires a value`);
       }
-      if (argument === "--digest") digest = value;
+      if (argument === "--benchmark") benchmark = value;
+      else if (argument === "--digest") digest = value;
       else if (argument === "--model") model = value;
       else if (argument === "--output") output = value;
       else if (argument === "--runtime-version") runtimeVersion = value;
@@ -65,6 +77,11 @@ function parseArguments(args) {
     throw new Error(`unknown argument: ${argument}`);
   }
 
+  if (!templatePaths.has(benchmark)) {
+    throw new Error(
+      "--benchmark must be model-interface-v1 or model-proposal-boundary-v1",
+    );
+  }
   if (model === undefined) throw new Error("--model is required");
   if (!modelPattern.test(model) || model.includes("://")) {
     throw new Error("--model must be a valid installed Ollama model name");
@@ -85,7 +102,7 @@ function parseArguments(args) {
     );
   }
   if (output === undefined) throw new Error("--output is required");
-  return { digest, model, output, runtimeVersion, thinking };
+  return { benchmark, digest, model, output, runtimeVersion, thinking };
 }
 
 async function assertOutsideCheckout(outputPath) {
@@ -120,6 +137,7 @@ async function currentSourceRevision() {
 }
 
 export async function createOllamaModelEvalConfig({
+  benchmark = "model-interface-v1",
   digest,
   model,
   output,
@@ -127,6 +145,12 @@ export async function createOllamaModelEvalConfig({
   sourceRevision,
   thinking = false,
 }) {
+  const templatePath = templatePaths.get(benchmark);
+  if (!templatePath) {
+    throw new Error(
+      "benchmark must be model-interface-v1 or model-proposal-boundary-v1",
+    );
+  }
   if (
     typeof sourceRevision !== "string" ||
     !sourceRevisionPattern.test(sourceRevision)

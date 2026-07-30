@@ -26,25 +26,49 @@ Timeline returns a canonical result + verifiable receipt
 
 The production model boundary is
 `covenant.timeline.model-proposal.v1`. Models work with request-scoped handles
-instead of ledger identifiers, digests, sequence numbers, or raw knowledge-cut
-indices.
+instead of mapped ledger identifiers, digests, sequence numbers, or raw
+knowledge-cut indices. The host is responsible for issuing opaque,
+least-privilege handles; caller-provided handle and evidence-ID strings are
+visible to the provider.
 
-The proposal compiler is available from a pinned source revision until the next
-package release. The published `0.0.0-alpha.2` package contains the temporal
-kernel.
+The published `0.0.0-alpha.2` package contains the temporal kernel. The proposal
+compiler is currently a source API. Build the checkout you deploy:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+```
 
 ```ts
-import { compileTemporalModelProposalV1 } from "@covenant-org/timeline";
+import {
+  compileTemporalModelProposalV1,
+  createTemporalModelProposalOutputSchemaV1,
+} from "./packages/prototype/dist/index.js";
 
-const candidate = compileTemporalModelProposalV1(proposal, {
+const proposalHost = {
   run,
   expectedRequestId,
   evidenceCatalog,
   referenceCatalog,
   assertionCatalog,
   knowledgeCutCatalog,
-});
+};
+const outputSchema = createTemporalModelProposalOutputSchemaV1(proposalHost);
+// Send outputSchema with the evidence and question through the provider SDK.
+const candidate = compileTemporalModelProposalV1(
+  proposalFromProvider,
+  proposalHost,
+);
 ```
+
+The generated schema pins the request ID and enumerates only current evidence
+and compatible handle categories from that request. The reference adapters
+pass it directly as Ollama's `format` value or, for supported non-fine-tuned
+models, as the `schema` inside an OpenAI strict `json_schema` response format.
+The provider still produces `covenant.timeline.model-proposal.v1`; no
+adapter-specific proposal shape or repair step sits between provider and
+compiler.
 
 The compiler:
 

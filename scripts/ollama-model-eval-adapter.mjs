@@ -19,8 +19,15 @@ export const OLLAMA_ADAPTER_VERSION = "1";
 const REQUEST_SCHEMA = "covenant.timeline.model-eval.request.v1";
 const ADAPTER_ERROR_SCHEMA = "covenant.timeline.model-eval.adapter-error.v1";
 const CONFIG_SCHEMA = "covenant.timeline.model-eval.config.v1";
-const BENCHMARK = "model-interface-v1";
-const ARMS = new Set(["direct", "narrative-memory", "timeline"]);
+const MODEL_PROPOSAL_CONFIG_SCHEMA =
+  "covenant.timeline.model-proposal-eval.config.v1";
+const MODEL_INTERFACE_BENCHMARK = "model-interface-v1";
+const MODEL_PROPOSAL_BENCHMARK = "model-proposal-boundary-v1";
+const MODEL_INTERFACE_ARMS = new Set([
+  "direct",
+  "narrative-memory",
+  "timeline",
+]);
 const MAX_REQUEST_BYTES = 256 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MIN_OUTPUT_TOKENS = 16;
@@ -93,24 +100,57 @@ function requireExactKeys(value, allowed, label) {
   }
 }
 
+function validateBenchmark(request) {
+  if (request.benchmark === MODEL_INTERFACE_BENCHMARK) {
+    if (!MODEL_INTERFACE_ARMS.has(request.arm)) {
+      fail("adapter.request", "adapter request uses an unsupported arm");
+    }
+    if (
+      Object.hasOwn(request, "outputSchema") ||
+      Object.hasOwn(request, "outputSchemaDigest")
+    ) {
+      fail(
+        "adapter.request",
+        "model-interface requests must not contain an output schema",
+      );
+    }
+    return undefined;
+  }
+
+  if (request.benchmark !== MODEL_PROPOSAL_BENCHMARK) {
+    fail("adapter.request", "adapter request uses an unsupported benchmark");
+  }
+  if (request.arm !== "proposal") {
+    fail("adapter.request", "adapter request uses an unsupported arm");
+  }
+  requireRecord(request.outputSchema, "adapter request.outputSchema");
+  requireNonEmptyString(
+    request.outputSchemaDigest,
+    "adapter request.outputSchemaDigest",
+  );
+  if (contentDigest(request.outputSchema) !== request.outputSchemaDigest) {
+    fail("adapter.output-schema-digest", "output schema digest does not match");
+  }
+  return request.outputSchema;
+}
+
 function validateRequest(request) {
   requireRecord(request, "adapter request");
   if (request.schema !== REQUEST_SCHEMA) {
     fail("adapter.request", "adapter request uses an unsupported schema");
   }
-  if (request.benchmark !== BENCHMARK) {
-    fail("adapter.request", "adapter request uses an unsupported benchmark");
-  }
   requireNonEmptyString(request.requestId, "adapter request.requestId");
   requireNonEmptyString(request.prompt, "adapter request.prompt");
   requireRecord(request.input, "adapter request.input");
-  if (!ARMS.has(request.arm)) {
-    fail("adapter.request", "adapter request uses an unsupported arm");
-  }
+  const outputSchema = validateBenchmark(request);
 
   const config = request.config;
   requireRecord(config, "adapter request.config");
-  if (config.schema !== CONFIG_SCHEMA) {
+  const expectedConfigSchema =
+    request.benchmark === MODEL_PROPOSAL_BENCHMARK
+      ? MODEL_PROPOSAL_CONFIG_SCHEMA
+      : CONFIG_SCHEMA;
+  if (config.schema !== expectedConfigSchema) {
     fail("adapter.config", "run configuration uses an unsupported schema");
   }
   requireNonEmptyString(
@@ -244,11 +284,12 @@ function validateRequest(request) {
     );
   }
 
-  return { config, generation, parameters };
+  return { config, generation, outputSchema, parameters };
 }
 
 export function createOllamaChatBody(request) {
-  const { config, generation, parameters } = validateRequest(request);
+  const { config, generation, outputSchema, parameters } =
+    validateRequest(request);
   return {
     model: config.model.id,
     messages: [
@@ -267,7 +308,10 @@ export function createOllamaChatBody(request) {
     stream: false,
     keep_alive: MODEL_KEEP_ALIVE,
     think: parameters.thinking,
-    format: createModelEvalOutputSchema(request.arm),
+    format:
+      outputSchema === undefined
+        ? createModelEvalOutputSchema(request.arm)
+        : outputSchema,
     options: {
       temperature: generation.temperature,
       seed: generation.seed,
@@ -681,6 +725,8 @@ function errorScope(code) {
   ) {
     return "run";
   }
+  const status = Number(code.match(/[.-]http-(\d{3})$/u)?.[1]);
+  if (status === 400 || status >= 500) return "run";
   return "observation";
 }
 

@@ -1,0 +1,22 @@
+{
+  "schema": "covenant.timeline.model-proposal-eval.config.v1",
+  "id": "openai-proposal-smoke",
+  "benchmarkRevision": "replace-with-source-commit",
+  "adapter": {
+    "id": "openai-responses",
+    "version": "1"
+  },
+  "model": {
+    "provider": "openai",
+    "id": "gpt-4o-mini-2024-07-18",
+    "revision": "gpt-4o-mini-2024-07-18"
+  },
+  "generation": {
+    "temperature": 0,
+    "seed": null,
+    "maxOutputTokens": 4096,
+    "parameters": {
+      "structuredOutput": true
+    }
+  }
+}

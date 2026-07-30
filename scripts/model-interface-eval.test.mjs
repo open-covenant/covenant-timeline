@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { canonicalJson } from "../packages/prototype/dist/index.js";
+import { byteDigest, canonicalJson } from "../packages/prototype/dist/index.js";
 import {
   assertModelTimelineDelta,
   createModelEvalValidators,
@@ -13,6 +13,7 @@ import {
   loadBenchmarkCases,
   loadRunConfig,
   readJsonLines,
+  readJsonLinesArtifact,
   validateAdapterResponse,
 } from "./model-interface-eval.mjs";
 import { runModelInterfaceEval } from "./run-model-interface-eval.mjs";
@@ -35,6 +36,26 @@ test("the model-interface corpus is kernel-derived and balanced", async () => {
     36,
   );
   assert.equal(new Set(cases.map(({ id }) => id)).size, 12);
+});
+
+test("JSONL parsing and digests bind the same UTF-8 bytes", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-jsonl-artifact-"),
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "artifact.jsonl");
+  const bytes = Buffer.from('{"value":1}\n', "utf8");
+  await writeFile(path, bytes);
+
+  const artifact = await readJsonLinesArtifact(path);
+  assert.deepEqual(artifact.records, [{ value: 1 }]);
+  assert.equal(artifact.digest, byteDigest(bytes));
+
+  await writeFile(
+    path,
+    Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]),
+  );
+  await assert.rejects(readJsonLinesArtifact(path), /not valid UTF-8/u);
 });
 
 test("Timeline deltas reject duplicate claims and benchmark-scale excess", async () => {

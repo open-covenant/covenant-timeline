@@ -14,9 +14,9 @@ that another process can check.
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
-The proposal compiler is available from a pinned source revision until the next
-package release. The published `0.0.0-alpha.2` package contains the temporal
-kernel.
+The published `0.0.0-alpha.2` package contains the temporal kernel. The model
+proposal API and benchmark are currently available from a source checkout; see
+[Integrate a language model](./docs/model-interface.md#use-the-proposal-compiler).
 
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
@@ -249,16 +249,21 @@ deterministic reasoner returns result + proof receipt
 another process verifies the conclusion
 ```
 
-Models work with request-scoped handles rather than ledger identifiers, evidence
-digests, sequence numbers, or raw knowledge-cut indices. The proposal compiler
+Models work with host-issued request handles rather than mapped ledger
+identifiers, evidence digests, sequence numbers, or raw knowledge-cut indices.
+Hosts should make those handles opaque and disclose only the scope needed for
+one request. The proposal compiler
 resolves those handles, hashes exact evidence bytes, checks unique quote
 locations, derives the ledger mechanics, and rejects the whole proposal on any
-error. A separate verifier recompiles against the same host inputs and compares
-the complete candidate artifact. Neither operation authenticates evidence or
-admits a claim.
+error. A generated provider schema pins the request ID and the handles available
+for that request without embedding source text or expected answers. A separate
+verifier recompiles against the same host inputs and compares the complete
+candidate artifact. Neither operation authenticates evidence or admits a claim.
 
 The [model interface](./docs/model-interface.md) and
 [complete proposal artifact](./docs/model-proposal.md) define this loop. The
+[model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v1/README.md)
+measures the production extraction boundary directly. The lower-level
 [model-interface benchmark](./benchmarks/model-interface/v1/README.md) measures
 extraction, admission, query selection, and final answers separately across
 direct text, narrative memory, and Timeline-backed state.
@@ -337,10 +342,12 @@ Before production use, review the
 
 ## Proving the model boundary
 
-The repository includes a public 12-case development suite, a digest-verified
-local Ollama adapter, and a stateless OpenAI Responses adapter. No model result
-has been published, and the visible corpus does not establish that Timeline
-outperforms narrative memory.
+The repository includes a public 12-case proposal-boundary benchmark,
+deterministic scoring, a digest-verified local Ollama adapter, and a stateless
+OpenAI Responses adapter. It measures whether a model can turn evidence into
+compiler-valid temporal proposals and verified conclusions across rolling
+knowledge cuts. No model result has been published, and the visible corpus does
+not establish that Timeline outperforms narrative memory.
 
 The next evidence gate is a preregistered blinded benchmark with longer rolling
 histories, controlled paraphrases, distractors, fixed budgets, strict failure

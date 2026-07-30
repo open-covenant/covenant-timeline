@@ -26,26 +26,34 @@ example, model interface, and development benchmark are public. They establish
 a working substrate, not adoption or model-quality evidence.
 
 The repository also provides deterministic model-proposal compilation with
-exact source-span provenance and an atomic local MCP write path. The compiler
-reproduces the admitted state and checked result for all 36 cuts in the public
-corpus. That establishes lowering equivalence, not model extraction quality.
+exact source-span provenance, a request-scoped Structured Outputs schema, and
+an atomic local MCP write path. The compiler reproduces the admitted state and
+checked result for all 36 cuts in the public corpus. That establishes lowering
+equivalence, not model extraction quality.
+
+The
+[model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v1/README.md)
+runs that production interface as a rolling evaluation, preserves every
+failure, and independently scores extraction, state, query, answer, and proof
+outcomes. Its checked oracle proves benchmark representability; it is not a
+model result.
 
 ## Evidence gates
 
 ### 1. Model reliability
 
-The checked-in
-[model-interface benchmark v1](./benchmarks/model-interface/v1/README.md) is a
-12-case development and smoke suite. It exercises direct text, narrative
-memory, and Timeline-backed state with a strict JSONL adapter protocol. The
-repository includes a digest-verified local Ollama adapter and a stateless OpenAI
-Responses adapter.
+The checked-in proposal-boundary benchmark is the primary engineering suite for
+model extraction. The lower-level
+[model-interface benchmark v1](./benchmarks/model-interface/v1/README.md)
+retains direct text, narrative memory, and raw Timeline authorship as research
+diagnostics. Both use stateless adapters and strict replayable artifacts.
 
 No external model result has been published. The visible corpus is too small
 and too exposed to support a performance claim.
 
-The next evaluation must measure the proposal boundary directly and compare it
-with both narrative memory and raw ledger authorship.
+The next evidence step is a reproducible baseline on the proposal boundary.
+Comparative claims against narrative memory or raw ledger authorship still
+require the blinded suite below.
 
 The model gate requires a preregistered blinded suite that:
 

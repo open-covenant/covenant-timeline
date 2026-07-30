@@ -1,0 +1,777 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/benchmarks/model-proposal-boundary/v1/result.schema.json",
+  "title": "Covenant Timeline model-proposal boundary benchmark result",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "nullableDigest": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableBoolean": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "providerParameter": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number",
+          "minimum": -1.7976931348623157e308,
+          "maximum": 1.7976931348623157e308
+        },
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "providerParameters": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/providerParameter"
+      }
+    },
+    "runConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "benchmarkRevision",
+        "adapter",
+        "model",
+        "generation"
+      ],
+      "properties": {
+        "schema": {
+          "const": "covenant.timeline.model-proposal-eval.config.v1"
+        },
+        "id": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+        },
+        "benchmarkRevision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "adapter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+            },
+            "version": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "id", "revision"],
+          "properties": {
+            "provider": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+            },
+            "id": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "generation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["temperature", "seed", "maxOutputTokens", "parameters"],
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "seed": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxOutputTokens": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "parameters": {
+              "$ref": "#/$defs/providerParameters"
+            }
+          }
+        }
+      }
+    },
+    "runMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config",
+        "configDigest",
+        "corpusDigest",
+        "promptDigest",
+        "selection",
+        "timelineVersion",
+        "sourceRevision",
+        "sourceDirty",
+        "sourceStateDigest",
+        "runtimeDigest",
+        "node",
+        "platform",
+        "arch"
+      ],
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/runConfig"
+        },
+        "configDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "corpusDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "promptDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cases", "repeats", "timeoutMs"],
+          "properties": {
+            "cases": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+              }
+            },
+            "repeats": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600000
+            }
+          }
+        },
+        "timelineVersion": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceRevision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceDirty": {
+          "const": false
+        },
+        "sourceStateDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "runtimeDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "node": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "platform": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "arch": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "costUsd"],
+      "properties": {
+        "inputTokens": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTokens": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "costUsd": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "code", "message"],
+      "properties": {
+        "stage": {
+          "enum": [
+            "adapter",
+            "protocol",
+            "response-schema",
+            "compilation",
+            "candidate-verification",
+            "application",
+            "reasoning",
+            "proof-verification"
+          ]
+        },
+        "code": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    },
+    "nullableProposal": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/model-proposal/v1/proposal.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableCandidate": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/model-proposal/v1/candidate.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableConclusion": {
+      "oneOf": [
+        {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "run",
+    "requestId",
+    "requestText",
+    "requestDigest",
+    "outputSchemaJson",
+    "outputSchemaDigest",
+    "responseText",
+    "responseDigest",
+    "caseId",
+    "family",
+    "repeat",
+    "cut",
+    "traits",
+    "status",
+    "proposal",
+    "responseSchemaValid",
+    "compiled",
+    "candidate",
+    "candidateVerified",
+    "applied",
+    "conclusion",
+    "proofVerified",
+    "usage",
+    "latencyMs",
+    "error"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-proposal-eval.result.v1"
+    },
+    "benchmark": {
+      "const": "model-proposal-boundary-v1"
+    },
+    "run": {
+      "$ref": "#/$defs/runMetadata"
+    },
+    "requestId": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+    },
+    "requestText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4194304
+    },
+    "requestDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "outputSchemaJson": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 65536
+    },
+    "outputSchemaDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "responseText": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 1310720
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "responseDigest": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "caseId": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+    },
+    "family": {
+      "enum": [
+        "bounded-indeterminate",
+        "planned-actual-isolation",
+        "delayed-observation-historical-cuts",
+        "correction-supersession-retraction",
+        "contradictions",
+        "interval-relations"
+      ]
+    },
+    "repeat": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 19
+    },
+    "cut": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "traits": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+      }
+    },
+    "status": {
+      "enum": ["ok", "error"]
+    },
+    "proposal": {
+      "$ref": "#/$defs/nullableProposal"
+    },
+    "responseSchemaValid": {
+      "$ref": "#/$defs/nullableBoolean"
+    },
+    "compiled": {
+      "$ref": "#/$defs/nullableBoolean"
+    },
+    "candidate": {
+      "$ref": "#/$defs/nullableCandidate"
+    },
+    "candidateVerified": {
+      "$ref": "#/$defs/nullableBoolean"
+    },
+    "applied": {
+      "$ref": "#/$defs/nullableBoolean"
+    },
+    "conclusion": {
+      "$ref": "#/$defs/nullableConclusion"
+    },
+    "proofVerified": {
+      "$ref": "#/$defs/nullableBoolean"
+    },
+    "usage": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/usage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "latencyMs": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "error": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/error"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "responseText": {
+            "type": "string"
+          },
+          "responseDigest": {
+            "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+          },
+          "proposal": {
+            "$ref": "https://covenant-timeline.org/schemas/model-proposal/v1/proposal.schema.json"
+          },
+          "responseSchemaValid": {
+            "const": true
+          },
+          "compiled": {
+            "const": true
+          },
+          "candidate": {
+            "$ref": "https://covenant-timeline.org/schemas/model-proposal/v1/candidate.schema.json"
+          },
+          "candidateVerified": {
+            "const": true
+          },
+          "applied": {
+            "const": true
+          },
+          "conclusion": {
+            "$ref": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json"
+          },
+          "proofVerified": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "error": {
+            "$ref": "#/$defs/error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "responseSchemaValid": {
+            "const": true
+          }
+        },
+        "required": ["responseSchemaValid"]
+      },
+      "then": {
+        "properties": {
+          "proposal": {
+            "$ref": "https://covenant-timeline.org/schemas/model-proposal/v1/proposal.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "responseSchemaValid": {
+            "const": false
+          }
+        },
+        "required": ["responseSchemaValid"]
+      },
+      "then": {
+        "properties": {
+          "proposal": {
+            "type": "null"
+          },
+          "compiled": {
+            "type": "null"
+          },
+          "candidate": {
+            "type": "null"
+          },
+          "candidateVerified": {
+            "type": "null"
+          },
+          "applied": {
+            "type": "null"
+          },
+          "conclusion": {
+            "type": "null"
+          },
+          "proofVerified": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "compiled": {
+            "const": true
+          }
+        },
+        "required": ["compiled"]
+      },
+      "then": {
+        "properties": {
+          "candidate": {
+            "$ref": "https://covenant-timeline.org/schemas/model-proposal/v1/candidate.schema.json"
+          },
+          "responseSchemaValid": {
+            "const": true
+          },
+          "candidateVerified": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "compiled": {
+            "const": false
+          }
+        },
+        "required": ["compiled"]
+      },
+      "then": {
+        "properties": {
+          "candidate": {
+            "type": "null"
+          },
+          "candidateVerified": {
+            "type": "null"
+          },
+          "applied": {
+            "type": "null"
+          },
+          "conclusion": {
+            "type": "null"
+          },
+          "proofVerified": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "applied": {
+            "const": true
+          }
+        },
+        "required": ["applied"]
+      },
+      "then": {
+        "properties": {
+          "compiled": {
+            "const": true
+          },
+          "candidateVerified": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "candidateVerified": {
+            "const": true
+          }
+        },
+        "required": ["candidateVerified"]
+      },
+      "then": {
+        "properties": {
+          "compiled": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "conclusion": {
+            "type": "object"
+          }
+        },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "applied": {
+            "const": true
+          },
+          "proofVerified": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "proofVerified": {
+            "type": "boolean"
+          }
+        },
+        "required": ["proofVerified"]
+      },
+      "then": {
+        "properties": {
+          "conclusion": {
+            "$ref": "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "responseText": {
+            "type": "string"
+          }
+        },
+        "required": ["responseText"]
+      },
+      "then": {
+        "properties": {
+          "responseDigest": {
+            "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "responseText": {
+            "type": "null"
+          }
+        },
+        "required": ["responseText"]
+      },
+      "then": {
+        "properties": {
+          "responseDigest": {
+            "type": "null"
+          },
+          "responseSchemaValid": {
+            "type": "null"
+          },
+          "compiled": {
+            "type": "null"
+          },
+          "candidate": {
+            "type": "null"
+          },
+          "candidateVerified": {
+            "type": "null"
+          },
+          "applied": {
+            "type": "null"
+          },
+          "conclusion": {
+            "type": "null"
+          },
+          "proofVerified": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

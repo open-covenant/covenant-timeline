@@ -51,7 +51,43 @@ test("config creation pins source, model, digest, and thinking level", async () 
   }
 });
 
+test("config creation selects the proposal benchmark contract", async () => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-ollama-proposal-config-"),
+  );
+  const output = join(directory, "run.json");
+  try {
+    await createOllamaModelEvalConfig({
+      benchmark: "model-proposal-boundary-v1",
+      digest,
+      model: "example/model:latest",
+      output,
+      runtimeVersion,
+      sourceRevision: revision,
+    });
+    const config = JSON.parse(await readFile(output, "utf8"));
+    assert.equal(
+      config.schema,
+      "covenant.timeline.model-proposal-eval.config.v1",
+    );
+    assert.equal(config.id, "ollama-proposal-smoke");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("config creation rejects invalid identities and checkout outputs", async () => {
+  await assert.rejects(
+    createOllamaModelEvalConfig({
+      benchmark: "unknown",
+      digest,
+      model: "example:latest",
+      output: join(root, "run.json"),
+      runtimeVersion,
+      sourceRevision: revision,
+    }),
+    /benchmark must be/u,
+  );
   for (const sourceRevision of ["a".repeat(41), "a".repeat(63)]) {
     await assert.rejects(
       createOllamaModelEvalConfig({

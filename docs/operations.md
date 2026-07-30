@@ -108,6 +108,17 @@ candidate across a process boundary should retain the exact proposal and host
 inputs and call `verifyTemporalModelProposalCandidateV1`; JSON Schema
 validation alone does not establish artifact integrity.
 
+The request-scoped provider schema has lower non-configurable ceilings: eight
+changes, four supports per change, 512 catalog values, 1,000 emitted enum
+entries, 15,000 characters in a string enum above 250 values, and 64 KiB of
+schema JSON. Projection hosts are also capped at 64 MiB, 1.1 million JSON
+values, and 128 nesting levels. The projection omits quote-length and
+safe-integer ranges to keep provider grammar construction bounded; the compiler
+applies those checks to the model response. Narrow the host catalogs or split
+the work into multiple requests when schema generation reaches a ceiling.
+Never truncate an exposed catalog or fall back silently to unconstrained text
+generation.
+
 The MCP limits are enforced independently from the broader core defaults.
 Continue catalog discovery with the returned opaque cursor and restart from the
 first page if a catalog mutation makes that cursor stale. Standard MCP

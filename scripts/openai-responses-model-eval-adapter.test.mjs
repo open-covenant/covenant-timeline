@@ -45,7 +45,7 @@ const adapterErrorSchema = "covenant.timeline.model-eval.adapter-error.v1";
 function createConfig(overrides = {}) {
   const model = overrides.model ?? "gpt-4o-mini-2024-07-18";
   return {
-    schema: "covenant.timeline.model-eval.config.v1",
+    schema: overrides.schema ?? "covenant.timeline.model-eval.config.v1",
     id: "openai-reference-test",
     benchmarkRevision: overrides.benchmarkRevision ?? "test-revision",
     adapter: {
@@ -73,7 +73,7 @@ function createRequest(arm = "direct", overrides = {}) {
   return {
     schema: "covenant.timeline.model-eval.request.v1",
     requestId: overrides.requestId ?? "request-17",
-    benchmark: "model-interface-v1",
+    benchmark: overrides.benchmark ?? "model-interface-v1",
     config,
     configDigest: overrides.configDigest ?? contentDigest(config),
     caseId: "case-01",
@@ -86,6 +86,44 @@ function createRequest(arm = "direct", overrides = {}) {
       question: "When did deployment happen?",
       evidence: [],
     },
+  };
+}
+
+function createProposalSchema() {
+  return {
+    type: "object",
+    properties: {
+      schema: {
+        type: "string",
+        enum: ["covenant.timeline.model-proposal.v1"],
+      },
+      requestId: { type: "string", enum: ["request-17"] },
+      changes: {
+        type: "array",
+        items: { type: "object" },
+        maxItems: 2,
+      },
+    },
+    required: ["schema", "requestId", "changes"],
+    additionalProperties: false,
+  };
+}
+
+function createProposalRequest(overrides = {}) {
+  const outputSchema = overrides.outputSchema ?? createProposalSchema();
+  return {
+    ...createRequest("proposal", {
+      ...overrides,
+      benchmark: "model-proposal-boundary-v1",
+      config:
+        overrides.config ??
+        createConfig({
+          schema: "covenant.timeline.model-proposal-eval.config.v1",
+        }),
+    }),
+    outputSchema,
+    outputSchemaDigest:
+      overrides.outputSchemaDigest ?? contentDigest(outputSchema),
   };
 }
 
@@ -239,6 +277,56 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
     }
     assert.equal(body.input[0].content.includes(config.id), false);
     assert.equal(body.input[0].content.includes(request.caseId), false);
+  }
+});
+
+test("proposal requests use a strict wrapper around the request-bound schema", () => {
+  const request = createProposalRequest();
+  const body = createOpenAIRequestBody(request);
+
+  assert.deepEqual(body.text.format, {
+    type: "json_schema",
+    name: "covenant_timeline_model_proposal_v1",
+    strict: true,
+    schema: request.outputSchema,
+  });
+  assert.equal(body.text.format.schema, request.outputSchema);
+  assert.deepEqual(body.input, [
+    {
+      role: "user",
+      content: canonicalJson({
+        requestId: request.requestId,
+        input: request.input,
+      }),
+    },
+  ]);
+});
+
+test("benchmark-specific schema fields fail closed", () => {
+  const schema = createProposalSchema();
+  const invalid = [
+    createProposalRequest({
+      outputSchemaDigest:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
+    {
+      ...createRequest("proposal", {
+        benchmark: "model-proposal-boundary-v1",
+      }),
+      outputSchema: schema,
+    },
+    {
+      ...createRequest(),
+      outputSchema: schema,
+      outputSchemaDigest: contentDigest(schema),
+    },
+    createRequest("direct", {
+      benchmark: "model-proposal-boundary-v1",
+    }),
+  ];
+
+  for (const request of invalid) {
+    assert.throws(() => createOpenAIRequestBody(request));
   }
 });
 
@@ -441,6 +529,27 @@ test("native Responses output is traversed once and usage is mechanical", () => 
       costUsd: null,
     },
   });
+});
+
+test("native Responses output preserves proposal fields with adapter usage", () => {
+  const proposal = {
+    schema: "covenant.timeline.model-proposal.v1",
+    requestId: "request-17",
+    changes: [],
+    query: {
+      type: "consistency",
+      targetHandle: "delivery",
+      knowledgeCut: { type: "current" },
+    },
+  };
+
+  assert.deepEqual(
+    parseOpenAIResponse(
+      createProviderResponse(proposal, { usage: null }),
+      "gpt-4o-mini-2024-07-18",
+    ),
+    proposal,
+  );
 });
 
 test("provider refusals, incomplete responses, and ambiguous output fail closed", () => {
@@ -683,6 +792,31 @@ test("provider HTTP failures become safe protocol error envelopes", async (t) =>
   }
 });
 
+test("provider HTTP 400 is a run-scoped request failure", async () => {
+  const request = createRequest();
+  const stdout = capture();
+  const stderr = capture();
+  const exitCode = await runAdapter({
+    apiKey: "inert-adapter-secret",
+    fetchImpl: async () => new Response("", { status: 400 }),
+    input: Readable.from([`${canonicalJson(request)}\n`]),
+    output: stdout.stream,
+    diagnostics: stderr.stream,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stderr.value(), "");
+  assert.deepEqual(JSON.parse(stdout.value()), {
+    schema: adapterErrorSchema,
+    requestId: request.requestId,
+    error: {
+      code: "provider.http-400",
+      message: "OpenAI Responses API returned HTTP 400",
+      scope: "run",
+    },
+  });
+});
+
 test("adapter error envelopes remain valid for adversarial config keys", async () => {
   const config = createConfig({
     parameters: {
@@ -770,9 +904,9 @@ test("HTTP status failures are classified without reading provider bodies", asyn
   }
 });
 
-test("HTTP authentication failures are run-scoped without hiding capacity failures", async () => {
+test("HTTP request and authentication failures are run-scoped", async () => {
   for (const [status, scope] of [
-    [400, "observation"],
+    [400, "run"],
     [401, "run"],
     [403, "run"],
     [404, "run"],

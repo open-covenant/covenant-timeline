@@ -17,24 +17,42 @@ import { parseStrictJson } from "./strict-json.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const templatePath = join(
-  root,
-  "benchmarks/model-interface/v1/configs/openai-responses.example.json",
-);
-const sourceRevisionPattern = /^[0-9a-f]{40,64}$/u;
+const templatePaths = new Map([
+  [
+    "model-interface-v1",
+    join(
+      root,
+      "benchmarks/model-interface/v1/configs/openai-responses.example.json",
+    ),
+  ],
+  [
+    "model-proposal-boundary-v1",
+    join(
+      root,
+      "benchmarks/model-proposal-boundary/v1/configs/openai-responses.example.json",
+    ),
+  ],
+]);
+const sourceRevisionPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 
 function parseArguments(args) {
+  let benchmark = "model-interface-v1";
   let output;
   let model;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === "--output" || argument === "--model") {
+    if (
+      argument === "--benchmark" ||
+      argument === "--output" ||
+      argument === "--model"
+    ) {
       const value = args[index + 1];
       if (value === undefined || value.startsWith("--")) {
         throw new Error(`${argument} requires a value`);
       }
-      if (argument === "--output") output = value;
+      if (argument === "--benchmark") benchmark = value;
+      else if (argument === "--output") output = value;
       else model = value;
       index += 1;
       continue;
@@ -42,11 +60,16 @@ function parseArguments(args) {
     throw new Error(`unknown argument: ${argument}`);
   }
 
+  if (!templatePaths.has(benchmark)) {
+    throw new Error(
+      "--benchmark must be model-interface-v1 or model-proposal-boundary-v1",
+    );
+  }
   if (output === undefined) throw new Error("--output is required");
   if (model !== undefined && (model.length === 0 || model.length > 200)) {
     throw new Error("--model must be between 1 and 200 characters");
   }
-  return { model, output };
+  return { benchmark, model, output };
 }
 
 async function assertOutsideCheckout(outputPath) {
@@ -81,10 +104,17 @@ async function currentSourceRevision() {
 }
 
 export async function createOpenAIModelEvalConfig({
+  benchmark = "model-interface-v1",
   model,
   output,
   sourceRevision,
 }) {
+  const templatePath = templatePaths.get(benchmark);
+  if (!templatePath) {
+    throw new Error(
+      "benchmark must be model-interface-v1 or model-proposal-boundary-v1",
+    );
+  }
   if (!sourceRevisionPattern.test(sourceRevision)) {
     throw new Error("sourceRevision must be a full Git object id");
   }

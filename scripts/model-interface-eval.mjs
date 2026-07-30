@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { TextDecoder } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import {
@@ -169,7 +170,16 @@ export async function loadRunConfig(path, validator) {
 
 export async function loadBenchmarkCases(path = defaultCasesPath, validators) {
   validators ??= await createModelEvalValidators();
-  const cases = await readJsonLines(path, maxCorpusBytes);
+  return (await loadBenchmarkCasesArtifact(path, validators)).cases;
+}
+
+export async function loadBenchmarkCasesArtifact(
+  path = defaultCasesPath,
+  validators,
+) {
+  validators ??= await createModelEvalValidators();
+  const artifact = await readJsonLinesArtifact(path, maxCorpusBytes);
+  const cases = artifact.records;
   const ids = new Set();
   const modelCaseIds = new Set();
   const familyCounts = new Map(FAMILIES.map((family) => [family, 0]));
@@ -321,20 +331,39 @@ export async function loadBenchmarkCases(path = defaultCasesPath, validators) {
     }
   }
 
-  return cases;
+  return { cases, digest: artifact.digest };
 }
 
 export async function readJsonLines(path, maxBytes = MAX_RESULTS_BYTES) {
-  const text = await readBoundedText(path, maxBytes);
-  const withoutFinalNewline = text.endsWith("\n") ? text.slice(0, -1) : text;
-  if (withoutFinalNewline.length === 0) return [];
+  return (await readJsonLinesArtifact(path, maxBytes)).records;
+}
 
-  return withoutFinalNewline.split("\n").map((line, index) => {
+export async function readJsonLinesArtifact(
+  path,
+  maxBytes = MAX_RESULTS_BYTES,
+) {
+  const bytes = await readBoundedBytes(path, maxBytes);
+  let text;
+  try {
+    text = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+  } catch {
+    fail(`${path}: file is not valid UTF-8`);
+  }
+  const withoutFinalNewline = text.endsWith("\n") ? text.slice(0, -1) : text;
+  if (withoutFinalNewline.length === 0) {
+    return { records: [], digest: byteDigest(bytes) };
+  }
+
+  const records = withoutFinalNewline.split("\n").map((line, index) => {
     if (line.trim().length === 0) {
       fail(`${path}:${index + 1}: blank JSONL record`);
     }
     return parseStrictJson(line, `${path}:${index + 1}`);
   });
+  return { records, digest: byteDigest(bytes) };
 }
 
 export async function digestFile(path, maxBytes = MAX_RESULTS_BYTES) {
@@ -360,6 +389,18 @@ export async function digestFile(path, maxBytes = MAX_RESULTS_BYTES) {
 }
 
 async function readBoundedText(path, maxBytes) {
+  const bytes = await readBoundedBytes(path, maxBytes);
+  try {
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+  } catch {
+    fail(`${path}: file is not valid UTF-8`);
+  }
+}
+
+async function readBoundedBytes(path, maxBytes) {
   const metadata = await stat(path);
   if (!metadata.isFile()) throw new ModelEvalError(`${path}: must be a file`);
   if (metadata.size > maxBytes) {
@@ -378,7 +419,7 @@ async function readBoundedText(path, maxBytes) {
     }
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks, bytes).toString("utf8");
+  return Buffer.concat(chunks, bytes);
 }
 
 export function visibleEvidence(testCase, cut) {

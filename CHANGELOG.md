@@ -14,9 +14,13 @@
   response artifacts, paired scoring, and adversarial harness tests.
 - Add deterministic model-proposal compilation with request-scoped handles,
   exact UTF-8 quote provenance, content-addressed ledger candidates, closed JSON
-  Schemas, bounded hostile-input validation, complete candidate
-  re-verification, and lowering-equivalence coverage across all 36 public
-  benchmark cuts.
+  Schemas, a bounded provider-schema projection from each host snapshot,
+  bounded hostile-input validation, complete candidate re-verification, and
+  lowering-equivalence coverage across all 36 public benchmark cuts.
+- Add the model-proposal boundary benchmark with opaque model inputs,
+  request-bound provider schemas, rolling failure continuity, one-shot Ollama
+  and OpenAI adapters, clean-source and runtime binding, atomic result
+  publication, independent scoring, and an exact 36-cut boundary oracle.
 - Add companion trajectory diagnostics that preserve the benchmark score while
   exposing first errors, later rolling observations, degraded prior state, and
   admitted-with-error counts.

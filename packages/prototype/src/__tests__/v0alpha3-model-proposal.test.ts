@@ -1,7 +1,9 @@
 import { byteDigest, contentDigest, type JsonValue } from "../identity.js";
 import {
+  TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1,
   TemporalModelProposalErrorV1,
   compileTemporalModelProposalV1,
+  createTemporalModelProposalOutputSchemaV1,
   verifyTemporalModelProposalCandidateV1,
   type TemporalModelProposalHostV1,
   type TemporalModelProposalLimitOptionsV1,
@@ -194,6 +196,16 @@ const host = (): TemporalModelProposalHostV1 => ({
   ],
 });
 
+const schemaHost = (): TemporalModelProposalHostV1 => {
+  const value = host();
+  return {
+    ...value,
+    referenceCatalog: value.referenceCatalog.filter(
+      ({ handle }) => handle !== "cross-context",
+    ),
+  };
+};
+
 const supports = {
   main: [
     {
@@ -246,6 +258,279 @@ function rejected(
   }
   throw new Error("expected proposal rejection");
 }
+
+describe("v0alpha3 model proposal output schema", () => {
+  it("projects only request-scoped public handles into a bounded schema", () => {
+    const schema = createTemporalModelProposalOutputSchemaV1(schemaHost());
+    const properties = jsonObject(schema.properties);
+    const changes = jsonObject(properties.changes);
+    const definitions = jsonObject(schema.$defs);
+    const supports = jsonObject(definitions.supports);
+    const support = jsonObject(definitions.support);
+    const supportProperties = jsonObject(support.properties);
+    const evidenceId = jsonObject(supportProperties.evidenceId);
+
+    expect(properties.requestId).toEqual({
+      type: "string",
+      enum: ["request-42"],
+    });
+    expect(changes.maxItems).toBe(
+      TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxChanges,
+    );
+    expect(supports.maxItems).toBe(
+      TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxSupportsPerChange,
+    );
+    expect(evidenceId.enum).toEqual(["source-correction", "source-main"]);
+    expect(definitions.safeInteger).toEqual({ type: "integer" });
+    expect(jsonObject(supportProperties.quote)).toEqual({ type: "string" });
+
+    const encoded = JSON.stringify(schema);
+    for (const exposed of [
+      "context-actual",
+      "point-start",
+      "duration",
+      "start-vs-finish",
+      "window-vs-next",
+      "current-start",
+      "current-duration",
+      "before-assertions",
+    ]) {
+      expect(encoded).toContain(`"${exposed}"`);
+    }
+    for (const hidden of [
+      evidenceText,
+      correctionText,
+      "source-stale",
+      "old-start",
+      "start-current",
+      "duration-current",
+      digest(evidenceText),
+    ]) {
+      expect(encoded).not.toContain(hidden);
+    }
+    expect(deeplyFrozen(schema)).toBe(true);
+  });
+
+  it("is invariant to catalog order and evidence contents", () => {
+    const original = schemaHost();
+    const reorderedBase = schemaHost();
+    const reordered: TemporalModelProposalHostV1 = {
+      ...reorderedBase,
+      evidenceCatalog: [...reorderedBase.evidenceCatalog]
+        .reverse()
+        .map((entry) => ({ ...entry, text: `replacement for ${entry.id}` })),
+      referenceCatalog: [...reorderedBase.referenceCatalog].reverse(),
+      assertionCatalog: [...(reorderedBase.assertionCatalog ?? [])].reverse(),
+      knowledgeCutCatalog: [
+        ...(reorderedBase.knowledgeCutCatalog ?? []),
+      ].reverse(),
+    };
+
+    expect(createTemporalModelProposalOutputSchemaV1(reordered)).toEqual(
+      createTemporalModelProposalOutputSchemaV1(original),
+    );
+  });
+
+  it("removes unavailable variants and caps provider grammar expansion", () => {
+    const queryOnlyHost: TemporalModelProposalHostV1 = {
+      ...host(),
+      evidenceCatalog: [
+        { id: "source-stale", status: "stale", text: "obsolete" },
+      ],
+      referenceCatalog: [
+        { type: "context", handle: "context-actual", contextId: "actual" },
+      ],
+      assertionCatalog: [],
+      knowledgeCutCatalog: [],
+    };
+    const queryOnly = createTemporalModelProposalOutputSchemaV1(queryOnlyHost);
+    const queryOnlyChanges = jsonObject(
+      jsonObject(queryOnly.properties).changes,
+    );
+    const queryOnlyDefinitions = jsonObject(queryOnly.$defs);
+
+    expect(queryOnlyChanges.maxItems).toBe(0);
+    expect(queryOnlyDefinitions).not.toHaveProperty("change");
+    expect(queryOnlyDefinitions).not.toHaveProperty("support");
+    expect(jsonObject(queryOnlyDefinitions.queryIntent)).not.toHaveProperty(
+      "anyOf",
+    );
+
+    const capped = createTemporalModelProposalOutputSchemaV1(schemaHost(), {
+      maxChanges: 32,
+      maxSupportsPerChange: 8,
+    });
+    expect(jsonObject(jsonObject(capped.properties).changes).maxItems).toBe(8);
+    expect(jsonObject(jsonObject(capped.$defs).supports).maxItems).toBe(4);
+  });
+
+  it("fails when a request exposes no query or too many enum values", () => {
+    expect(
+      rejected(() =>
+        createTemporalModelProposalOutputSchemaV1({
+          ...host(),
+          referenceCatalog: [
+            { type: "point", handle: "point-start", pointId: "start" },
+          ],
+        }),
+      ),
+    ).toContainEqual({
+      code: "model-proposal.reference",
+      path: "host.referenceCatalog",
+      message:
+        "must expose at least one context, difference, point-relation, or interval-relation query handle",
+    });
+
+    const references = Array.from({ length: 510 }, (_, index) => ({
+      type: "context" as const,
+      handle: `context-${index.toString().padStart(3, "0")}`,
+      contextId: "actual",
+    }));
+    expect(
+      rejected(() =>
+        createTemporalModelProposalOutputSchemaV1({
+          ...host(),
+          referenceCatalog: references,
+        }),
+      ).some(
+        ({ code, path, message }) =>
+          code === "model-proposal.limit" &&
+          path === "host" &&
+          message.includes("must not exceed 512"),
+      ),
+    ).toBe(true);
+  });
+
+  it("enforces provider enum limits on the emitted schema", () => {
+    const repeatedDifferences = Array.from({ length: 497 }, (_, index) => ({
+      type: "difference" as const,
+      handle: `difference-${index.toString().padStart(3, "0")}`,
+      fromPointId: "start",
+      toPointId: "finish",
+    }));
+    expect(
+      rejected(() =>
+        createTemporalModelProposalOutputSchemaV1({
+          ...host(),
+          referenceCatalog: repeatedDifferences,
+        }),
+      ),
+    ).toContainEqual({
+      code: "model-proposal.limit",
+      path: "host",
+      message: expect.stringContaining(
+        `must not exceed ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxEnumValues}`,
+      ),
+    });
+
+    const longContexts = Array.from({ length: 251 }, (_, index) => ({
+      type: "context" as const,
+      handle: `context-${index.toString().padStart(3, "0")}-${"x".repeat(56)}`,
+      contextId: "actual",
+    }));
+    expect(
+      rejected(() =>
+        createTemporalModelProposalOutputSchemaV1({
+          ...host(),
+          referenceCatalog: longContexts,
+        }),
+      ),
+    ).toContainEqual({
+      code: "model-proposal.limit",
+      path: "host",
+      message: expect.stringContaining(
+        `must not exceed ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxStringEnumCharacters} characters`,
+      ),
+    });
+  });
+
+  it("rejects unresolved and incompatible references before projection", () => {
+    for (const referenceCatalog of [
+      [
+        {
+          type: "context" as const,
+          handle: "context-missing",
+          contextId: "missing",
+        },
+      ],
+      [
+        {
+          type: "point" as const,
+          handle: "point-missing",
+          pointId: "missing",
+        },
+        {
+          type: "context" as const,
+          handle: "context-actual",
+          contextId: "actual",
+        },
+      ],
+      [
+        {
+          type: "difference" as const,
+          handle: "difference-cross-context",
+          fromPointId: "start",
+          toPointId: "planned-start",
+        },
+      ],
+    ]) {
+      expect(
+        rejected(() =>
+          createTemporalModelProposalOutputSchemaV1({
+            ...host(),
+            referenceCatalog,
+          }),
+        ).some(({ code }) => code === "model-proposal.reference"),
+      ).toBe(true);
+    }
+  });
+
+  it("rejects host accessors without executing them", () => {
+    let getterCalls = 0;
+    const hostile = { ...host() };
+    Object.defineProperty(hostile, "evidenceCatalog", {
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        throw new Error("must not execute");
+      },
+    });
+
+    expect(
+      rejected(() =>
+        createTemporalModelProposalOutputSchemaV1(
+          hostile as TemporalModelProposalHostV1,
+        ),
+      ),
+    ).toContainEqual({
+      code: "model-proposal.invalid",
+      path: "host.evidenceCatalog",
+      message: "must be a data property",
+    });
+    expect(getterCalls).toBe(0);
+
+    const nonEnumerable = { ...schemaHost() };
+    Object.defineProperty(nonEnumerable, "evidenceCatalog", {
+      enumerable: false,
+      get() {
+        getterCalls += 1;
+        throw new Error("must not execute");
+      },
+    });
+    expect(
+      rejected(() =>
+        createTemporalModelProposalOutputSchemaV1(
+          nonEnumerable as TemporalModelProposalHostV1,
+        ),
+      ),
+    ).toContainEqual({
+      code: "model-proposal.invalid",
+      path: "host.evidenceCatalog",
+      message: "must be a data property",
+    });
+    expect(getterCalls).toBe(0);
+  });
+});
 
 describe("v0alpha3 model proposal compiler", () => {
   it("lowers grounded changes into deterministic ledger candidates", () => {
@@ -1214,3 +1499,16 @@ describe("v0alpha3 model proposal compiler", () => {
     });
   });
 });
+
+function jsonObject(value: JsonValue): Readonly<Record<string, JsonValue>> {
+  expect(value).not.toBeNull();
+  expect(typeof value).toBe("object");
+  expect(Array.isArray(value)).toBe(false);
+  return value as Readonly<Record<string, JsonValue>>;
+}
+
+function deeplyFrozen(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return true;
+  if (!Object.isFrozen(value)) return false;
+  return Object.values(value).every(deeplyFrozen);
+}

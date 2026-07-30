@@ -5,9 +5,9 @@ began 5,400 seconds after security review, not 3,600 seconds as previously
 recorded. The model identifies the correction. The host retains control of the
 ledger.
 
-The proposal compiler is available from a pinned source revision until the next
-package release. The published `0.0.0-alpha.2` package contains the temporal
-kernel.
+The published `0.0.0-alpha.2` package contains the temporal kernel. The proposal
+compiler is currently a source API. Run the example from a built repository
+checkout.
 
 The host gives the model opaque handles for the relevant relationship,
 existing assertion, evidence document, and knowledge cut. The model returns a
@@ -56,8 +56,9 @@ The host compiles that untrusted output against its current run and catalogs:
 ```js
 import {
   compileTemporalModelProposalV1,
+  createTemporalModelProposalOutputSchemaV1,
   verifyTemporalModelProposalCandidateV1,
-} from "@covenant-org/timeline";
+} from "./packages/prototype/dist/index.js";
 
 const proposalHost = {
   run,
@@ -85,6 +86,8 @@ const proposalHost = {
   ],
 };
 
+const outputSchema = createTemporalModelProposalOutputSchemaV1(proposalHost);
+// Give outputSchema to the provider before compiling its response.
 const candidate = compileTemporalModelProposalV1(proposal, proposalHost);
 if (
   !verifyTemporalModelProposalCandidateV1(candidate, proposal, proposalHost)
@@ -92,6 +95,43 @@ if (
   throw new Error("candidate verification failed");
 }
 ```
+
+The benchmark adapters append an adapter-controlled `usage` field to their
+JSONL response when token counts are available. Remove that metadata before
+passing the proposal to the compiler. The benchmark runner performs this
+normalization and preserves usage separately in the result artifact.
+
+`outputSchema` is a direct schema for the proposal shown above. Use it as
+Ollama's `format` value:
+
+```js
+const ollamaRequest = {
+  model,
+  messages,
+  stream: false,
+  format: outputSchema,
+};
+```
+
+For supported non-fine-tuned OpenAI Responses models, place it inside the
+strict JSON Schema format:
+
+```js
+const openAIFormat = {
+  type: "json_schema",
+  name: "covenant_timeline_model_proposal_v1",
+  strict: true,
+  schema: outputSchema,
+};
+```
+
+The projection pins the exact request ID, includes current evidence IDs, groups
+reference handles by operation, includes active assertion and knowledge-cut
+handles, and removes unavailable variants. Catalog order and evidence contents
+do not affect its bytes. It does not derive mapped ledger identifiers or embed
+source text, source digests, quotes, numeric answers, or an expected change
+count. Caller-issued handles and evidence IDs are included verbatim, so hosts
+must make them opaque and limit them to the current request.
 
 Compilation produces a deterministic candidate event, query, and provenance
 record:
@@ -254,10 +294,27 @@ must begin with a lowercase letter or digit. Numeric bounds use JavaScript safe
 integers.
 
 The [proposal schema](../schemas/model-proposal/v1/proposal.schema.json) is
-closed, bounded, and organized for structured-output providers that support
-Draft 2020-12 object schemas, `$defs`, and `anyOf`. The compiler remains the
-authoritative validator for UTF-8 byte limits, catalog resolution, range
-ordering, and candidate construction.
+the complete normative structural schema.
+`createTemporalModelProposalOutputSchemaV1` derives a smaller provider schema
+from the exact host snapshot used for compilation. Provider grammar expansion
+is capped at eight changes, four supports per change, 512 catalog values, 1,000
+enum entries in the emitted schema, 15,000 characters in any string enum above
+250 values, and 65,536 schema bytes. Projection also rejects hosts above 64 MiB,
+1.1 million JSON values, or 128 nesting levels. Larger requests fail instead of
+truncating their visible catalogs. Every exposed context, point, difference,
+and relation must resolve to compatible declarations before provider inference.
+
+The provider projection deliberately omits numeric minima and maxima and quote
+length bounds. Large repetitions of those constraints can overwhelm local
+grammar compilers. The proposal compiler still enforces safe integers, UTF-8
+quote limits, catalog resolution, range ordering, proposal bytes and depth, and
+candidate construction. A provider accepting the schema is not evidence that
+its output is safe to admit.
+
+Supersession choices are grouped by assertion kind to keep provider grammars
+bounded. The compiler still requires the selected assertion to match the
+change's context and target; a category-valid but incompatible choice rejects
+the complete proposal.
 
 The
 [candidate schema](../schemas/model-proposal/v1/candidate.schema.json) validates

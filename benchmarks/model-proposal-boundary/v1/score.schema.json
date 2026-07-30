@@ -1,0 +1,458 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/benchmarks/model-proposal-boundary/v1/score.schema.json",
+  "title": "Covenant Timeline model-proposal boundary benchmark score",
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "positiveCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "finiteNonNegativeNumber": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.7976931348623157e308
+    },
+    "unitInterval": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nullableFiniteNonNegativeNumber": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/finiteNonNegativeNumber"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableUnitInterval": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/unitInterval"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numerator", "denominator", "value"],
+      "properties": {
+        "numerator": {
+          "$ref": "#/$defs/count"
+        },
+        "denominator": {
+          "$ref": "#/$defs/count"
+        },
+        "value": {
+          "$ref": "#/$defs/nullableUnitInterval"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "denominator": {
+                "const": 0
+              }
+            },
+            "required": ["denominator"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "value": {
+                "$ref": "#/$defs/unitInterval"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "mean", "p50", "p95"],
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/count"
+        },
+        "mean": {
+          "$ref": "#/$defs/nullableFiniteNonNegativeNumber"
+        },
+        "p50": {
+          "$ref": "#/$defs/nullableFiniteNonNegativeNumber"
+        },
+        "p95": {
+          "$ref": "#/$defs/nullableFiniteNonNegativeNumber"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "count": {
+                "const": 0
+              }
+            },
+            "required": ["count"]
+          },
+          "then": {
+            "properties": {
+              "mean": {
+                "type": "null"
+              },
+              "p50": {
+                "type": "null"
+              },
+              "p95": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "mean": {
+                "$ref": "#/$defs/finiteNonNegativeNumber"
+              },
+              "p50": {
+                "$ref": "#/$defs/finiteNonNegativeNumber"
+              },
+              "p95": {
+                "$ref": "#/$defs/finiteNonNegativeNumber"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "total", "mean"],
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/count"
+        },
+        "total": {
+          "$ref": "#/$defs/nullableFiniteNonNegativeNumber"
+        },
+        "mean": {
+          "$ref": "#/$defs/nullableFiniteNonNegativeNumber"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "count": {
+                "const": 0
+              }
+            },
+            "required": ["count"]
+          },
+          "then": {
+            "properties": {
+              "total": {
+                "type": "null"
+              },
+              "mean": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "total": {
+                "$ref": "#/$defs/finiteNonNegativeNumber"
+              },
+              "mean": {
+                "$ref": "#/$defs/finiteNonNegativeNumber"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "responseSchemaValidRate",
+        "compilerValidRate",
+        "candidateVerificationRate",
+        "appliedRate",
+        "representationExactAssertionPrecision",
+        "representationExactAssertionRecall",
+        "representationExactAssertionF1",
+        "projectedStateExactRate",
+        "queryExactRate",
+        "answerExactRate",
+        "proofVerificationRate",
+        "endToEndExactRate",
+        "latencyMs",
+        "inputTokens",
+        "outputTokens",
+        "costUsd"
+      ],
+      "properties": {
+        "responseSchemaValidRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "compilerValidRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "candidateVerificationRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "appliedRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "representationExactAssertionPrecision": {
+          "$ref": "#/$defs/rate"
+        },
+        "representationExactAssertionRecall": {
+          "$ref": "#/$defs/rate"
+        },
+        "representationExactAssertionF1": {
+          "$ref": "#/$defs/nullableUnitInterval"
+        },
+        "projectedStateExactRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "queryExactRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "answerExactRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "proofVerificationRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "endToEndExactRate": {
+          "$ref": "#/$defs/rate"
+        },
+        "latencyMs": {
+          "$ref": "#/$defs/distribution"
+        },
+        "inputTokens": {
+          "$ref": "#/$defs/totals"
+        },
+        "outputTokens": {
+          "$ref": "#/$defs/totals"
+        },
+        "costUsd": {
+          "$ref": "#/$defs/totals"
+        }
+      }
+    },
+    "families": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 6,
+      "properties": {
+        "bounded-indeterminate": {
+          "$ref": "#/$defs/metrics"
+        },
+        "planned-actual-isolation": {
+          "$ref": "#/$defs/metrics"
+        },
+        "delayed-observation-historical-cuts": {
+          "$ref": "#/$defs/metrics"
+        },
+        "correction-supersession-retraction": {
+          "$ref": "#/$defs/metrics"
+        },
+        "contradictions": {
+          "$ref": "#/$defs/metrics"
+        },
+        "interval-relations": {
+          "$ref": "#/$defs/metrics"
+        }
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "error"],
+      "properties": {
+        "ok": {
+          "$ref": "#/$defs/count"
+        },
+        "error": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "stageCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 8,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "protocol": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "response-schema": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "compilation": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "candidate-verification": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "application": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "reasoning": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "proof-verification": {
+          "$ref": "#/$defs/positiveCount"
+        }
+      }
+    },
+    "codeCounts": {
+      "type": "object",
+      "maxProperties": 720,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/positiveCount"
+      }
+    },
+    "failures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "stages", "codes"],
+      "properties": {
+        "total": {
+          "$ref": "#/$defs/count"
+        },
+        "stages": {
+          "$ref": "#/$defs/stageCounts"
+        },
+        "codes": {
+          "$ref": "#/$defs/codeCounts"
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected",
+        "observed",
+        "missing",
+        "duplicate",
+        "unexpected",
+        "complete",
+        "cases",
+        "cutsPerCase",
+        "repeats"
+      ],
+      "properties": {
+        "expected": {
+          "$ref": "#/$defs/count"
+        },
+        "observed": {
+          "$ref": "#/$defs/count"
+        },
+        "missing": {
+          "$ref": "#/$defs/count"
+        },
+        "duplicate": {
+          "$ref": "#/$defs/count"
+        },
+        "unexpected": {
+          "$ref": "#/$defs/count"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "cases": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "cutsPerCase": {
+          "const": 3
+        },
+        "repeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "run",
+    "resultsDigest",
+    "corpusDigest",
+    "coverage",
+    "outcomes",
+    "metrics",
+    "families",
+    "failures"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-proposal-eval.score.v1"
+    },
+    "benchmark": {
+      "const": "model-proposal-boundary-v1"
+    },
+    "run": {
+      "$ref": "https://covenant-timeline.org/benchmarks/model-proposal-boundary/v1/result.schema.json#/$defs/runMetadata"
+    },
+    "resultsDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "corpusDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "outcomes": {
+      "$ref": "#/$defs/outcomes"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "families": {
+      "$ref": "#/$defs/families"
+    },
+    "failures": {
+      "$ref": "#/$defs/failures"
+    }
+  }
+}

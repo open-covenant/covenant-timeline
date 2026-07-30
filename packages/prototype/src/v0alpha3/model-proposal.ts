@@ -169,6 +169,14 @@ export interface TemporalModelProposalLimitsV1 {
 export type TemporalModelProposalLimitOptionsV1 =
   Partial<TemporalModelProposalLimitsV1>;
 
+export interface TemporalModelProposalOutputSchemaV1 {
+  readonly type: "object";
+  readonly properties: Readonly<Record<string, JsonValue>>;
+  readonly required: readonly ["schema", "requestId", "changes", "query"];
+  readonly additionalProperties: false;
+  readonly $defs: Readonly<Record<string, JsonValue>>;
+}
+
 export const DEFAULT_TEMPORAL_MODEL_PROPOSAL_LIMITS_V1: Readonly<TemporalModelProposalLimitsV1> =
   Object.freeze({
     maxAssertionCatalogEntries: 1_024,
@@ -184,6 +192,19 @@ export const DEFAULT_TEMPORAL_MODEL_PROPOSAL_LIMITS_V1: Readonly<TemporalModelPr
     maxSupportsPerChange: 8,
     maxTotalEvidenceBytes: 1_048_576,
   });
+
+export const TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1 = Object.freeze({
+  maxCatalogValues: 512,
+  maxChanges: 8,
+  maxEnumValues: 1_000,
+  maxHostBytes: 67_108_864,
+  maxHostDepth: 128,
+  maxHostNodes: 1_100_000,
+  maxSchemaBytes: 65_536,
+  maxStringEnumCharacters: 15_000,
+  maxSupportsPerChange: 4,
+  stringEnumCharacterThreshold: 250,
+});
 
 export type TemporalModelProposalIssueCodeV1 =
   | "model-proposal.candidate"
@@ -302,6 +323,15 @@ interface Declarations {
   >;
 }
 
+interface PreparedModelProposalHost {
+  readonly activeAssertions: ReadonlySet<string>;
+  readonly assertions: ReadonlyMap<string, AssertionRecord>;
+  readonly catalogs: Catalogs;
+  readonly declarations: Declarations;
+  readonly host: TemporalModelProposalHostV1;
+  readonly run: TimelineRunDocumentV0Alpha3;
+}
+
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
 const SIMPLE_PATH_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
 const MAX_VALIDATION_ISSUES = 64;
@@ -312,7 +342,43 @@ const CANDIDATE_PREFLIGHT_LIMITS = Object.freeze({
   maxDepth: 24,
   maxNodes: 8_192,
 });
+const HOST_PREFLIGHT_LIMITS = Object.freeze({
+  maxBytes: TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxHostBytes,
+  maxDepth: TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxHostDepth,
+  maxNodes: TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxHostNodes,
+});
 const textEncoder = new TextEncoder();
+
+/**
+ * Projects a validated, request-scoped host into a provider JSON Schema.
+ * Compilation remains authoritative for all semantic and resource checks.
+ */
+export function createTemporalModelProposalOutputSchemaV1(
+  host: TemporalModelProposalHostV1,
+  options: TemporalModelProposalLimitOptionsV1 = {},
+): TemporalModelProposalOutputSchemaV1 {
+  const limits = resolveLimits(options);
+  assertBoundedJson(host, "host", HOST_PREFLIGHT_LIMITS);
+  const prepared = prepareModelProposalHost(host, limits);
+  validateModelProposalOutputReferences(prepared);
+  const schema = buildModelProposalOutputSchema(prepared, limits);
+  validateModelProposalOutputSchemaEnums(schema);
+  const schemaBytes = textEncoder.encode(
+    canonicalJson(schema as unknown as JsonValue),
+  ).byteLength;
+  if (
+    schemaBytes > TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxSchemaBytes
+  ) {
+    throw new TemporalModelProposalErrorV1([
+      issue(
+        "model-proposal.limit",
+        "host",
+        `request-scoped output schema must not exceed ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxSchemaBytes} bytes`,
+      ),
+    ]);
+  }
+  return deepFreeze(schema);
+}
 
 /**
  * Compiles untrusted model output into deterministic candidates. Quote matching
@@ -326,13 +392,13 @@ export function compileTemporalModelProposalV1(
 ): TemporalModelProposalCandidateV1 {
   const limits = resolveLimits(options);
   const proposal = parseProposal(value, limits);
-  const parsedHost = parseHost(host);
-  requireRequestId(proposal.requestId, parsedHost.expectedRequestId);
-  const baseRun = parseBaseRun(parsedHost.run);
-  const assertions = collectAssertions(baseRun);
-  const declarations = collectDeclarations(baseRun);
-  const activeAssertions = collectActiveAssertionIds(baseRun);
-  const catalogs = parseCatalogs(parsedHost, baseRun, limits);
+  const prepared = prepareModelProposalHost(host, limits);
+  requireRequestId(proposal.requestId, prepared.host.expectedRequestId);
+  const baseRun = prepared.run;
+  const assertions = prepared.assertions;
+  const declarations = prepared.declarations;
+  const activeAssertions = prepared.activeAssertions;
+  const catalogs = prepared.catalogs;
 
   const issues: TemporalModelProposalIssueV1[] = [];
   const plans: ChangePlan[] = [];
@@ -613,6 +679,506 @@ function parseHost(value: unknown): TemporalModelProposalHostV1 {
   identifier(host.expectedRequestId, "host.expectedRequestId", issues);
   if (issues.length > 0) throw new TemporalModelProposalErrorV1(issues);
   return host as unknown as TemporalModelProposalHostV1;
+}
+
+function prepareModelProposalHost(
+  value: TemporalModelProposalHostV1,
+  limits: TemporalModelProposalLimitsV1,
+): PreparedModelProposalHost {
+  const host = parseHost(value);
+  const run = parseBaseRun(host.run);
+  return {
+    activeAssertions: collectActiveAssertionIds(run),
+    assertions: collectAssertions(run),
+    catalogs: parseCatalogs(host, run, limits),
+    declarations: collectDeclarations(run),
+    host,
+    run,
+  };
+}
+
+function validateModelProposalOutputReferences(
+  prepared: PreparedModelProposalHost,
+): void {
+  const contexts = new Set(prepared.run.contract.contexts.map(({ id }) => id));
+  const issues: TemporalModelProposalIssueV1[] = [];
+
+  for (const [handle, reference] of prepared.catalogs.references) {
+    const path = childPath("host.referenceCatalog", handle);
+    if (reference.type === "context") {
+      if (!contexts.has(reference.contextId)) {
+        addIssue(
+          issues,
+          "model-proposal.reference",
+          path,
+          "must identify a declared temporal context",
+        );
+      }
+      continue;
+    }
+    if (reference.type === "point") {
+      if (!prepared.declarations.points.has(reference.pointId)) {
+        addIssue(
+          issues,
+          "model-proposal.reference",
+          path,
+          "must identify a declared temporal point",
+        );
+      }
+      continue;
+    }
+    if (reference.type === "interval-relation") {
+      validateModelProposalOutputReferencePair(
+        prepared.declarations.intervals.get(reference.leftIntervalId),
+        prepared.declarations.intervals.get(reference.rightIntervalId),
+        "intervals",
+        path,
+        issues,
+      );
+      continue;
+    }
+    const leftPointId =
+      reference.type === "difference"
+        ? reference.fromPointId
+        : reference.leftPointId;
+    const rightPointId =
+      reference.type === "difference"
+        ? reference.toPointId
+        : reference.rightPointId;
+    validateModelProposalOutputReferencePair(
+      prepared.declarations.points.get(leftPointId),
+      prepared.declarations.points.get(rightPointId),
+      "points",
+      path,
+      issues,
+    );
+  }
+
+  if (issues.length > 0) throw new TemporalModelProposalErrorV1(issues);
+}
+
+function validateModelProposalOutputReferencePair(
+  left: { readonly contextId: string; readonly axisId: string } | undefined,
+  right: { readonly contextId: string; readonly axisId: string } | undefined,
+  kind: "intervals" | "points",
+  path: string,
+  issues: TemporalModelProposalIssueV1[],
+): void {
+  if (!left || !right) {
+    addIssue(
+      issues,
+      "model-proposal.reference",
+      path,
+      `must identify two declared temporal ${kind}`,
+    );
+    return;
+  }
+  if (left.contextId !== right.contextId) {
+    addIssue(
+      issues,
+      "model-proposal.reference",
+      path,
+      `must identify ${kind} in the same temporal context`,
+    );
+  }
+  if (left.axisId !== right.axisId) {
+    addIssue(
+      issues,
+      "model-proposal.reference",
+      path,
+      `must identify ${kind} on the same temporal axis`,
+    );
+  }
+}
+
+interface ModelProposalOutputScope {
+  readonly activeAssertionHandles: readonly string[];
+  readonly constraintAssertionHandles: readonly string[];
+  readonly coordinateAssertionHandles: readonly string[];
+  readonly currentEvidenceIds: readonly string[];
+  readonly cutHandles: readonly string[];
+  readonly referenceHandles: Readonly<
+    Record<TemporalModelReferenceCatalogEntryV1["type"], readonly string[]>
+  >;
+}
+
+function buildModelProposalOutputSchema(
+  prepared: PreparedModelProposalHost,
+  limits: TemporalModelProposalLimitsV1,
+): TemporalModelProposalOutputSchemaV1 {
+  const scope = collectModelProposalOutputScope(prepared);
+  const catalogValues =
+    scope.currentEvidenceIds.length +
+    scope.activeAssertionHandles.length +
+    scope.cutHandles.length +
+    Object.values(scope.referenceHandles).reduce(
+      (total, handles) => total + handles.length,
+      0,
+    );
+  if (
+    catalogValues >
+    TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxCatalogValues
+  ) {
+    throw new TemporalModelProposalErrorV1([
+      issue(
+        "model-proposal.limit",
+        "host",
+        `request-scoped catalogs expose ${catalogValues} values; must not exceed ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxCatalogValues}`,
+      ),
+    ]);
+  }
+
+  const maxChanges = Math.min(
+    limits.maxChanges,
+    TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxChanges,
+  );
+  const maxSupportsPerChange = Math.min(
+    limits.maxSupportsPerChange,
+    TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxSupportsPerChange,
+  );
+  const definitions: Record<string, JsonValue> = {};
+  const hasChangeTarget =
+    scope.referenceHandles.point.length > 0 ||
+    scope.referenceHandles.difference.length > 0 ||
+    scope.activeAssertionHandles.length > 0;
+  const changeVariants =
+    scope.currentEvidenceIds.length === 0 || !hasChangeTarget
+      ? []
+      : modelProposalChangeSchemas(scope, maxSupportsPerChange, definitions);
+  const queryVariants = modelProposalQuerySchemas(scope);
+  if (queryVariants.length === 0) {
+    throw new TemporalModelProposalErrorV1([
+      issue(
+        "model-proposal.reference",
+        "host.referenceCatalog",
+        "must expose at least one context, difference, point-relation, or interval-relation query handle",
+      ),
+    ]);
+  }
+
+  definitions.knowledgeCut = modelProposalKnowledgeCutSchema(scope.cutHandles);
+  definitions.queryIntent = modelProposalSchemaVariants(queryVariants);
+
+  const changes: JsonValue =
+    changeVariants.length === 0
+      ? {
+          type: "array",
+          items: modelProposalSchemaObject({}),
+          maxItems: 0,
+        }
+      : {
+          type: "array",
+          items: modelProposalSchemaReference("change"),
+          maxItems: maxChanges,
+        };
+  if (changeVariants.length > 0) {
+    definitions.change = modelProposalSchemaVariants(changeVariants);
+  }
+
+  return {
+    type: "object",
+    properties: {
+      schema: modelProposalSchemaLiteral("covenant.timeline.model-proposal.v1"),
+      requestId: modelProposalSchemaLiteral(prepared.host.expectedRequestId),
+      changes,
+      query: modelProposalSchemaReference("queryIntent"),
+    },
+    required: ["schema", "requestId", "changes", "query"],
+    additionalProperties: false,
+    $defs: definitions,
+  };
+}
+
+function validateModelProposalOutputSchemaEnums(
+  schema: TemporalModelProposalOutputSchemaV1,
+): void {
+  let enumValues = 0;
+  let oversizedStringEnum:
+    | { readonly characters: number; readonly values: number }
+    | undefined;
+
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    for (const [key, child] of Object.entries(value)) {
+      if (key !== "enum" || !Array.isArray(child)) {
+        visit(child);
+        continue;
+      }
+      enumValues += child.length;
+      if (
+        child.length <=
+        TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.stringEnumCharacterThreshold
+      ) {
+        continue;
+      }
+      const characters = child.reduce(
+        (total, entry) =>
+          total + (typeof entry === "string" ? Array.from(entry).length : 0),
+        0,
+      );
+      if (
+        characters >
+          TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxStringEnumCharacters &&
+        (!oversizedStringEnum || characters > oversizedStringEnum.characters)
+      ) {
+        oversizedStringEnum = { characters, values: child.length };
+      }
+    }
+  };
+
+  visit(schema);
+  const issues: TemporalModelProposalIssueV1[] = [];
+  if (
+    enumValues > TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxEnumValues
+  ) {
+    addIssue(
+      issues,
+      "model-proposal.limit",
+      "host",
+      `request-scoped output schema exposes ${enumValues} enum values; must not exceed ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxEnumValues}`,
+    );
+  }
+  if (oversizedStringEnum) {
+    addIssue(
+      issues,
+      "model-proposal.limit",
+      "host",
+      `request-scoped output schema contains ${oversizedStringEnum.characters} string-enum characters across ${oversizedStringEnum.values} values; enums above ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.stringEnumCharacterThreshold} values must not exceed ${TEMPORAL_MODEL_PROPOSAL_OUTPUT_SCHEMA_CAPS_V1.maxStringEnumCharacters} characters`,
+    );
+  }
+  if (issues.length > 0) throw new TemporalModelProposalErrorV1(issues);
+}
+
+function collectModelProposalOutputScope(
+  prepared: PreparedModelProposalHost,
+): ModelProposalOutputScope {
+  const currentEvidenceIds = [...prepared.catalogs.evidence]
+    .filter(([, { entry }]) => entry.status === "current")
+    .map(([id]) => id)
+    .sort(compareStrings);
+  const referenceHandles: Record<
+    TemporalModelReferenceCatalogEntryV1["type"],
+    string[]
+  > = {
+    context: [],
+    difference: [],
+    "interval-relation": [],
+    point: [],
+    "point-relation": [],
+  };
+  for (const [handle, reference] of prepared.catalogs.references) {
+    referenceHandles[reference.type].push(handle);
+  }
+  for (const handles of Object.values(referenceHandles)) {
+    handles.sort(compareStrings);
+  }
+
+  const activeAssertionHandles: string[] = [];
+  const constraintAssertionHandles: string[] = [];
+  const coordinateAssertionHandles: string[] = [];
+  for (const [handle, assertionId] of prepared.catalogs.assertions) {
+    if (!prepared.activeAssertions.has(assertionId)) continue;
+    const assertion = prepared.assertions.get(assertionId);
+    if (!assertion) continue;
+    activeAssertionHandles.push(handle);
+    if (assertion.kind === "constraint") {
+      constraintAssertionHandles.push(handle);
+    } else if (assertion.kind === "coordinate") {
+      coordinateAssertionHandles.push(handle);
+    }
+  }
+  activeAssertionHandles.sort(compareStrings);
+  constraintAssertionHandles.sort(compareStrings);
+  coordinateAssertionHandles.sort(compareStrings);
+
+  return {
+    activeAssertionHandles,
+    constraintAssertionHandles,
+    coordinateAssertionHandles,
+    currentEvidenceIds,
+    cutHandles: [...prepared.catalogs.cuts.keys()].sort(compareStrings),
+    referenceHandles,
+  };
+}
+
+function modelProposalChangeSchemas(
+  scope: ModelProposalOutputScope,
+  maxSupportsPerChange: number,
+  definitions: Record<string, JsonValue>,
+): readonly JsonValue[] {
+  definitions.safeInteger = { type: "integer" };
+  definitions.support = modelProposalSchemaObject({
+    evidenceId: modelProposalSchemaEnum(scope.currentEvidenceIds),
+    quote: { type: "string" },
+  });
+  definitions.supports = {
+    type: "array",
+    items: modelProposalSchemaReference("support"),
+    minItems: 1,
+    maxItems: maxSupportsPerChange,
+  };
+  definitions.bounds = modelProposalSchemaVariants([
+    modelProposalSchemaObject({
+      type: modelProposalSchemaLiteral("exact"),
+      value: modelProposalSchemaReference("safeInteger"),
+    }),
+    modelProposalSchemaObject({
+      type: modelProposalSchemaLiteral("lower-bound"),
+      minimum: modelProposalSchemaReference("safeInteger"),
+    }),
+    modelProposalSchemaObject({
+      type: modelProposalSchemaLiteral("upper-bound"),
+      maximum: modelProposalSchemaReference("safeInteger"),
+    }),
+    modelProposalSchemaObject({
+      type: modelProposalSchemaLiteral("closed-range"),
+      minimum: modelProposalSchemaReference("safeInteger"),
+      maximum: modelProposalSchemaReference("safeInteger"),
+    }),
+  ]);
+
+  const changes: JsonValue[] = [];
+  if (scope.referenceHandles.point.length > 0) {
+    const revisions: JsonValue[] = [
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral("keep"),
+      }),
+    ];
+    if (scope.coordinateAssertionHandles.length > 0) {
+      revisions.push(
+        modelProposalSchemaObject({
+          type: modelProposalSchemaLiteral("supersede"),
+          assertionHandle: modelProposalSchemaEnum(
+            scope.coordinateAssertionHandles,
+          ),
+        }),
+      );
+    }
+    changes.push(
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral("coordinate"),
+        pointHandle: modelProposalSchemaEnum(scope.referenceHandles.point),
+        bounds: modelProposalSchemaReference("bounds"),
+        supports: modelProposalSchemaReference("supports"),
+        revision: modelProposalSchemaVariants(revisions),
+      }),
+    );
+  }
+  if (scope.referenceHandles.difference.length > 0) {
+    const revisions: JsonValue[] = [
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral("keep"),
+      }),
+    ];
+    if (scope.constraintAssertionHandles.length > 0) {
+      revisions.push(
+        modelProposalSchemaObject({
+          type: modelProposalSchemaLiteral("supersede"),
+          assertionHandle: modelProposalSchemaEnum(
+            scope.constraintAssertionHandles,
+          ),
+        }),
+      );
+    }
+    changes.push(
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral("constraint"),
+        differenceHandle: modelProposalSchemaEnum(
+          scope.referenceHandles.difference,
+        ),
+        bounds: modelProposalSchemaReference("bounds"),
+        supports: modelProposalSchemaReference("supports"),
+        revision: modelProposalSchemaVariants(revisions),
+      }),
+    );
+  }
+  if (scope.activeAssertionHandles.length > 0) {
+    changes.push(
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral("retraction"),
+        assertionHandle: modelProposalSchemaEnum(scope.activeAssertionHandles),
+        supports: modelProposalSchemaReference("supports"),
+      }),
+    );
+  }
+  return changes;
+}
+
+function modelProposalQuerySchemas(
+  scope: ModelProposalOutputScope,
+): readonly JsonValue[] {
+  const queries: JsonValue[] = [];
+  const addQuery = (
+    type: TemporalModelQueryIntentV1["type"],
+    handles: readonly string[],
+  ): void => {
+    if (handles.length === 0) return;
+    queries.push(
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral(type),
+        targetHandle: modelProposalSchemaEnum(handles),
+        knowledgeCut: modelProposalSchemaReference("knowledgeCut"),
+      }),
+    );
+  };
+  addQuery("consistency", scope.referenceHandles.context);
+  addQuery("difference", scope.referenceHandles.difference);
+  addQuery("point-relation", scope.referenceHandles["point-relation"]);
+  addQuery("interval-relation", scope.referenceHandles["interval-relation"]);
+  return queries;
+}
+
+function modelProposalKnowledgeCutSchema(
+  cutHandles: readonly string[],
+): JsonValue {
+  const variants: JsonValue[] = [
+    modelProposalSchemaObject({
+      type: modelProposalSchemaLiteral("current"),
+    }),
+  ];
+  if (cutHandles.length > 0) {
+    variants.push(
+      modelProposalSchemaObject({
+        type: modelProposalSchemaLiteral("prior"),
+        cutHandle: modelProposalSchemaEnum(cutHandles),
+      }),
+    );
+  }
+  return modelProposalSchemaVariants(variants);
+}
+
+function modelProposalSchemaObject(
+  properties: Readonly<Record<string, JsonValue>>,
+): JsonValue {
+  return {
+    type: "object",
+    properties,
+    required: Object.keys(properties),
+    additionalProperties: false,
+  };
+}
+
+function modelProposalSchemaLiteral(value: string): JsonValue {
+  return modelProposalSchemaEnum([value]);
+}
+
+function modelProposalSchemaEnum(values: readonly string[]): JsonValue {
+  return { type: "string", enum: values };
+}
+
+function modelProposalSchemaReference(name: string): JsonValue {
+  return { $ref: `#/$defs/${name}` };
+}
+
+function modelProposalSchemaVariants(
+  variants: readonly JsonValue[],
+): JsonValue {
+  if (variants.length === 1) return variants[0] as JsonValue;
+  return { anyOf: variants };
 }
 
 function validateChange(
@@ -2193,13 +2759,25 @@ function assertBoundedJson(
       active.delete(entry);
       return;
     }
+    let keys: readonly PropertyKey[];
+    try {
+      keys = Reflect.ownKeys(entry);
+    } catch {
+      active.delete(entry);
+      fail("model-proposal.invalid", entryPath, "must be a plain JSON object");
+      return;
+    }
     let propertyCount = 0;
     try {
-      for (const key in entry) {
-        if (!Object.hasOwn(entry, key)) continue;
-        propertyCount += 1;
-        if (propertyCount > 1 && !addBytes(1)) break;
-        if (!addString(key) || !addBytes(1)) break;
+      for (const key of keys) {
+        if (typeof key !== "string") {
+          fail(
+            "model-proposal.invalid",
+            entryPath,
+            "must contain only string property names",
+          );
+          break;
+        }
         const descriptor = Object.getOwnPropertyDescriptor(entry, key);
         if (!descriptor || !Object.hasOwn(descriptor, "value")) {
           fail(
@@ -2209,6 +2787,17 @@ function assertBoundedJson(
           );
           break;
         }
+        if (!descriptor.enumerable) {
+          fail(
+            "model-proposal.invalid",
+            childPath(entryPath, key),
+            "must be enumerable",
+          );
+          break;
+        }
+        propertyCount += 1;
+        if (propertyCount > 1 && !addBytes(1)) break;
+        if (!addString(key) || !addBytes(1)) break;
         visit(descriptor.value, childPath(entryPath, key), depth + 1);
         if (stopped) break;
       }

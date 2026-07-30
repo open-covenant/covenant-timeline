@@ -41,7 +41,7 @@ const runtimeVersion = "0.31.2";
 
 function createConfig(overrides = {}) {
   return {
-    schema: "covenant.timeline.model-eval.config.v1",
+    schema: overrides.schema ?? "covenant.timeline.model-eval.config.v1",
     id: "ollama-reference-test",
     benchmarkRevision: overrides.benchmarkRevision ?? "test-revision",
     adapter: {
@@ -73,7 +73,7 @@ function createRequest(arm = "direct", overrides = {}) {
   return {
     schema: "covenant.timeline.model-eval.request.v1",
     requestId: overrides.requestId ?? "request-23",
-    benchmark: "model-interface-v1",
+    benchmark: overrides.benchmark ?? "model-interface-v1",
     config,
     configDigest: overrides.configDigest ?? contentDigest(config),
     caseId: "case-01",
@@ -86,6 +86,44 @@ function createRequest(arm = "direct", overrides = {}) {
       question: "When did deployment happen?",
       evidence: [],
     },
+  };
+}
+
+function createProposalSchema() {
+  return {
+    type: "object",
+    properties: {
+      schema: {
+        type: "string",
+        enum: ["covenant.timeline.model-proposal.v1"],
+      },
+      requestId: { type: "string", enum: ["request-23"] },
+      changes: {
+        type: "array",
+        items: { type: "object" },
+        maxItems: 2,
+      },
+    },
+    required: ["schema", "requestId", "changes"],
+    additionalProperties: false,
+  };
+}
+
+function createProposalRequest(overrides = {}) {
+  const outputSchema = overrides.outputSchema ?? createProposalSchema();
+  return {
+    ...createRequest("proposal", {
+      ...overrides,
+      benchmark: "model-proposal-boundary-v1",
+      config:
+        overrides.config ??
+        createConfig({
+          schema: "covenant.timeline.model-proposal-eval.config.v1",
+        }),
+    }),
+    outputSchema,
+    outputSchemaDigest:
+      overrides.outputSchemaDigest ?? contentDigest(outputSchema),
   };
 }
 
@@ -231,6 +269,48 @@ test("Ollama request mapping is deterministic and stateless for every arm", () =
   }
 });
 
+test("proposal requests use the request-bound output schema directly", () => {
+  const request = createProposalRequest();
+  const body = createOllamaChatBody(request);
+
+  assert.equal(body.format, request.outputSchema);
+  assert.deepEqual(body.messages[1], {
+    role: "user",
+    content: canonicalJson({
+      requestId: request.requestId,
+      input: request.input,
+    }),
+  });
+});
+
+test("benchmark-specific schema fields fail closed", () => {
+  const schema = createProposalSchema();
+  const invalid = [
+    createProposalRequest({
+      outputSchemaDigest:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
+    {
+      ...createRequest("proposal", {
+        benchmark: "model-proposal-boundary-v1",
+      }),
+      outputSchema: schema,
+    },
+    {
+      ...createRequest(),
+      outputSchema: schema,
+      outputSchemaDigest: contentDigest(schema),
+    },
+    createRequest("direct", {
+      benchmark: "model-proposal-boundary-v1",
+    }),
+  ];
+
+  for (const request of invalid) {
+    assert.throws(() => createOllamaChatBody(request));
+  }
+});
+
 test("records supported thinking levels in the provider request", () => {
   const config = createConfig({
     parameters: {
@@ -330,6 +410,31 @@ test("native chat output maps token counts mechanically", () => {
       costUsd: null,
     },
   });
+});
+
+test("native chat output preserves proposal fields with adapter usage", () => {
+  const proposal = {
+    schema: "covenant.timeline.model-proposal.v1",
+    requestId: "request-23",
+    changes: [],
+    query: {
+      type: "consistency",
+      targetHandle: "delivery",
+      knowledgeCut: { type: "current" },
+    },
+  };
+
+  assert.deepEqual(
+    parseOllamaChatResponse(createChatResponse(proposal), model),
+    {
+      ...proposal,
+      usage: {
+        inputTokens: 180,
+        outputTokens: 30,
+        costUsd: null,
+      },
+    },
+  );
 });
 
 test("incomplete, ambiguous, and malformed chat output fails closed", () => {
@@ -662,7 +767,7 @@ test("chat failures are not retried", async () => {
   assert.equal(chatCalls, 1);
 });
 
-test("chat HTTP 400 remains an observation-scoped result", async () => {
+test("chat HTTP 400 is a run-scoped request failure", async () => {
   const request = createRequest();
   const stdout = capture();
   const exitCode = await runAdapter({
@@ -687,7 +792,7 @@ test("chat HTTP 400 remains an observation-scoped result", async () => {
     error: {
       code: "provider.chat-http-400",
       message: "Ollama API returned HTTP 400",
-      scope: "observation",
+      scope: "run",
     },
   });
 });

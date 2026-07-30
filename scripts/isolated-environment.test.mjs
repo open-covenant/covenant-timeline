@@ -38,7 +38,6 @@ test("isolates installed package processes from host credentials and options", (
     { encoding: "utf8", env: environment },
   );
   assert.equal(result.status, 0, result.stderr);
-  const observed = JSON.parse(result.stdout);
   const expected = {
     HOME: "/isolated/home",
     LANG: "C.UTF-8",
@@ -49,6 +48,9 @@ test("isolates installed package processes from host credentials and options", (
     TMPDIR: "/isolated/tmp",
     USERPROFILE: "/isolated/home",
   };
+  assert.deepEqual(environment, expected);
+
+  const observed = JSON.parse(result.stdout);
   for (const key of [
     "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
     "ACTIONS_RUNTIME_TOKEN",
@@ -61,14 +63,9 @@ test("isolates installed package processes from host credentials and options", (
   ]) {
     assert.equal(observed[key], undefined);
   }
-  assert.deepEqual(
-    Object.fromEntries(
-      Object.entries(observed).filter(
-        ([key]) => key !== "__CF_USER_TEXT_ENCODING",
-      ),
-    ),
-    expected,
-  );
+  for (const [key, value] of Object.entries(expected)) {
+    assert.equal(observed[key], value);
+  }
 });
 
 test("rejects unsupported environment overrides", () => {

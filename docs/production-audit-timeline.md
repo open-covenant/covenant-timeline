@@ -297,17 +297,17 @@ graph exhaustion, and temporal-data privacy.
       writes as unauthenticated. Catalog discovery is paginated, fatal protocol
       input exits nonzero, and the source-first pilot exports a
       restart-spanning artifact that a separate process verifies offline.
-- [ ] **Validate the model boundary.** The versioned harness, corpus, and scorer
-      now compare Timeline-assisted reasoning with a narrative-memory baseline
-      while preserving invalid output and unsupported definite answers as
-      failures. Reference adapters now support a digest-verified local Ollama
-      model and stateless OpenAI Responses requests while preserving provider
-      failures. One local smoke run exercised raw v0alpha3 event authorship on
-      the visible development suite; it did not exercise the proposal compiler
-      and is not efficacy evidence. No proposal-boundary or blinded model result
-      has been published, so there is still no controlled evidence that models
-      reliably emit admissible temporal proposals or that Timeline improves
-      end-to-end temporal accuracy.
+- [ ] **Validate the model boundary.** The versioned harness, corpora, and
+      scorer now compare rolling Timeline state with bounded narrative memory
+      and stateless full-context structured extraction while preserving invalid
+      output and unsupported definite answers as failures. Reference adapters
+      support a digest-verified local Ollama model and stateless OpenAI
+      Responses requests while preserving provider failures. A fixed
+      frontier-model gate and teacher-forced diagnostic are preregistered
+      against a public paraphrase corpus. No formal frontier-model or
+      proposal-boundary result has been published, so there is still no
+      controlled evidence that models reliably emit admissible temporal
+      proposals or that Timeline improves end-to-end temporal accuracy.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.
@@ -452,8 +452,8 @@ Recommended host metrics:
 
 ## Recommended Architecture Changes
 
-1. Run an external model through the proposal-compiler boundary, then complete
-   the preregistered blinded scale evaluation before any efficacy claim.
+1. Complete the preregistered frontier-model falsification gate, then run a
+   broader blinded proposal-boundary evaluation before any efficacy claim.
 2. Obtain one externally operated temporal pilot with the source-first starter;
    publish the MCP package as a distribution step when registry access is
    available.
@@ -469,7 +469,8 @@ Recommended host metrics:
 
 ## Test Coverage Gaps
 
-- No published proposal-boundary model result or blinded scale-suite result.
+- No published formal frontier-model, proposal-boundary, or blinded scale-suite
+  result.
 - No independently operated temporal pilot.
 - No independently maintained temporal implementation.
 - No production deployment evidence in the public archive.
@@ -487,8 +488,8 @@ Recommended host metrics:
 ## Action Plan
 
 1. Preserve v0alpha1 replay and the v0alpha2 migration corpus on every release.
-2. Publish one external v1 smoke run and preregister the blinded scale
-   evaluation defined in the roadmap.
+2. Complete and publish the preregistered frontier-model gate, then use a
+   passing result to design the broader blinded proposal-boundary evaluation.
 3. Complete one external temporal pilot with replayable evidence.
 4. Support a separately maintained temporal implementation through the shared
    conformance target.

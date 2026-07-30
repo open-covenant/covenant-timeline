@@ -168,8 +168,10 @@ Evaluate model integrations in separate stages:
 - **reasoning:** the kernel or verifier returns an incorrect result; and
 - **response:** the model contradicts or overstates the checked result.
 
-The public [model-interface v1 benchmark](./model-evaluation.md) compares direct
-prompting, narrative memory, and rolling Timeline state. Its Timeline arm
-deliberately asks the model to author raw v0alpha3 events, making ledger
-bookkeeping failures visible. Production integrations should use the proposal
-compiler; results from the two boundaries are not interchangeable.
+The public [model-interface v1 benchmark](./model-evaluation.md) compares
+bounded narrative memory, stateless full-context structured extraction, and
+rolling Timeline state. Direct full-context answering remains a secondary
+reference. The Timeline arm deliberately asks the model to author raw
+v0alpha3 events, making ledger bookkeeping failures visible. Production
+integrations should use the proposal compiler; results from the two boundaries
+are not interchangeable.

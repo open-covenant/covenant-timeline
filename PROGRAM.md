@@ -38,10 +38,12 @@ responsibility.
 The [roadmap](./ROADMAP.md) is the canonical source for the project's three
 current gates: model reliability, operational value, and protocol portability.
 
-The checked-in model-interface v1 suite is a public development and smoke
-benchmark. It has no published model result and cannot close the model gate.
-That requires the preregistered blinded scale evaluation defined in the
-roadmap. Pilot and interoperability work advance through exported evidence.
+The checked-in model-interface v1 suite includes a public development corpus and
+a preregistered public paraphrase corpus for a formal frontier-model
+falsification gate. No formal frontier-model result has been published. A
+failure ends the standalone model-memory thesis; a pass justifies a broader
+blinded evaluation but does not establish general efficacy. Pilot and
+interoperability work advance through exported evidence.
 
 ## Product boundary
 
@@ -68,8 +70,9 @@ Covenant is the first reference adopter, not a required service.
 
 ## What the evidence decides
 
-If the blinded model evaluation succeeds, the next interface work should follow
-its observed extraction and repair failures. If the pilot succeeds,
+If the frontier-model gate passes, the next interface work and broader blinded
+evaluation should follow its observed extraction and continuity failures. If it
+fails, standalone model-memory expansion stops. If the pilot succeeds,
 operational features should follow the operator's measured friction. If the
 independent implementation succeeds, the interoperable subset can advance
 through the RFC process.

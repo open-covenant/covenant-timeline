@@ -8,10 +8,14 @@
   transition, and after knowledge cuts; content-bound evidence documents; exact
   conclusion fixtures; verifier-checked proofs; and a repository command that
   reproduces the complete artifact.
-- Add the model-interface v1 development benchmark: 12 kernel-derived temporal
-  cases, paired direct, narrative-memory, and Timeline arms, a one-shot JSONL adapter
-  protocol, strict admission and capacity limits, replayable request and
-  response artifacts, paired scoring, and adversarial harness tests.
+- Add the model-interface v1 benchmark: 12-case development and deterministic
+  paraphrase corpora; primary narrative-memory, structured-extraction, and
+  Timeline arms; a secondary direct-answer reference; a one-shot JSONL adapter
+  protocol; strict admission and capacity limits; replayable request and
+  response artifacts; paired scoring; and adversarial harness tests.
+- Add teacher-forced prior-state diagnostics and a preregistered frontier-model
+  gate with fixed configuration, absolute and comparative thresholds,
+  per-repeat floors, case-clustered exact tests, and a continue-or-kill decision.
 - Add deterministic model-proposal compilation with request-scoped handles,
   exact UTF-8 quote provenance, content-addressed ledger candidates, closed JSON
   Schemas, a bounded provider-schema projection from each host snapshot,
@@ -65,7 +69,7 @@
   continued standalone product expansion.
 - Refocus the public roadmap on model reliability, an external temporal pilot,
   and an independently maintained implementation, with a blinded scale
-  evaluation required before any model-performance claim.
+  evaluation required before any broad efficacy claim.
 - Record the alpha.2 token-fallback publication and operator-observed credential
   cleanup without presenting trusted publishing as an alpha release gate.
 - Move artifact upload to its Node.js 24 action and consolidate SBOM

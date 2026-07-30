@@ -21,9 +21,12 @@ test("config creation injects the source revision and exact model snapshot", asy
   try {
     assert.equal(
       await createOpenAIModelEvalConfig({
+        maxOutputTokens: 16_384,
         model: "gpt-4o-mini-2024-07-18",
         output,
+        reasoningEffort: "high",
         sourceRevision: revision,
+        verbosity: "low",
       }),
       output,
     );
@@ -34,7 +37,10 @@ test("config creation injects the source revision and exact model snapshot", asy
     assert.equal(config.adapter.id, "openai-responses");
     assert.equal(config.adapter.version, "1");
     assert.equal(config.generation.seed, null);
+    assert.equal(config.generation.maxOutputTokens, 16_384);
     assert.equal(config.generation.parameters.structuredOutput, true);
+    assert.equal(config.generation.parameters.reasoningEffort, "high");
+    assert.equal(config.generation.parameters.verbosity, "low");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

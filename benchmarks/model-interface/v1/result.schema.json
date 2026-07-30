@@ -94,19 +94,26 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "attemptId",
         "config",
         "configDigest",
         "corpusDigest",
         "promptDigests",
         "selection",
         "timelineVersion",
+        "startedAt",
         "sourceRevision",
         "sourceDirty",
+        "sourceStateDigest",
+        "runtimeDigest",
         "node",
         "platform",
         "arch"
       ],
       "properties": {
+        "attemptId": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+        },
         "config": {
           "$ref": "#/$defs/runConfig"
         },
@@ -119,12 +126,20 @@
         "promptDigests": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["direct", "narrative-memory", "timeline"],
+          "required": [
+            "direct",
+            "narrative-memory",
+            "structured-extraction",
+            "timeline"
+          ],
           "properties": {
             "direct": {
               "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
             },
             "narrative-memory": {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+            },
+            "structured-extraction": {
               "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
             },
             "timeline": {
@@ -135,14 +150,25 @@
         "selection": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["arms", "cases", "repeats", "timeoutMs"],
+          "required": [
+            "arms",
+            "cases",
+            "priorStateMode",
+            "repeats",
+            "timeoutMs"
+          ],
           "properties": {
             "arms": {
               "type": "array",
               "minItems": 1,
               "uniqueItems": true,
               "items": {
-                "enum": ["direct", "narrative-memory", "timeline"]
+                "enum": [
+                  "direct",
+                  "narrative-memory",
+                  "structured-extraction",
+                  "timeline"
+                ]
               }
             },
             "cases": {
@@ -152,6 +178,9 @@
               "items": {
                 "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
               }
+            },
+            "priorStateMode": {
+              "enum": ["rolling", "teacher-forced"]
             },
             "repeats": {
               "type": "integer",
@@ -168,6 +197,10 @@
         "timelineVersion": {
           "$ref": "#/$defs/nonEmptyString"
         },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
         "sourceRevision": {
           "$ref": "#/$defs/nonEmptyString"
         },
@@ -180,6 +213,19 @@
               "type": "null"
             }
           ]
+        },
+        "sourceStateDigest": {
+          "oneOf": [
+            {
+              "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runtimeDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
         },
         "node": {
           "$ref": "#/$defs/nonEmptyString"
@@ -348,7 +394,12 @@
       ]
     },
     "arm": {
-      "enum": ["direct", "narrative-memory", "timeline"]
+      "enum": [
+        "direct",
+        "narrative-memory",
+        "structured-extraction",
+        "timeline"
+      ]
     },
     "repeat": {
       "type": "integer",

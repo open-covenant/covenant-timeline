@@ -45,36 +45,31 @@ model result.
 The checked-in proposal-boundary benchmark is the primary engineering suite for
 model extraction. The lower-level
 [model-interface benchmark v1](./benchmarks/model-interface/v1/README.md)
-retains direct text, narrative memory, and raw Timeline authorship as research
-diagnostics. Both use stateless adapters and strict replayable artifacts.
+compares bounded narrative memory, stateless full-context structured
+extraction, and rolling Timeline state. Direct full-context answering remains a
+secondary diagnostic. Both suites use stateless adapters and strict replayable
+artifacts.
 
-No external model result has been published. The visible corpus is too small
-and too exposed to support a performance claim.
+No formal frontier-model result has been published. The visible corpus is too
+small and too exposed to establish broad model performance. It is sufficient
+for a strict falsification test.
 
-The next evidence step is a reproducible baseline on the proposal boundary.
-Comparative claims against narrative memory or raw ledger authorship still
-require the blinded suite below.
+The
+[frontier-model preregistration](./benchmarks/model-interface/v1/PREREGISTRATION.md)
+fixes one model and configuration, three repeats, a public paraphrase corpus
+held out from prompt and schema development, three primary arms, failure
+accounting, paired analysis, and a binary continue-or-kill decision before any
+result is observed. Timeline must clear high absolute extraction and
+end-to-end thresholds and beat both simpler baselines. Teacher-forced prior
+state is reported separately to distinguish current-cut extraction failures
+from continuity failures.
 
-The model gate requires a preregistered blinded suite that:
-
-- uses opaque case and entity identifiers;
-- includes distractors and no-op cuts;
-- evaluates controlled paraphrase families;
-- spans rolling histories from 20 to 200 cuts;
-- fixes context and memory budgets before corpus generation;
-- reserves generation seeds and variants unavailable during adapter
-  development;
-- keeps model, decoding, retry, and structured-output settings identical
-  across paired arms;
-- counts malformed output, admission failures, and unsupported definite
-  answers as failures; and
-- reports case-clustered uncertainty rather than treating every cut as an
-  independent observation.
-
-The preregistration must fix the primary outcome, exclusions, stopping rule,
-sample size, model configuration, and analysis before results are observed.
-Published results must separate extraction, query, admission, kernel, proof,
-and final-answer errors.
+A passing result would justify a larger blinded suite with opaque identifiers,
+distractors, no-op cuts, controlled paraphrase families, longer histories,
+reserved generation variants, fixed budgets, and case-clustered uncertainty.
+It would not itself establish general temporal intelligence or production
+safety. A failed gate ends the standalone model-memory thesis without changing
+the kernel's independently tested deterministic properties.
 
 ### 2. Low-friction agent integration
 
@@ -135,7 +130,7 @@ following:
 - the installable temporal API;
 - the correction-and-replay demo;
 - the local MCP integration; and
-- one published blinded model evaluation.
+- one published passing result from the preregistered frontier-model gate.
 
 Standalone product expansion continues only if that window produces:
 

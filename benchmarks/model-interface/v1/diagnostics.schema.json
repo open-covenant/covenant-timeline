@@ -220,7 +220,12 @@
       ],
       "properties": {
         "arm": {
-          "enum": ["direct", "narrative-memory", "timeline"]
+          "enum": [
+            "direct",
+            "narrative-memory",
+            "structured-extraction",
+            "timeline"
+          ]
         },
         "caseId": {
           "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
@@ -241,7 +246,7 @@
           "maximum": 19
         },
         "scope": {
-          "enum": ["independent", "rolling"]
+          "enum": ["independent", "rolling", "teacher-forced"]
         },
         "cuts": {
           "type": "array",

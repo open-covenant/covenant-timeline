@@ -200,7 +200,12 @@ async function readBody(request) {
 }
 
 test("OpenAI request mapping is exact and stateless for every arm", () => {
-  for (const arm of ["direct", "narrative-memory", "timeline"]) {
+  for (const arm of [
+    "direct",
+    "narrative-memory",
+    "structured-extraction",
+    "timeline",
+  ]) {
     const config = createConfig({
       parameters: {
         structuredOutput: true,
@@ -240,7 +245,7 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
         MAX_NARRATIVE_MEMORY_CHARACTERS,
       );
     }
-    if (arm === "timeline") {
+    if (arm === "structured-extraction" || arm === "timeline") {
       assert.equal(
         body.text.format.schema.properties.events.maxItems,
         MAX_TIMELINE_EVENTS_PER_RESPONSE,
@@ -337,7 +342,12 @@ test("provider schemas cover every public v1 gold response", async () => {
     .map(JSON.parse);
   const ajv = new Ajv2020({ allErrors: true, strict: false });
 
-  for (const arm of ["direct", "narrative-memory", "timeline"]) {
+  for (const arm of [
+    "direct",
+    "narrative-memory",
+    "structured-extraction",
+    "timeline",
+  ]) {
     const requestId = `schema-${arm}`;
     const format = createOpenAIResponseFormat(arm);
     assert.equal(format.schema.type, "object");
@@ -348,7 +358,7 @@ test("provider schemas cover every public v1 gold response", async () => {
     for (const testCase of cases) {
       for (const cut of testCase.cuts) {
         const response =
-          arm === "timeline"
+          arm === "structured-extraction" || arm === "timeline"
             ? {
                 schema: responseSchema,
                 requestId,

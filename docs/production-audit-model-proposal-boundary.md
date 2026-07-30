@@ -67,8 +67,11 @@ This audit covers:
 
 The public corpus is visible and small. It proves representability, replay, and
 failure accounting; it cannot establish generalization or a win over narrative
-memory. The next evidence gate is a preregistered blinded suite with longer
-histories, paraphrases, distractors, fixed budgets, and paired analysis.
+memory. The lower-level model-interface benchmark now preregisters a fixed
+frontier-model falsification run on a public paraphrase corpus against
+narrative memory and stateless structured extraction. A passing result would
+justify a blinded proposal-boundary suite with longer histories, distractors,
+fixed budgets, and reserved variants.
 
 The adoption gate remains one independent long-running-agent pilot that crosses
 a restart, admits delayed or corrected evidence, and publishes a redacted run

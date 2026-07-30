@@ -266,7 +266,9 @@ The [model interface](./docs/model-interface.md) and
 measures the production extraction boundary directly. The lower-level
 [model-interface benchmark](./benchmarks/model-interface/v1/README.md) measures
 extraction, admission, query selection, and final answers separately across
-direct text, narrative memory, and Timeline-backed state.
+bounded narrative memory, stateless structured extraction, and
+Timeline-backed state. Direct full-context answers remain available as a
+secondary reference.
 Its low-level Timeline arm keeps raw ledger authorship visible as a research
 diagnostic; production integrations should use the proposal compiler. Reference
 adapters support a digest-verified local Ollama model or the OpenAI Responses
@@ -342,18 +344,23 @@ Before production use, review the
 
 ## Proving the model boundary
 
-The repository includes a public 12-case proposal-boundary benchmark,
-deterministic scoring, a digest-verified local Ollama adapter, and a stateless
-OpenAI Responses adapter. It measures whether a model can turn evidence into
-compiler-valid temporal proposals and verified conclusions across rolling
-knowledge cuts. No model result has been published, and the visible corpus does
-not establish that Timeline outperforms narrative memory.
+The repository includes deterministic model-interface and proposal-boundary
+benchmarks, a digest-verified local Ollama adapter, and a stateless OpenAI
+Responses adapter. They measure whether a model can turn evidence into typed
+temporal state and verified conclusions across rolling knowledge cuts. No
+frontier-model result has been published.
 
-The next evidence gate is a preregistered blinded benchmark with longer rolling
-histories, controlled paraphrases, distractors, fixed budgets, strict failure
-accounting, and paired analysis. See
-[Model evaluation](./docs/model-evaluation.md) and the
-[roadmap](./ROADMAP.md).
+The first decision gate is
+[preregistered](./benchmarks/model-interface/v1/PREREGISTRATION.md): one fixed
+frontier model, three repeats, and a public paraphrase corpus held out from
+prompt and schema development. Timeline must clear high assertion and
+end-to-end accuracy thresholds and beat both bounded narrative memory and
+stateless full-context structured extraction. Teacher-forced prior state
+separates current-cut extraction failures from continuity failures. The suite
+is intentionally small: it can kill the standalone model-memory thesis, but a
+pass would justify broader blinded evaluation rather than prove general
+temporal intelligence. See [Model evaluation](./docs/model-evaluation.md) and
+the [roadmap](./ROADMAP.md).
 
 The second gate is one independent long-running-agent pilot that crosses a
 restart, admits delayed or corrected evidence, and publishes a redacted run

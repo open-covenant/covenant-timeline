@@ -351,7 +351,7 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
 
   const run = await runModelInterfaceEval({
     adapter: [process.execPath, adapterPath, casesPath],
-    arms: ["direct", "narrative-memory", "timeline"],
+    arms: ["narrative-memory", "structured-extraction", "timeline"],
     caseIds: [],
     cases: casesPath,
     config: configPath,
@@ -369,17 +369,17 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
   assert.deepEqual(
     orderedResults.slice(0, 9).map(({ arm }) => arm),
     [
-      ...Array(3).fill("direct"),
       ...Array(3).fill("narrative-memory"),
+      ...Array(3).fill("structured-extraction"),
       ...Array(3).fill("timeline"),
     ],
   );
   assert.deepEqual(
     orderedResults.slice(9, 18).map(({ arm }) => arm),
     [
-      ...Array(3).fill("narrative-memory"),
+      ...Array(3).fill("structured-extraction"),
       ...Array(3).fill("timeline"),
-      ...Array(3).fill("direct"),
+      ...Array(3).fill("narrative-memory"),
     ],
   );
 
@@ -394,8 +394,8 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
     complete: true,
     repeats: 1,
   });
-  assert.equal(score.arms.direct.answerExactRate.value, 1);
   assert.equal(score.arms["narrative-memory"].answerExactRate.value, 1);
+  assert.equal(score.arms["structured-extraction"].endToEndExactRate.value, 1);
   assert.equal(score.arms.timeline.endToEndExactRate.value, 1);
   assert.equal(score.arms.timeline.answerExactRate.value, 1);
   assert.equal(score.arms.timeline.admissionRate.value, 1);
@@ -403,13 +403,19 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
   assert.equal(score.arms.timeline.projectedStateExactRate.value, 1);
   assert.equal(score.arms.timeline.queryExactRate.value, 1);
   assert.equal(score.arms.timeline.proofVerificationRate.value, 1);
-  assert.deepEqual(score.paired.timelineVsDirect, {
+  const tiedComparison = {
     win: 0,
     loss: 0,
     tie: 36,
     bothCorrect: 36,
     bothIncorrect: 0,
-  });
+    answerExactDifference: 0,
+    caseClusterCount: 12,
+    caseClusterSignFlipP: 1,
+  };
+  assert.deepEqual(score.paired.timelineVsNarrativeMemory, tiedComparison);
+  assert.deepEqual(score.paired.timelineVsStructuredExtraction, tiedComparison);
+  assert.equal(score.paired.timelineVsDirect, null);
 
   const tamperedPath = join(temporaryDirectory, "tampered-results.jsonl");
   const tampered = await readJsonLines(resultsPath);
@@ -426,7 +432,7 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
       cases: casesPath,
       results: tamperedPath,
     }),
-    /answer does not match stored response/,
+    /narrative output does not match stored response/,
   );
 
   const hiddenPriorPath = join(
@@ -1207,7 +1213,13 @@ input.on("line", (line) => {
     requestId: request.requestId,
   };
   const ids = assertionIds.get(request.caseId);
-  const events = cut.goldEvents.map((event) => {
+  const sourceEvents =
+    request.arm === "structured-extraction"
+      ? testCase.cuts
+          .slice(0, request.cut + 1)
+          .flatMap(({ goldEvents }) => goldEvents)
+      : cut.goldEvents;
+  const events = sourceEvents.map((event) => {
     const renamed = {
       ...event,
       id: "model-event-" + event.sequence,
@@ -1229,7 +1241,7 @@ input.on("line", (line) => {
     return renamed;
   });
   const response =
-    request.arm === "timeline"
+    request.arm === "timeline" || request.arm === "structured-extraction"
       ? {
           ...common,
           events,

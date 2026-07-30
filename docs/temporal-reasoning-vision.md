@@ -81,13 +81,15 @@ has to separate assertion extraction, query construction, admission, solver
 behavior, and final-answer accuracy.
 
 The public
-[model-interface v1 development benchmark](../benchmarks/model-interface/v1/README.md)
-compares Timeline-assisted reasoning with direct full-context answers and
-rolling narrative memory. Its smoke suite measures delayed observations,
-historical cuts, corrections, contradictions, bounded time, scenario isolation,
-and interval relations while keeping invalid output visible. No model evaluation
-with an external model has been run; the roadmap defines the blinded scale
-evaluation required for an efficacy claim.
+[model-interface v1 benchmark](../benchmarks/model-interface/v1/README.md)
+compares Timeline-assisted reasoning with rolling narrative memory and
+stateless full-context structured extraction. Direct answers remain a
+secondary reference. Its suites measure delayed observations, historical cuts,
+corrections, contradictions, bounded time, scenario isolation, and interval
+relations while keeping invalid output visible. No formal frontier-model result
+has been published. The preregistered public paraphrase run can falsify the
+standalone model-memory thesis; a broader blinded evaluation would still be
+required for an efficacy claim.
 
 ## What success means
 
@@ -105,9 +107,10 @@ The model benchmark and external pilot measure these capabilities directly.
 ## Evidence path
 
 The [roadmap](../ROADMAP.md) defines the current evidence sequence and its exit
-criteria: a blinded model evaluation, an external long-running-agent pilot, and
-an independently maintained implementation. These establish model reliability,
-operational value, and protocol portability respectively.
+criteria: the preregistered frontier-model gate, an external long-running-agent
+pilot, and an independently maintained implementation. A successful gate would
+justify a broader blinded model evaluation. Together these test model
+reliability, operational value, and protocol portability.
 
 ## Research boundary
 

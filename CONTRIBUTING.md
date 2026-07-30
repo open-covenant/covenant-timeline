@@ -4,10 +4,9 @@
 
 Current priorities are:
 
-- adapter validation runs and failure cases for the public
-  [model-interface v1 smoke benchmark](./benchmarks/model-interface/v1/README.md),
-  plus independent review of the blinded scale protocol in the
-  [roadmap](./ROADMAP.md);
+- independent review and reproduction of the public
+  [model-interface v1 frontier-model gate](./benchmarks/model-interface/v1/PREREGISTRATION.md),
+  plus adapter validation runs and failure cases;
 - one externally operated
   [long-running-agent pilot](./docs/temporal-pilot.md); and
 - an independent implementation of
@@ -25,11 +24,12 @@ affects normative semantics, compatibility, security, or governance.
 
 ## Model-interface benchmark
 
-The checked-in v1 suite is a public development and smoke benchmark with no
-published model result. Its cases, prompts, adapters, scorers, and result
-submissions are non-normative evaluation artifacts. They use ordinary
-pull-request review and do not require an RFC unless they also change protocol
-semantics, schemas, compatibility, or a security boundary.
+The checked-in v1 suite includes a public development corpus and a
+preregistered public paraphrase corpus with no published frontier-model result.
+Its cases, prompts, adapters, scorers, gates, and result submissions are
+non-normative evaluation artifacts. They use ordinary pull-request review and
+do not require an RFC unless they also change protocol semantics, schemas,
+compatibility, or a security boundary.
 
 A benchmark contribution must:
 
@@ -40,8 +40,9 @@ A benchmark contribution must:
 - separate extraction, query, solver, and final-answer errors; and
 - include the command needed to reproduce scoring.
 
-Do not tune cases against unpublished result sets or present a smoke run as
-evidence of a general gain.
+Do not tune prompts or schemas against the reserved paraphrase corpus, select
+favorable observations across attempts, or present a smoke run as evidence of a
+general gain.
 
 ## Development
 

@@ -20,7 +20,17 @@ import {
 } from "./model-eval-output-schema.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
-export const ARMS = ["direct", "narrative-memory", "timeline"];
+export const ARMS = [
+  "direct",
+  "narrative-memory",
+  "structured-extraction",
+  "timeline",
+];
+export const DEFAULT_ARMS = [
+  "narrative-memory",
+  "structured-extraction",
+  "timeline",
+];
 export const BENCHMARK = "model-interface-v1";
 export const CASE_SCHEMA = "covenant.timeline.model-eval.case.v1";
 export const CONFIG_SCHEMA = "covenant.timeline.model-eval.config.v1";
@@ -39,6 +49,8 @@ export const PROMPT_PATHS = {
   direct: "benchmarks/model-interface/v1/prompts/direct.md",
   "narrative-memory":
     "benchmarks/model-interface/v1/prompts/narrative-memory.md",
+  "structured-extraction":
+    "benchmarks/model-interface/v1/prompts/structured-extraction.md",
   timeline: "benchmarks/model-interface/v1/prompts/timeline.md",
 };
 
@@ -67,6 +79,10 @@ const scoreSchemaPath = join(
 const diagnosticsSchemaPath = join(
   root,
   "benchmarks/model-interface/v1/diagnostics.schema.json",
+);
+const gateSchemaPath = join(
+  root,
+  "benchmarks/model-interface/v1/gate.schema.json",
 );
 const schemaDirectory = join(root, "schemas/v0alpha3");
 const schemaFiles = [
@@ -122,6 +138,11 @@ export async function createModelEvalValidators() {
     diagnosticsSchemaPath,
   );
   ajv.addSchema(diagnosticsSchema);
+  const gateSchema = parseStrictJson(
+    await readFile(gateSchemaPath, "utf8"),
+    gateSchemaPath,
+  );
+  ajv.addSchema(gateSchema);
 
   return {
     config: requireValidator(
@@ -146,6 +167,7 @@ export async function createModelEvalValidators() {
       diagnosticsSchema.$id,
       "benchmark diagnostics",
     ),
+    gate: requireValidator(ajv, gateSchema.$id, "frontier-model gate"),
     semanticResult: requireValidator(
       ajv,
       "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json#/$defs/semanticResult",
@@ -470,6 +492,34 @@ export function assertVisibleEvidenceRefs(event, evidence, label = "event") {
   }
 }
 
+export function assertStructuredEventOrder(
+  events,
+  evidence,
+  label = "adapter response.events",
+) {
+  const cutByDigest = new Map(evidence.map(({ cut, digest }) => [digest, cut]));
+  let previousCut = -1;
+  for (const [index, event] of events.entries()) {
+    const cuts = eventEvidenceRefs(event).map((reference) =>
+      cutByDigest.get(reference),
+    );
+    if (cuts.length === 0 || cuts.some((cut) => !Number.isSafeInteger(cut))) {
+      continue;
+    }
+    const eventCut = Math.max(...cuts);
+    if (eventCut < previousCut) {
+      throw new ModelEvalError(
+        `${label}[${index}]: events must follow evidence-cut order`,
+        {
+          code: "event.evidence-order",
+          stage: "admission",
+        },
+      );
+    }
+    previousCut = eventCut;
+  }
+}
+
 export function assertModelTimelineDelta(
   events,
   label = "adapter response.events",
@@ -645,7 +695,7 @@ export function validateAdapterResponse(response, request, validators) {
       code: "response.memory",
     });
   }
-  if (request.arm === "timeline") {
+  if (request.arm === "structured-extraction" || request.arm === "timeline") {
     if (!Array.isArray(response.events)) {
       throw new ModelEvalError("adapter response.events: must be an array", {
         code: "response.events",

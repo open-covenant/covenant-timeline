@@ -206,7 +206,12 @@ function jsonResponse(value, status = 200) {
 }
 
 test("Ollama request mapping is deterministic and stateless for every arm", () => {
-  for (const arm of ["direct", "narrative-memory", "timeline"]) {
+  for (const arm of [
+    "direct",
+    "narrative-memory",
+    "structured-extraction",
+    "timeline",
+  ]) {
     const request = createRequest(arm);
     const body = createOllamaChatBody(request);
 
@@ -239,7 +244,7 @@ test("Ollama request mapping is deterministic and stateless for every arm", () =
         MAX_NARRATIVE_MEMORY_CHARACTERS,
       );
     }
-    if (arm === "timeline") {
+    if (arm === "structured-extraction" || arm === "timeline") {
       assert.equal(
         body.format.properties.events.maxItems,
         MAX_TIMELINE_EVENTS_PER_RESPONSE,

@@ -26,6 +26,7 @@ const MODEL_PROPOSAL_BENCHMARK = "model-proposal-boundary-v1";
 const MODEL_INTERFACE_ARMS = new Set([
   "direct",
   "narrative-memory",
+  "structured-extraction",
   "timeline",
 ]);
 const MAX_REQUEST_BYTES = 256 * 1024;

@@ -358,7 +358,7 @@ export function createModelEvalOutputSchema(arm) {
       }),
       $defs: semanticDefinitions(),
     };
-  } else if (arm === "timeline") {
+  } else if (arm === "structured-extraction" || arm === "timeline") {
     schema = {
       ...object({
         ...common,

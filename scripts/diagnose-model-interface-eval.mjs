@@ -62,12 +62,13 @@ export async function diagnoseModelInterfaceEval({
     for (const caseId of score.run.selection.cases) {
       const testCase = caseById.get(caseId);
       for (const arm of score.run.selection.arms) {
-        if (arm === "direct") {
+        if (arm === "direct" || arm === "structured-extraction") {
           for (const cut of testCase.cuts) {
             trajectories.push(
               createTrajectory({
                 arm,
                 cuts: [cut.index],
+                priorStateMode: score.run.selection.priorStateMode,
                 records,
                 repeat,
                 testCase,
@@ -80,6 +81,7 @@ export async function diagnoseModelInterfaceEval({
           createTrajectory({
             arm,
             cuts: testCase.cuts.map(({ index }) => index),
+            priorStateMode: score.run.selection.priorStateMode,
             records,
             repeat,
             testCase,
@@ -110,7 +112,14 @@ export async function diagnoseModelInterfaceEval({
   return diagnostics;
 }
 
-function createTrajectory({ arm, cuts, records, repeat, testCase }) {
+function createTrajectory({
+  arm,
+  cuts,
+  priorStateMode,
+  records,
+  repeat,
+  testCase,
+}) {
   const resultRecords = cuts
     .map((cut) =>
       records.get(
@@ -150,7 +159,12 @@ function createTrajectory({ arm, cuts, records, repeat, testCase }) {
     caseId: testCase.id,
     family: testCase.family,
     repeat,
-    scope: arm === "direct" ? "independent" : "rolling",
+    scope:
+      arm === "direct" || arm === "structured-extraction"
+        ? "independent"
+        : arm === "timeline" && priorStateMode === "teacher-forced"
+          ? "teacher-forced"
+          : "rolling",
     cuts,
     expectedObservationCount: cuts.length,
     recordedObservationCount: observations.length,

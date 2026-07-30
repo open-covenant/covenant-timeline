@@ -4,24 +4,29 @@ This benchmark tests whether a language model can maintain and use temporal
 state more reliably with Covenant Timeline than with text alone. It runs the
 same model and decoding configuration against three interfaces:
 
-- full-context direct answering;
-- rolling bounded text memory (`narrative-memory`); and
+- rolling bounded text memory (`narrative-memory`);
+- stateless full-context typed extraction (`structured-extraction`); and
 - rolling typed Timeline state with deterministic reasoning.
+
+Full-context direct answering remains available as a secondary reference but is
+not part of the preregistered frontier comparison.
 
 The comparison is end to end. In the Timeline arm, an incorrect or invalid
 model-generated assertion is a failure even when the kernel behaves correctly.
 No output is repaired by a person or by the harness.
 
-Version 1 is a public development and smoke suite. It has no published external
-model result and is not evidence that Timeline improves a model. A performance
-claim requires a larger held-out evaluation plus published run configuration,
-raw JSONL results, scores, and enough provider metadata to reproduce the run.
-The scale gate is tracked in the project [roadmap](../../../ROADMAP.md).
+Version 1 includes a public development corpus and a separately materialized
+paraphrase corpus held out from prompt and schema development. It has no
+published frontier-model result and is not evidence that Timeline improves a
+model. The [frontier-model gate](./PREREGISTRATION.md) fixes the model,
+configuration, primary arms, thresholds, and stopping rule before the first
+formal run.
 
 ## Scope
 
-The public v1 corpus contains 12 cases, with three knowledge cuts per case. Two
-cases cover each family:
+Both [`cases.jsonl`](./cases.jsonl) and
+[`heldout-cases.jsonl`](./heldout-cases.jsonl) contain 12 cases, with three
+knowledge cuts per case. Two cases cover each family:
 
 - `bounded-indeterminate`;
 - `planned-actual-isolation`;
@@ -35,8 +40,7 @@ measures temporal extraction and reasoning without making named-entity
 recognition, calendar parsing, time-zone databases, or civil-time conversion
 part of the result.
 
-Each line of [`cases.jsonl`](./cases.jsonl) is one
-`covenant.timeline.model-eval.case.v1` object:
+Each line is one `covenant.timeline.model-eval.case.v1` object:
 
 | Field         | Meaning                                                                 |
 | ------------- | ----------------------------------------------------------------------- |
@@ -69,7 +73,17 @@ The corpus `id`, `family`, `expectedResult`, `goldQuery`, `goldEvents`, and cut
 traits remain evaluator metadata. The request uses the contract's opaque case ID
 and does not expose family or semantic labels to the model.
 
-## Paired arms
+The held-out corpus is a deterministic semantic paraphrase of the development
+corpus. [`paraphrases.json`](./paraphrases.json) contains the human-authored
+evidence and question rewrites.
+[`materialize-model-interface-heldout.mjs`](../../../scripts/materialize-model-interface-heldout.mjs)
+recomputes exact evidence digests, rewrites every gold evidence reference, and
+emits canonical JSONL. Tests require byte-identical materialization and run
+every held-out gold trajectory through the kernel. The corpus is public for
+reproducibility; “held out” means it was not used to tune the prompts or output
+schemas before the preregistered evaluation, not that its text remains secret.
+
+## Primary arms
 
 All three arms use the same case order, repeat count, model identity, decoding
 configuration, controlled entity dictionary, contract, trusted setup events,
@@ -79,13 +93,14 @@ The checked-in prompts are evaluation inputs:
 
 - [`prompts/direct.md`](./prompts/direct.md)
 - [`prompts/narrative-memory.md`](./prompts/narrative-memory.md)
+- [`prompts/structured-extraction.md`](./prompts/structured-extraction.md)
 - [`prompts/timeline.md`](./prompts/timeline.md)
 
 An adapter receives the complete applicable prompt in every request. Changing
 a prompt creates a different benchmark revision and must not be mixed into an
 existing result file.
 
-### Direct
+### Direct reference
 
 Each cut is an independent request. The adapter receives trusted setup events
 and all evidence through that cut, then returns:
@@ -138,6 +153,22 @@ memory strategy used by the adapter and model.
 This byte budget is deterministic and provider-neutral. It does not claim that
 equal serialized bytes imply equal tokenizer cost. Token usage is reported
 separately when the adapter provides it.
+
+### Structured extraction
+
+Each cut is independent. The model receives all evidence available through that
+cut and emits the complete typed assertion history plus a typed query. No prior
+model response, ledger, narrative memory, or host-generated knowledge-cut map
+is supplied. The host builds an ephemeral run, validates the model output,
+executes the same deterministic reasoner used by Timeline, and verifies the
+proof.
+
+This is the control for structured output plus a solver. It deliberately uses
+the same event and query shapes as Timeline so the paired comparison isolates
+the value of rolling temporal state. A Timeline advantage cannot be attributed
+only to JSON schema enforcement or deterministic reasoning. Structured
+extraction may cite any evidence visible at the current cut; Timeline deltas may
+cite only newly introduced evidence.
 
 ### Timeline
 
@@ -226,6 +257,20 @@ setup data are unmetered for both rolling arms. An over-budget candidate is
 rejected and not carried forward. Extraction scoring separately compares
 proposed events with the gold assertions. Production admission still requires
 a domain-owned authority policy.
+
+### Teacher-forced prior state
+
+`--prior-state teacher-forced` runs the Timeline arm alone. Before each cut, the
+harness reconstructs the exact gold state and knowledge-cut map through the
+previous cut. It withholds the current gold events, query, and answer, evaluates
+the current model delta normally, and discards that delta before the next
+request. This separates current-cut extraction failures from failures
+propagated through rolling model state.
+
+Teacher-forced scores are marked `diagnosticOnly: true`. The scorer reports
+`teacherForcedPriorCuts` for cuts one and two; cut zero has no prior state and
+is excluded from that aggregate. Teacher forcing cannot satisfy the primary
+continuation gate.
 
 ## Standard semantic answer
 
@@ -323,11 +368,12 @@ semantics remain evaluator-side. `input` always includes
 `entities`, `contract`, `setupEvents`, `question`, and `evidence`. Arm-specific
 fields are:
 
-| Arm                | Evidence supplied                      | Additional input                                |
-| ------------------ | -------------------------------------- | ----------------------------------------------- |
-| `direct`           | All evidence through the current cut   | none                                            |
-| `narrative-memory` | Evidence introduced at the current cut | `memory`, `memoryBudgetBytes`                   |
-| `timeline`         | Evidence introduced at the current cut | `priorRun`, `knowledgeCuts`, `stateBudgetBytes` |
+| Arm                     | Evidence supplied                      | Additional input                                |
+| ----------------------- | -------------------------------------- | ----------------------------------------------- |
+| `direct`                | All evidence through the current cut   | none                                            |
+| `narrative-memory`      | Evidence introduced at the current cut | `memory`, `memoryBudgetBytes`                   |
+| `structured-extraction` | All evidence through the current cut   | `stateBudgetBytes`                              |
+| `timeline`              | Evidence introduced at the current cut | `priorRun`, `knowledgeCuts`, `stateBudgetBytes` |
 
 `knowledgeCuts` contains one entry for each completed cut and binds that cut to
 the final sequence admitted by the host. It lets the model express a historical
@@ -435,9 +481,23 @@ for semantic answers, events, queries, evidence visibility, state budgets, and
 proofs. Keep credentials inside the adapter environment and exclude them from
 configuration, results, and diagnostics.
 
-With a fixed seed, repeated observations are stability checks for provider or
-runtime nondeterminism. They are not independent statistical samples and must
-not be reported as such.
+The frontier preregistration uses the provider-documented `gpt-5.6-sol` model
+ID. OpenAI does not publish a dated snapshot ID for it. A published result must
+therefore report the exact model ID and UTC run date and cannot claim
+byte-identical model reproducibility.
+
+Repeated observations with the same fixed configuration are stability checks
+for provider or runtime nondeterminism. They are not independent statistical
+samples and must not be reported as such.
+
+The preregistered run is evaluated with
+`scripts/evaluate-model-interface-gate.mjs`. The gate refuses a dirty source,
+different corpus, model or generation drift, partial arm selection, a different
+repeat count, or a missing or mismatched teacher-forced artifact. It binds both
+artifacts to the committed source and official adapter runtime, then checks the
+absolute thresholds, per-repeat floors, paired accuracy differences, and exact
+12-cluster sign-flip tests fixed in
+[`PREREGISTRATION.md`](./PREREGISTRATION.md).
 
 ## Failure accounting
 
@@ -451,19 +511,20 @@ The optional companion command
 `node scripts/diagnose-model-interface-eval.mjs --results <results.jsonl>`
 replays the same artifact checks and emits
 [`diagnostics.schema.json`](./diagnostics.schema.json). It treats each direct
-observation independently and groups narrative-memory and Timeline observations
-into rolling case/repeat trajectories. The artifact records the first observed
-error, later recorded observations, exact versus degraded Timeline prior
-projected state against gold, and errors recorded after state admission by
-stage and code. These fields describe the recorded trajectory without assigning
-cause. Raw expected, recorded, exact, degraded, and error counts are retained.
+and structured-extraction observation independently and groups narrative-memory
+and Timeline observations into rolling case/repeat trajectories. The artifact
+records the first observed error, later recorded observations, exact versus
+degraded Timeline prior projected state against gold, and errors recorded after
+state admission by stage and code. These fields describe the recorded
+trajectory without assigning cause. Raw expected, recorded, exact, degraded,
+and error counts are retained.
 
 The result distinguishes:
 
 - adapter and protocol failure;
 - invalid direct or narrative semantic output;
-- Timeline event or run admission failure;
-- Timeline query validation failure;
+- structured event or run admission failure;
+- structured query validation failure;
 - kernel failure;
 - proof-verification failure; and
 - a valid but incorrect semantic result.
@@ -476,11 +537,13 @@ downstream cost of an earlier model-interface failure.
 
 Common answer score fields are `answerExactRate`, `unsupportedDefiniteRate`,
 `contradictionPrecision`, `contradictionRecall`, `falseInconsistencyRate`,
-`correctionAccuracy`, and `historicalReconstructionAccuracy`. Paired fields
-`timelineVsNarrativeMemory` and `timelineVsDirect` report answer-accuracy win,
-loss, and tie counts for the same case, repeat, and cut.
+`correctionAccuracy`, and `historicalReconstructionAccuracy`. Primary paired
+fields `timelineVsNarrativeMemory` and `timelineVsStructuredExtraction` report
+answer-accuracy win, loss, and tie counts for the same case, repeat, and cut.
+`timelineVsDirect` is retained as a secondary reference.
 
-Timeline diagnostics are `admissionRate`,
+Typed-state diagnostics for structured extraction and Timeline are
+`admissionRate`,
 `representationExactAssertionPrecision`,
 `representationExactAssertionRecall`, `representationExactAssertionF1`,
 `projectedStateExactRate`, `queryExactRate`, `proofVerificationRate`, and
@@ -493,32 +556,33 @@ Operational observations are `latencyMs`, `inputTokens`, `outputTokens`, and
 
 The Timeline prompt permits the model to choose event, assertion, and query
 IDs. Representation-exact assertion comparison alpha-renames those model-owned
-IDs while preserving their reference graph. It does not normalize point,
-interval, context, axis, evidence, bound, or event-order values.
+IDs while preserving their reference graph. It ignores model-owned event IDs
+and sequences while retaining point, interval, context, axis, evidence, and
+bound values. Admission separately requires contiguous sequences and
+chronological evidence-cut order.
 `projectedStateExactRate` compares normalized active coordinate, constraint,
 fact, and evidence-reference atoms plus their temporal consequences. Combined
-and split lower/upper bounds normalize to the same atoms. Event sequences
-remain admission-strict. Query exactness ignores the freely chosen query ID and
-maps `recordedThrough` to the corresponding benchmark knowledge-cut ordinal
-before comparison.
+and split lower/upper bounds normalize to the same atoms. Query exactness
+ignores the freely chosen query ID and maps `recordedThrough` to the
+corresponding benchmark knowledge-cut ordinal before comparison.
 
 Each reported rate contains its numerator, denominator, and value:
 
-| Metric                                                  | Definition                                                                                                                 |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `answerExactRate`                                       | Successful answers canonically equal to the gold result, divided by all observations                                       |
-| `unsupportedDefiniteRate`                               | Eligible answers that invent a bound or collapse supported ambiguity, divided by `unsupported-definite-risk` cuts          |
-| `contradictionPrecision`                                | Correct inconsistent answers divided by inconsistent answers on `contradiction` cuts                                       |
-| `contradictionRecall`                                   | Correct inconsistent answers divided by gold-inconsistent `contradiction` cuts                                             |
-| `falseInconsistencyRate`                                | Incorrect inconsistent answers divided by gold-non-inconsistent observations                                               |
-| `correctionAccuracy`                                    | Exact successful answers divided by `correction` cuts                                                                      |
-| `historicalReconstructionAccuracy`                      | Correct historical answers that reproduce the first-cut answer, divided by `historical` cuts                               |
-| `admissionRate`                                         | Timeline deltas admitted without repair, divided by all Timeline observations                                              |
-| `representationExactAssertionPrecision` / recall / `F1` | Alpha-renamed structural assertion matches against the chosen gold event encoding                                          |
-| `projectedStateExactRate`                               | Admitted candidate states with the same normalized active assertions and temporal consequences as gold                     |
-| `queryExactRate`                                        | Structurally exact queries at the same normalized knowledge cut, divided by all Timeline observations                      |
-| `proofVerificationRate`                                 | Verified Timeline conclusions divided by all Timeline observations                                                         |
-| `endToEndExactRate`                                     | Timeline observations with exact answer, normalized state, query, and verified proof, divided by all Timeline observations |
+| Metric                                                  | Definition                                                                                                        |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `answerExactRate`                                       | Successful answers canonically equal to the gold result, divided by all observations                              |
+| `unsupportedDefiniteRate`                               | Eligible answers that invent a bound or collapse supported ambiguity, divided by `unsupported-definite-risk` cuts |
+| `contradictionPrecision`                                | Correct inconsistent answers divided by inconsistent answers on `contradiction` cuts                              |
+| `contradictionRecall`                                   | Correct inconsistent answers divided by gold-inconsistent `contradiction` cuts                                    |
+| `falseInconsistencyRate`                                | Incorrect inconsistent answers divided by gold-non-inconsistent observations                                      |
+| `correctionAccuracy`                                    | Exact successful answers divided by `correction` cuts                                                             |
+| `historicalReconstructionAccuracy`                      | Correct historical answers that reproduce the first-cut answer, divided by `historical` cuts                      |
+| `admissionRate`                                         | Structured outputs admitted without repair, divided by all applicable observations                                |
+| `representationExactAssertionPrecision` / recall / `F1` | Alpha-renamed structural assertion matches against the chosen gold event encoding                                 |
+| `projectedStateExactRate`                               | Admitted candidate states with the same normalized active assertions and temporal consequences as gold            |
+| `queryExactRate`                                        | Structurally exact queries at the same normalized knowledge cut, divided by all applicable observations           |
+| `proofVerificationRate`                                 | Verified conclusions divided by all applicable observations                                                       |
+| `endToEndExactRate`                                     | Applicable observations with exact answer, normalized state, query, and verified proof                            |
 
 Missing, timed-out, malformed, and rejected responses remain in applicable
 denominators. Representation-exact assertion F1 is the harmonic mean of its
@@ -538,11 +602,12 @@ selection after the operational condition is fixed.
 
 A publishable run retains:
 
-- the raw `cases.jsonl`, prompt files, and their SHA-256 digests;
+- the selected corpus JSONL, prompt files, and their SHA-256 digests;
 - the Timeline package version and source commit;
 - the runner and scorer source commit;
 - the adapter source revision;
-- provider and exact model identifier;
+- the attempt ID, UTC start time, source-state digest, and runtime digest;
+- provider, exact model identifier, and UTC run date;
 - decoding parameters, seed support, and provider API revision;
 - repeat count, timeout, case and arm filters, and case order;
 - runtime, operating system, and architecture;
@@ -582,13 +647,14 @@ raw HTTP response.
 
 ## Interpretation
 
-The suite is deliberately small and public. It can reveal interface failures
-and justify the roadmap's scale gate, but it cannot establish broad temporal
-intelligence, production safety, domain transfer, or clinical or regulatory
-fitness. There is no external model result for v1 yet.
+The suite is deliberately small and public. It can falsify the current
+model-memory thesis, but it cannot establish broad temporal intelligence,
+production safety, domain transfer, or clinical or regulatory fitness. There is
+no frontier-model result for v1 yet.
 
-A Timeline win can come from typed extraction, preserved state, deterministic
-inference, or their interaction. The diagnostic metrics separate these stages;
-the aggregate score alone does not. A Timeline loss is equally actionable:
-invalid typed output, missed corrections, or a memory-cost disadvantage should
-be reported without excluding the affected cases.
+The structured-extraction arm controls for typed output and deterministic
+reasoning. The paired primary result therefore asks whether rolling Timeline
+state improves on both bounded narrative memory and re-extraction from the full
+record. Teacher-forced diagnostics separate local extraction from propagated
+state errors. A failed gate retires the standalone thesis without changing the
+kernel's independently tested deterministic properties.

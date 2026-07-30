@@ -8,6 +8,7 @@ export const TIMELINE_REASONER = "covenant.timeline.stn.v0alpha1";
 export const DEFAULT_MAX_RUN_BYTES = 4 * 1024 * 1024;
 export const DEFAULT_MAX_RUNS = 256;
 export const DEFAULT_MAX_MESSAGE_BYTES = 1024 * 1024;
+export const MAX_LIST_PAGE_SIZE = 8;
 
 export const MCP_DOCUMENT_LIMITS = Object.freeze({
   maxCanonicalDepth: 64,

@@ -2,6 +2,7 @@ export {
   DEFAULT_MAX_MESSAGE_BYTES,
   DEFAULT_MAX_RUN_BYTES,
   DEFAULT_MAX_RUNS,
+  MAX_LIST_PAGE_SIZE,
   MCP_ADMISSION,
   MCP_DOCUMENT_LIMITS,
   MCP_IMPLEMENTATION,
@@ -32,6 +33,8 @@ export type {
   CreateRunResultV0Alpha1,
   McpRunEnvelopeV0Alpha1,
   McpRunImplementationV0Alpha1,
+  McpRunListPageOptionsV0Alpha1,
+  McpRunListPageV0Alpha1,
   McpRunMetadataV0Alpha1,
   TemporalEventDraftV0Alpha3,
 } from "./types.js";

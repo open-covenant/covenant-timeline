@@ -26,7 +26,6 @@ export class TimelineJsonError extends SyntaxError {
 }
 
 export function parseJson(text: string): unknown {
-  const issues: TimelineJsonIssue[] = [];
   const objectKeys: Set<string>[] = [];
 
   visit(
@@ -38,14 +37,16 @@ export function parseJson(text: string): unknown {
       onObjectProperty: (property, offset, _length, line, column, path) => {
         const keys = objectKeys.at(-1);
         if (keys?.has(property)) {
-          issues.push({
-            code: "duplicate_key",
-            offset,
-            line,
-            column,
-            path: formatPath([...path(), property]),
-            detail: `duplicate object key ${JSON.stringify(property)}`,
-          });
+          throw new TimelineJsonError([
+            {
+              code: "duplicate_key",
+              offset,
+              line,
+              column,
+              path: formatPath([...path(), property]),
+              detail: `duplicate object key ${JSON.stringify(property)}`,
+            },
+          ]);
         }
         keys?.add(property);
       },
@@ -53,13 +54,15 @@ export function parseJson(text: string): unknown {
         objectKeys.pop();
       },
       onError: (error, offset, _length, line, column) => {
-        issues.push({
-          code: "syntax",
-          offset,
-          line,
-          column,
-          detail: printParseErrorCode(error),
-        });
+        throw new TimelineJsonError([
+          {
+            code: "syntax",
+            offset,
+            line,
+            column,
+            detail: printParseErrorCode(error),
+          },
+        ]);
       },
     },
     {
@@ -69,7 +72,6 @@ export function parseJson(text: string): unknown {
     },
   );
 
-  if (issues.length > 0) throw new TimelineJsonError(issues);
   try {
     return JSON.parse(text) as unknown;
   } catch (error) {

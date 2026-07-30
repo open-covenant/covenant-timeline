@@ -1,0 +1,68 @@
+[
+  {
+    "id": "event.review-declared",
+    "type": "point.declared",
+    "point": {
+      "id": "review-finished",
+      "contextId": "actual",
+      "axisId": "elapsed-seconds"
+    }
+  },
+  {
+    "id": "event.deploy-declared",
+    "type": "point.declared",
+    "point": {
+      "id": "deployed",
+      "contextId": "actual",
+      "axisId": "elapsed-seconds"
+    }
+  },
+  {
+    "id": "event.review-v1",
+    "type": "coordinate.asserted",
+    "assertion": {
+      "id": "review.v1",
+      "contextId": "actual",
+      "pointId": "review-finished",
+      "coordinate": {
+        "minimum": 100,
+        "maximum": 100
+      },
+      "evidenceFiles": ["review-initial.json"]
+    }
+  },
+  {
+    "id": "event.deploy-v1",
+    "type": "coordinate.asserted",
+    "assertion": {
+      "id": "deploy.v1",
+      "contextId": "actual",
+      "pointId": "deployed",
+      "coordinate": {
+        "minimum": 200,
+        "maximum": 200
+      },
+      "evidenceFiles": ["deploy.json"]
+    }
+  },
+  {
+    "id": "event.review-v2",
+    "type": "coordinate.asserted",
+    "assertion": {
+      "id": "review.v2",
+      "contextId": "actual",
+      "pointId": "review-finished",
+      "coordinate": {
+        "minimum": 300,
+        "maximum": 300
+      },
+      "evidenceFiles": ["review-correction.json"]
+    }
+  },
+  {
+    "id": "event.review-v1-retracted",
+    "type": "assertion.retracted",
+    "assertionId": "review.v1",
+    "evidenceFiles": ["review-correction.json"]
+  }
+]

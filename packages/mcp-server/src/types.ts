@@ -39,6 +39,16 @@ export interface McpRunMetadataV0Alpha1 {
   runDigest: `sha256:${string}`;
 }
 
+export interface McpRunListPageOptionsV0Alpha1 {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface McpRunListPageV0Alpha1 {
+  timelines: readonly McpRunMetadataV0Alpha1[];
+  nextCursor: string | null;
+}
+
 export interface CreateRunResultV0Alpha1 {
   envelope: McpRunEnvelopeV0Alpha1;
   created: boolean;

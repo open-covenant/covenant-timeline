@@ -4,8 +4,11 @@ Run Timeline in one external long-running-agent workflow and publish a redacted
 artifact that another process can replay and verify. The result should identify
 one operational benefit, failure, or required contract change.
 
-An operator can run the pilot independently with the npm package. No hosted
-Covenant service or formal partnership is required.
+An operator can run the pilot independently from a source checkout. No hosted
+Covenant service, registry package, or formal partnership is required. The
+[MCP agent pilot starter](../examples/mcp-agent-pilot)
+provides replaceable inputs, restart orchestration, complete export, and a
+separate offline verifier.
 
 Teams that are not ready to operate a workflow can start with the public
 [model-interface v1 smoke benchmark](../benchmarks/model-interface/v1/README.md).
@@ -53,10 +56,15 @@ Publish:
 ```text
 pilot/
   README.md
+  artifact.json
   run.json
   queries/
   conclusions/
+  evidence/
+  evidence-manifest.json
   environment.json
+  tool-calls.jsonl
+  verification.json
 ```
 
 `README.md` states:
@@ -74,7 +82,10 @@ pilot/
 
 `environment.json` records only non-sensitive runtime facts: operating system,
 architecture, Node.js version, package or commit identity, and command exit
-status.
+status. The verifier reports the generation and verification checkout
+identities separately and whether they match. Those fields are recorded
+provenance, not evidence that either checkout or operator is authentic; bind a
+published pilot artifact through the operator's release or attestation system.
 
 ## Pass criteria
 
@@ -97,12 +108,23 @@ operational benefit should be published as such.
 
 ## Start
 
-1. Install `@covenant-org/timeline@0.0.0-alpha.2` or run
-   `pnpm temporal:demo` from a source checkout.
+1. Clone the repository, install with the frozen lockfile, and run `pnpm build`.
 2. Read [the model interface](./model-interface.md). If a model will propose
    records, validate its adapter with the public v1 smoke benchmark.
-3. Comment on the
+3. Copy `examples/mcp-agent-pilot` outside the checkout and replace its
+   contract, evidence, events, queries, operator, and workflow fields.
+4. Generate and verify the artifact:
+
+   ```sh
+   node scripts/mcp-agent-pilot.mjs \
+     --input /path/to/operator-pilot \
+     --out /path/to/new-pilot-artifact
+   node scripts/mcp-agent-pilot-verify.mjs \
+     /path/to/new-pilot-artifact
+   ```
+
+5. Comment on the
    [independent pilot issue](https://github.com/open-covenant/covenant-timeline/issues/21)
    with the workflow and expected artifacts.
-4. Keep the first integration to one axis mapping, one context, and one query
+6. Keep the first integration to one axis mapping, one context, and one query
    family unless the workflow genuinely needs more.

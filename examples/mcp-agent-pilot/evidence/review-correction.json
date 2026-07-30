@@ -1,0 +1,5 @@
+{
+  "source": "signed-review-log",
+  "observation": "Correction: security review completed at elapsed second 300, not 100.",
+  "revision": "correction"
+}

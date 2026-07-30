@@ -25,6 +25,18 @@
   Sigstore verification to GitHub CLI, binds provenance and SBOM statements to
   the recorded release, and runs npm signature checks plus a clean
   installed-package temporal proof.
+- Add a local stdio MCP server with five bounded temporal-state tools, a
+  portable run resource template, explicit knowledge cuts, structural-only
+  admission labels, optimistic concurrency, canonical append-only persistence,
+  restart recovery, and a separate reproducible release workflow.
+- Add a source-first MCP pilot starter that crosses a server restart, hashes
+  retained evidence, chains append digests, exports the complete pilot artifact
+  and tool transcript, and verifies historical and corrected conclusions in a
+  separate offline process.
+- Add a credential-free local Ollama benchmark adapter with preflight
+  installed-model checks, post-inference loaded-model digest verification,
+  fixed generation settings, structured output, bounded provider handling,
+  token accounting, and source-bound configuration generation.
 
 ### Changed
 
@@ -45,18 +57,19 @@
   cleanup without presenting trusted publishing as an alpha release gate.
 - Move artifact upload to its Node.js 24 action and consolidate SBOM
   attestation on the supported GitHub attestation action.
+- Describe MCP input semantics in tool discovery, cap each catalog page at
+  eight runs, bind cursors to a catalog generation, cap reference-store
+  configuration at its advertised ceilings, and make the source checkout a
+  complete agent-integration path.
 
-## @covenant-org/timeline-mcp 0.0.0-alpha.1 - 2026-07-27
+### Security
 
-### Added
-
-- Add a local stdio server with five bounded temporal-state tools, portable run
-  resources, explicit knowledge cuts, structural-only admission labels,
-  optimistic concurrency, canonical append-only persistence, restart recovery,
-  and installed-package correction-and-proof verification.
-- Add a separate reproducible MCP release workflow with checksum, SPDX SBOM,
-  GitHub build and SBOM attestations, npm provenance, OIDC publishing, and the
-  documented alpha token fallback.
+- Exit the stdio server with a failure status after malformed or oversized
+  protocol input while retaining one sanitized diagnostic.
+- Stop strict JSON diagnostics at the first parse issue to prevent adversarial
+  error amplification.
+- Refuse symlinked and non-regular MCP run files without blocking on special
+  filesystem entries.
 
 ## 0.0.0-alpha.2 - 2026-07-27
 

@@ -39,6 +39,90 @@ failures use the separate
 `covenant.timeline.model-eval.adapter-error.v1` envelope so failure reporting
 does not widen the published success protocol.
 
+## Ollama local adapter
+
+The repository includes an adapter for an Ollama daemon at
+`127.0.0.1:11434`. The adapter sends no credentials, accepts no endpoint
+override, rejects redirects and cloud-model identifiers, performs no retry, and
+makes one independent `/api/chat` request per observation. Inference uses the
+arm-specific JSON Schema, disables streaming, and fixes the thinking setting,
+temperature, seed, top-p, context length, and output-token limit from the
+recorded run configuration. Thinking is `false` by default; models such as
+GPT-OSS that require a level use a recorded `low`, `medium`, or `high` value.
+
+A loopback endpoint alone does not guarantee local inference: a signed-in
+Ollama daemon can route cloud models. A conforming local run uses a daemon
+started with cloud features disabled. Stop any existing daemon on the benchmark
+port, then start a dedicated process in another terminal:
+
+```sh
+OLLAMA_NO_CLOUD=1 ollama serve
+```
+
+PowerShell:
+
+```powershell
+$env:OLLAMA_NO_CLOUD = "1"
+ollama serve
+```
+
+The adapter rejects known cloud-model names, but the daemon-wide no-cloud
+setting is an operator requirement because the local API does not expose it for
+verification.
+
+Before inference, the adapter reads `/api/version` and `/api/tags`. The exact
+runtime version and installed model's complete SHA-256 digest must match the
+recorded configuration. The chat request keeps the model loaded for five
+minutes; after inference, the adapter reads `/api/ps` and requires the running
+model's digest to match. A version, tag, or loaded-model mismatch fails the run.
+Use a dedicated daemon and do not pull, copy, or delete models during an
+evaluation. Prompt and generated token counts are copied into the result.
+Ollama does not provide monetary accounting for local inference, so `costUsd`
+is `null`.
+
+Choose and install a local Ollama model, then inspect the runtime and inventory:
+
+```sh
+ollama pull <model>
+curl --fail --silent http://127.0.0.1:11434/api/version
+curl --fail --silent http://127.0.0.1:11434/api/tags
+```
+
+Create the source-, runtime-, and model-bound configuration outside the
+checkout:
+
+```sh
+node scripts/create-ollama-model-eval-config.mjs \
+  --model <exact-installed-name> \
+  --digest sha256:<digest-returned-by-api-tags> \
+  --runtime-version <version-returned-by-api-version> \
+  --output /tmp/covenant-timeline-ollama.json
+```
+
+Add `--thinking low`, `medium`, or `high` for a model that does not accept
+`false`.
+
+Run the three-request Timeline smoke before a complete evaluation:
+
+```sh
+node scripts/run-model-interface-eval.mjs \
+  --config /tmp/covenant-timeline-ollama.json \
+  --output /tmp/covenant-timeline-ollama-smoke.jsonl \
+  --repeats 1 \
+  --case correction.shipment-arrival \
+  --arm timeline \
+  --timeout-ms 120000 \
+  -- node scripts/ollama-model-eval-adapter.mjs
+node scripts/score-model-interface-eval.mjs \
+  --results /tmp/covenant-timeline-ollama-smoke.jsonl
+```
+
+On Windows, replace the `/tmp/...` paths with an absolute path outside the
+checkout and use PowerShell backticks for multiline commands.
+
+No Ollama model result is committed. The adapter tests use a bounded mock
+provider and establish protocol behavior, not model quality.
+
 ## OpenAI Responses default-endpoint adapter
 
 The repository includes a reference adapter at

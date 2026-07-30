@@ -33,7 +33,8 @@ The checked-in
 [model-interface benchmark v1](./benchmarks/model-interface/v1/README.md) is a
 12-case development and smoke suite. It exercises direct text, narrative
 memory, and Timeline-backed state with a strict JSONL adapter protocol. The
-repository also includes a stateless OpenAI Responses adapter.
+repository includes a digest-verified local Ollama adapter and a stateless OpenAI
+Responses adapter.
 
 No external model result has been published. The visible corpus is too small
 and too exposed to support a performance claim.
@@ -61,9 +62,9 @@ and final-answer errors.
 
 ### 2. Low-friction agent integration
 
-The separate local stdio package `@covenant-org/timeline-mcp` keeps the
-portable kernel dependency-light while giving MCP-capable agents durable
-temporal state through five explicit tools:
+The separate local stdio MCP server keeps the portable kernel dependency-light
+while giving MCP-capable agents durable temporal state through five explicit
+tools:
 
 1. create a run from an exact v0alpha3 contract;
 2. list bounded run metadata after a new session;
@@ -71,15 +72,16 @@ temporal state through five explicit tools:
 4. project active state at an explicit knowledge cut; and
 5. reason over an exact query and return a verified conclusion.
 
-The first alpha requires a data directory, retains only evidence digests, makes
-no network calls, and classifies direct model writes as structurally valid but
+The server requires a data directory, retains only evidence digests, makes no
+network calls, and classifies direct model writes as structurally valid but
 unauthenticated. It does not provide semantic memory search, civil-time
 normalization, remote hosting, or evidence authority.
 
-The installed-package check creates a run, appends a correction, stops the
-server, restarts it, projects both historical and current state, and verifies
-both receipts over stdio. This gate closes after the tagged artifact passes
-that check on Node.js 22 and 24 and is published to npm.
+The source-first pilot creates a run, appends a correction, stops and restarts
+the server, projects both historical and current state, exports the complete
+artifact, and verifies both receipts in another process. Registry publication
+is a distribution milestone; it does not block source pilots, model
+evaluation, or independent implementation work.
 
 ### 3. Independent temporal pilot
 
@@ -91,7 +93,8 @@ reduces reconciliation work.
 The [pilot contract](./docs/temporal-pilot.md) requires a redacted export that
 another process can replay and verify. A negative result is useful if it
 identifies the wrong abstraction or shows that Timeline adds no operational
-value.
+value. The checked-in MCP starter supplies the export and verification
+mechanics so the operator can focus on its own evidence and workflow.
 
 ### 4. Protocol portability
 

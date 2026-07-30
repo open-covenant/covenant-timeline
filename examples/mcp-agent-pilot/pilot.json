@@ -1,0 +1,20 @@
+{
+  "schema": "covenant.timeline.mcp-agent-pilot.input.v1",
+  "id": "release-correction",
+  "title": "Release review correction",
+  "operator": "example-operator",
+  "workflow": "A release agent reconciles security-review and deployment observations.",
+  "contract": "contract.json",
+  "events": "events.json",
+  "restartAfterEventId": "event.deploy-v1",
+  "queries": [
+    {
+      "name": "before",
+      "file": "queries/before.json"
+    },
+    {
+      "name": "after",
+      "file": "queries/after.json"
+    }
+  ]
+}

@@ -45,7 +45,7 @@ export function createTimelineMcpServer(
     },
     {
       instructions:
-        "Store typed temporal records, project state, and reason at explicit knowledge cuts. Direct MCP writes are structurally validated but unauthenticated. Evidence references are external SHA-256 labels; the server does not retain or authenticate evidence payloads. A verified receipt establishes derivation from admitted records, not source truth. Normalize civil time before admission. recordedThrough null means the empty prefix.",
+        "Create one run from a pinned contract, then carry the returned runDigest into each new event append. Event drafts omit schema and sequence; the server assigns both. After a restart, list runs to recover the current digest before writing. Project or reason at an explicit recordedThrough cut; null selects the empty prefix. Difference bounds answer toPointId - fromPointId. Direct writes are structurally validated but unauthenticated. Evidence references are external SHA-256 labels; the server does not retain or authenticate evidence payloads. A verified receipt establishes derivation from admitted records, not source truth. Normalize civil time before admission.",
     },
   );
 
@@ -80,7 +80,7 @@ export function createTimelineMcpServer(
     {
       title: "List Timeline Runs",
       description:
-        "List bounded metadata for locally stored runs, including the latest record cut and whole-run digest.",
+        "List one bounded page of locally stored run metadata, including each latest record cut and whole-run digest. Continue with nextCursor until it is null.",
       inputSchema: listRunsInputSchema,
       outputSchema: listRunsOutputSchema,
       annotations: {
@@ -90,9 +90,9 @@ export function createTimelineMcpServer(
         openWorldHint: false,
       },
     },
-    async () =>
+    async (options) =>
       runTool(async () => ({
-        timelines: await store.list(),
+        ...(await store.listPage(options)),
       })),
   );
 
@@ -224,21 +224,7 @@ export function createTimelineMcpServer(
   const runTemplate: ResourceTemplate = new ResourceTemplate(
     "timeline://run/{runId}",
     {
-      list: async () => {
-        try {
-          return {
-            resources: (await store.list()).map((timeline) => ({
-              uri: runResourceUri(timeline.runId),
-              name: timeline.runId,
-              title: `Timeline ${timeline.runId}`,
-              mimeType: "application/json",
-            })),
-          };
-        } catch (error) {
-          const safe = asTimelineMcpError(error);
-          throw new Error(`${safe.code}: ${safe.message}`);
-        }
-      },
+      list: undefined,
     },
   );
 

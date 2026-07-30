@@ -24,6 +24,7 @@ import {
   FileMcpRunStore,
   type McpRunStore,
 } from "./index.js";
+import { MAX_LIST_PAGE_SIZE } from "./constants.js";
 
 const toolNames = [
   "timeline_create_run",
@@ -54,7 +55,113 @@ describe("Timeline MCP server", () => {
     expect(listed.tools.every(({ outputSchema }) => outputSchema)).toBe(true);
   });
 
-  test("exports encoded run resources and sanitizes resource failures", async () => {
+  test("describes the input semantics an agent must preserve", async () => {
+    const tools = await connection.client.listTools();
+    const create = tools.tools.find(
+      ({ name }) => name === "timeline_create_run",
+    );
+    const list = tools.tools.find(({ name }) => name === "timeline_list_runs");
+    const append = tools.tools.find(
+      ({ name }) => name === "timeline_append_event",
+    );
+    const project = tools.tools.find(
+      ({ name }) => name === "timeline_project_state",
+    );
+    const reason = tools.tools.find(({ name }) => name === "timeline_reason");
+
+    expect(create?.inputSchema).toMatchObject({
+      properties: {
+        contract: {
+          description: expect.stringContaining("never replaces"),
+        },
+      },
+    });
+    expect(append?.inputSchema).toMatchObject({
+      properties: {
+        expectedRunDigest: {
+          description: expect.stringContaining("compare-and-swap"),
+        },
+        event: {
+          description: expect.stringContaining(
+            "Do not send schema or sequence",
+          ),
+        },
+      },
+    });
+    expect(list?.inputSchema).toMatchObject({
+      properties: {
+        cursor: {
+          description: expect.stringContaining("preceding"),
+        },
+        limit: {
+          description: expect.stringContaining(
+            `never exceeds ${MAX_LIST_PAGE_SIZE}`,
+          ),
+        },
+      },
+    });
+    expect(project?.inputSchema).toMatchObject({
+      properties: {
+        recordedThrough: {
+          description: expect.stringContaining("null selects the empty prefix"),
+        },
+      },
+    });
+    const reasonSchema = JSON.stringify(reason?.inputSchema);
+    expect(reasonSchema).toContain("toPointId - fromPointId");
+    expect(reasonSchema).toContain("Always pin recordedThrough explicitly");
+  });
+
+  test("paginates run discovery without scanning the complete catalog", async () => {
+    const store = new FileMcpRunStore(directory);
+    const runIds = [];
+    for (let index = 0; index < MAX_LIST_PAGE_SIZE + 2; index += 1) {
+      const runId = `agent.catalog-${String(index).padStart(2, "0")}`;
+      await store.create(releaseContract(runId));
+      runIds.push(runId);
+    }
+
+    const first = listRunsOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_list_runs",
+          arguments: {},
+        })
+      ).structuredContent,
+    );
+    expect(first.timelines).toHaveLength(MAX_LIST_PAGE_SIZE);
+    expect(first.nextCursor).toMatch(/^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/);
+
+    const second = listRunsOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_list_runs",
+          arguments: {
+            cursor: first.nextCursor,
+          },
+        })
+      ).structuredContent,
+    );
+    expect(second.timelines).toHaveLength(2);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      [...first.timelines, ...second.timelines]
+        .map(({ runId }) => runId)
+        .sort(),
+    ).toEqual(runIds.sort());
+
+    const resources = await connection.client.listResources();
+    expect(resources.resources).toEqual([]);
+    const templates = await connection.client.listResourceTemplates();
+    expect(templates.resourceTemplates).toEqual([
+      expect.objectContaining({
+        name: "timeline-run",
+        uriTemplate: "timeline://run/{runId}",
+      }),
+    ]);
+  });
+
+  test("reads encoded run resources and sanitizes resource failures", async () => {
     const contract = releaseContract("agent/release:42");
     await connection.client.callTool({
       name: "timeline_create_run",
@@ -62,15 +169,9 @@ describe("Timeline MCP server", () => {
     });
 
     const listed = await connection.client.listResources();
-    expect(listed.resources).toEqual([
-      expect.objectContaining({
-        name: contract.id,
-        uri: "timeline://run/agent%2Frelease%3A42",
-        mimeType: "application/json",
-      }),
-    ]);
+    expect(listed.resources).toEqual([]);
     const resource = await connection.client.readResource({
-      uri: listed.resources[0]!.uri,
+      uri: "timeline://run/agent%2Frelease%3A42",
     });
     const content = resource.contents[0];
     if (!content || !("text" in content)) {
@@ -83,15 +184,6 @@ describe("Timeline MCP server", () => {
     await connection.close();
     const secret = "private-storage-detail";
     connection = await connect(failingStore(secret));
-    const listFailure = await connection.client
-      .listResources()
-      .then(() => undefined)
-      .catch((error: unknown) => error);
-    expect(String(listFailure)).toContain(
-      "timeline.mcp.internal: request failed",
-    );
-    expect(String(listFailure)).not.toContain(secret);
-
     await expect(
       connection.client.readResource({
         uri: "timeline://run/agent.release",
@@ -383,6 +475,7 @@ function failingStore(secret: string): McpRunStore {
 
   return {
     list: fail,
+    listPage: fail,
     load: fail,
     require: fail,
     create: fail,

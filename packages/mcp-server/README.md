@@ -9,19 +9,25 @@ process can verify.
 
 ## Connect
 
-Requires Node.js 22 or 24. Add the server to any MCP client that supports local
-stdio servers:
+Requires Node.js 22 or 24. Build the repository once:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+Add the built server to any MCP client that supports local stdio servers:
 
 ```json
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "--yes",
-        "@covenant-org/timeline-mcp@0.0.0-alpha.1",
+        "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
-        "/path/to/private/timeline-data"
+        "/absolute/path/to/private/timeline-data"
       ]
     }
   }
@@ -39,19 +45,36 @@ The server provides five tools:
 | Tool                     | Purpose                                                                 |
 | ------------------------ | ----------------------------------------------------------------------- |
 | `timeline_create_run`    | Create an append-only run from an exact v0alpha3 contract               |
-| `timeline_list_runs`     | Recover bounded run metadata and digests after a restart                |
+| `timeline_list_runs`     | Page through run metadata and recover digests after a restart           |
 | `timeline_append_event`  | Append one typed event under optimistic concurrency                     |
 | `timeline_project_state` | Project admitted state at an explicit knowledge cut                     |
 | `timeline_reason`        | Answer an exact temporal query and return a verified conclusion receipt |
 
-Portable run documents are available as MCP resources at
-`timeline://run/{runId}`. A verifier can read that resource and check a
-conclusion with `verifyTemporalConclusionV0Alpha3` from
+Portable run documents are available through the advertised MCP resource
+template `timeline://run/{runId}`. Discover run IDs with
+`timeline_list_runs`, then read the corresponding resource. A verifier can
+check its conclusions with `verifyTemporalConclusionV0Alpha3` from
 `@covenant-org/timeline`.
+
+Run discovery returns at most eight entries. Continue with `nextCursor` until it
+is `null`. Creating or deleting a run invalidates existing cursors; restart
+discovery from the first page after a stale-cursor error. The resource template
+does not publish a partial dynamic resource list: the custom list tool is the
+single complete discovery path.
 
 `recordedThrough` is always explicit. A non-negative integer selects that event
 prefix; `null` selects the empty prefix. The server does not substitute a
 mutable “latest” cut.
+
+Tool discovery describes the contract, event, concurrency, and query fields
+needed to construct a valid call. In particular, event drafts omit `schema` and
+`sequence`, every new event carries the latest `runDigest`, and
+`difference.bounds` returns bounds for `toPointId - fromPointId`.
+
+The repository includes a
+[source-first pilot starter](../../examples/mcp-agent-pilot)
+that exercises every tool across a restart and exports a complete artifact for
+offline verification.
 
 ## Admission boundary
 
@@ -75,14 +98,15 @@ and evidence bytes outside this server.
 ## Persistence
 
 The reference store uses canonical JSON, whole-run digests, exclusive writer
-locks, optimistic concurrency, and same-directory atomic replacement. Default
-limits are 256 runs, 2,000 events per run, 4 MiB per stored run, and 1 MiB per
-incoming MCP message.
+locks, optimistic concurrency, and same-directory atomic replacement. Limits
+are 256 runs, 2,000 events per run, 4 MiB per stored run, eight catalog entries
+per tool call, and 1 MiB per incoming MCP message. Programmatic store options
+may lower the run and byte ceilings but cannot raise them.
 
-Every append requires the current `runDigest`. If a response is lost, reload
-the run and retry the same event ID and content; exact retries are idempotent.
-An `indeterminate` error means a write may have committed and must be checked
-before another event is proposed.
+Each new event requires the current `runDigest`. If a response is lost, reload
+the run and retry the same event ID and content; exact retries are idempotent
+even when their supplied digest is stale. An `indeterminate` error means a
+write may have committed and must be checked before another event is proposed.
 
 The store never removes a lock based on age. After an unclean exit, verify that
 no writer is active before removing a stale lock. The reference implementation
@@ -91,9 +115,12 @@ On Windows, protect the data directory with a user-private ACL.
 
 An unclean exit before replacement can leave a hidden `.tmp` file. After
 confirming that no server process is using the directory, operators may remove
-those temporary files; committed runs are the canonical `.json` files.
+those temporary files; committed runs are the canonical `.json` files. Reads
+reject symbolic links, FIFOs, devices, and other non-regular entries.
 
 ## Programmatic use
+
+From code in this repository workspace:
 
 ```ts
 import {
@@ -105,13 +132,14 @@ const store = new FileMcpRunStore("/path/to/private/timeline-data");
 const server = createTimelineMcpServer(store);
 ```
 
-Connect the returned server with an MCP transport. The packaged
-`timeline-mcp` binary uses stdio.
+Connect the returned server with an MCP transport. The built `timeline-mcp`
+binary uses stdio. External package installation will be documented when the
+workspace package is published.
 
 ## Status
 
-This package is an alpha reference integration for the Draft v0alpha3 temporal
-contract. It is not a remote or multi-tenant service. Review the repository
+This workspace package is an alpha reference integration for the Draft v0alpha3
+temporal contract. It is not a remote or multi-tenant service. Review the repository
 [operations guide](https://github.com/open-covenant/covenant-timeline/blob/main/docs/operations.md)
 and
 [threat model](https://github.com/open-covenant/covenant-timeline/blob/main/docs/threat-model.md)

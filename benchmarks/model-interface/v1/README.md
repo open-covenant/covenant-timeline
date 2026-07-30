@@ -339,6 +339,15 @@ The checked-in OpenAI Responses adapter sends `prompt` unchanged as
 of `{ "requestId": requestId, "input": input }`. This fixes the path by which
 the model receives the correlation value it must return.
 
+The checked-in Ollama adapter sends `prompt` unchanged as the system message
+and the same canonical JSON bytes as the only user message. It uses a fixed
+loopback endpoint and verifies the exact Ollama runtime version and complete
+installed model digest before each independent inference request. After the
+response, it checks `/api/ps` to bind the result to the digest of the model
+Ollama kept loaded for that request. It rejects cloud-model identifiers. A
+conforming local run also starts a dedicated daemon with cloud features
+disabled and does not mutate its model inventory during the run.
+
 The response envelope contains `schema`, `requestId`, the arm-specific fields
 shown above, and optional usage:
 
@@ -392,6 +401,16 @@ verification failure remain visible in the result artifact.
 
 `requestId` is an opaque correlation value. Adapters must echo it exactly and
 must not infer benchmark behavior from its contents.
+
+## Running the Ollama reference adapter
+
+The
+[local-adapter quickstart](../../../docs/model-evaluation.md#ollama-local-adapter)
+binds the configuration to the checked-out source, exact installed model digest,
+and Ollama runtime version. It begins with the three-request Timeline smoke. The
+adapter sends no credentials and uses the raw arm-specific JSON Schema, fixed
+generation settings, no conversation state, no redirect, and no retry. Its
+mock-provider tests establish the adapter contract; they are not model results.
 
 ## Running the OpenAI reference adapter
 

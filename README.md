@@ -16,6 +16,7 @@ npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
+[Run a source-first agent pilot](./examples/mcp-agent-pilot) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
 [Evaluate the model boundary](./docs/model-evaluation.md)
@@ -133,19 +134,26 @@ decisions.
 
 ## Give an MCP agent temporal memory
 
-`@covenant-org/timeline-mcp` runs as a local stdio server and keeps typed
-temporal state durable across agent sessions. Add it to an MCP client:
+The local MCP server keeps typed temporal state durable across agent sessions.
+Build it once from a source checkout:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+Then add the built server to an MCP client using absolute paths:
 
 ```json
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "--yes",
-        "@covenant-org/timeline-mcp@0.0.0-alpha.1",
+        "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
-        "/path/to/private/timeline-data"
+        "/absolute/path/to/private/timeline-data"
       ]
     }
   }
@@ -158,14 +166,20 @@ also exports the complete portable run required for independent receipt
 verification.
 
 Direct MCP writes are structurally validated but unauthenticated. Evidence
-payloads remain outside the server, and every append requires the current
-whole-run digest for optimistic concurrency. The process exposes no network
-transport.
+payloads remain outside the server, and each new event requires the current
+whole-run digest for optimistic concurrency. An exact same-ID retry remains
+idempotent. The process exposes no network transport.
 
 See the
-[`@covenant-org/timeline-mcp` guide](./packages/mcp-server/README.md)
+[Timeline MCP server guide](./packages/mcp-server/README.md)
 for the tool contract, persistence model, recovery procedure, limits, and
 production boundary.
+
+The
+[source-first pilot starter](./examples/mcp-agent-pilot)
+drives all five tools across a server restart, exports the evidence, run,
+queries, conclusions, environment, and exact call transcript, then verifies the
+artifact in a separate offline process.
 
 ## Use the temporal API
 
@@ -234,6 +248,9 @@ The [model interface](./docs/model-interface.md) defines this loop. The
 [model-interface benchmark](./benchmarks/model-interface/v1/README.md) measures
 extraction, admission, query selection, and final answers separately across
 direct text, narrative memory, and Timeline-backed state.
+Reference adapters support a digest-verified local Ollama model or the OpenAI
+Responses API; neither adapter changes the benchmark protocol or repairs model
+output.
 
 ## Temporal model
 
@@ -305,9 +322,10 @@ Before production use, review the
 
 ## Proving the model boundary
 
-The repository includes a public 12-case development suite and a stateless
-OpenAI Responses reference adapter. No model result has been published, and the
-visible corpus does not establish that Timeline outperforms narrative memory.
+The repository includes a public 12-case development suite, a digest-verified
+local Ollama adapter, and a stateless OpenAI Responses adapter. No model result
+has been published, and the visible corpus does not establish that Timeline
+outperforms narrative memory.
 
 The next evidence gate is a preregistered blinded benchmark with longer rolling
 histories, controlled paraphrases, distractors, fixed budgets, strict failure
@@ -350,7 +368,7 @@ binds source, protocol inputs, artifacts, registry metadata, and attestations.
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Start             | [Getting started](./docs/getting-started.md)                                                                                            |
 | Model integration | [Model interface](./docs/model-interface.md), [model evaluation](./docs/model-evaluation.md)                                            |
-| Agent integration | [`@covenant-org/timeline-mcp`](./packages/mcp-server/README.md)                                                                         |
+| Agent integration | [Local MCP server](./packages/mcp-server/README.md)                                                                                     |
 | Contract          | [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md), [`schemas/v0alpha3`](./schemas/v0alpha3)                                 |
 | Conformance       | [`conformance/v0alpha3`](./conformance/v0alpha3), [second implementation](https://github.com/open-covenant/covenant-timeline/issues/19) |
 | Operations        | [Operations guide](./docs/operations.md), [security](./SECURITY.md)                                                                     |

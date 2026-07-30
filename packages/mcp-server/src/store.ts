@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { constants as fsConstants } from "node:fs";
 import {
+  lstat,
   mkdir,
   open,
   readdir,
@@ -28,6 +29,7 @@ import {
   MCP_DOCUMENT_LIMITS,
   MCP_IMPLEMENTATION,
   MCP_KERNEL_LIMITS,
+  MAX_LIST_PAGE_SIZE,
 } from "./constants.js";
 import { TimelineMcpError } from "./errors.js";
 import type {
@@ -35,6 +37,8 @@ import type {
   CreateRunResultV0Alpha1,
   McpRunEnvelopeV0Alpha1,
   McpRunImplementationV0Alpha1,
+  McpRunListPageOptionsV0Alpha1,
+  McpRunListPageV0Alpha1,
   McpRunMetadataV0Alpha1,
   TemporalEventDraftV0Alpha3,
 } from "./types.js";
@@ -43,6 +47,7 @@ const IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const SERVER_VERSION = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/;
 const STORED_FILE = /^[0-9a-f]{64}\.json$/;
+const PAGE_CURSOR = /^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/;
 
 export interface FileMcpRunStoreOptions {
   maxBytes?: number;
@@ -51,6 +56,9 @@ export interface FileMcpRunStoreOptions {
 
 export interface McpRunStore {
   list(): Promise<readonly McpRunMetadataV0Alpha1[]>;
+  listPage(
+    options?: McpRunListPageOptionsV0Alpha1,
+  ): Promise<McpRunListPageV0Alpha1>;
   load(runId: string): Promise<McpRunEnvelopeV0Alpha1 | undefined>;
   require(runId: string): Promise<McpRunEnvelopeV0Alpha1>;
   create(contract: unknown): Promise<CreateRunResultV0Alpha1>;
@@ -75,6 +83,8 @@ export class FileMcpRunStore implements McpRunStore {
     this.maxRuns = options.maxRuns ?? DEFAULT_MAX_RUNS;
     assertPositiveSafeInteger(this.maxBytes, "maxBytes");
     assertPositiveSafeInteger(this.maxRuns, "maxRuns");
+    assertAtMost(this.maxBytes, DEFAULT_MAX_RUN_BYTES, "maxBytes");
+    assertAtMost(this.maxRuns, DEFAULT_MAX_RUNS, "maxRuns");
   }
 
   async list(): Promise<readonly McpRunMetadataV0Alpha1[]> {
@@ -101,6 +111,64 @@ export class FileMcpRunStore implements McpRunStore {
     return timelines.sort((left, right) =>
       left.runId.localeCompare(right.runId),
     );
+  }
+
+  async listPage(
+    options: McpRunListPageOptionsV0Alpha1 = {},
+  ): Promise<McpRunListPageV0Alpha1> {
+    const { cursor, limit } = parseListPageOptions(options);
+    await this.ensureDirectory();
+    const files = await this.storedFiles();
+    if (files.length > this.maxRuns) {
+      throw new TimelineMcpError(
+        "timeline.mcp.store.limit",
+        "timeline store exceeds its run limit",
+      );
+    }
+    const catalogDigest = pageCatalogDigest(files);
+
+    let start = 0;
+    if (cursor !== undefined) {
+      const [, cursorCatalogDigest, cursorFileDigest] = cursor.split(".");
+      if (cursorCatalogDigest !== catalogDigest) {
+        throw new TimelineMcpError(
+          "timeline.mcp.input.invalid",
+          "timeline page cursor is invalid or stale",
+        );
+      }
+      const cursorIndex = files.findIndex(
+        (file) => pageFileDigest(file) === cursorFileDigest,
+      );
+      if (cursorIndex === -1) {
+        throw new TimelineMcpError(
+          "timeline.mcp.input.invalid",
+          "timeline page cursor is invalid or stale",
+        );
+      }
+      start = cursorIndex + 1;
+    }
+
+    const pageFiles = files.slice(start, start + limit);
+    const timelines: McpRunMetadataV0Alpha1[] = [];
+    for (const file of pageFiles) {
+      const envelope = await this.loadPath(join(this.directory, file));
+      if (file !== this.fileName(envelope.runId)) {
+        throw new TimelineMcpError(
+          "timeline.mcp.store.corrupt",
+          "stored timeline filename does not match its run ID",
+        );
+      }
+      timelines.push(metadataForEnvelope(envelope));
+    }
+
+    const hasMore = start + pageFiles.length < files.length;
+    return {
+      timelines,
+      nextCursor:
+        hasMore && pageFiles.length > 0
+          ? pageCursorFor(catalogDigest, pageFiles.at(-1)!)
+          : null,
+    };
   }
 
   async load(runId: string): Promise<McpRunEnvelopeV0Alpha1 | undefined> {
@@ -700,6 +768,73 @@ function assertRunId(runId: string): void {
   }
 }
 
+function parseListPageOptions(value: unknown): {
+  cursor: string | undefined;
+  limit: number;
+} {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    invalidPageOptions();
+  }
+  const options = value as Record<string, unknown>;
+  const descriptors = Object.getOwnPropertyDescriptors(options);
+  if (
+    Object.getOwnPropertySymbols(options).length > 0 ||
+    Object.values(descriptors).some((descriptor) => !("value" in descriptor)) ||
+    Object.keys(options).some((key) => key !== "cursor" && key !== "limit")
+  ) {
+    invalidPageOptions();
+  }
+
+  const cursor = options.cursor;
+  if (
+    cursor !== undefined &&
+    (typeof cursor !== "string" || !PAGE_CURSOR.test(cursor))
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "timeline page cursor is invalid or stale",
+    );
+  }
+  const limit =
+    options.limit === undefined ? MAX_LIST_PAGE_SIZE : options.limit;
+  if (
+    typeof limit !== "number" ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_LIST_PAGE_SIZE
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      `timeline page limit must be an integer from 1 through ${MAX_LIST_PAGE_SIZE}`,
+    );
+  }
+  return { cursor, limit };
+}
+
+function pageCatalogDigest(files: readonly string[]): string {
+  return contentDigest(files as unknown as JsonValue).slice(7);
+}
+
+function pageFileDigest(file: string): string {
+  return contentDigest(file as unknown as JsonValue).slice(7);
+}
+
+function pageCursorFor(catalogDigest: string, file: string): string {
+  return `v1.${catalogDigest}.${pageFileDigest(file)}`;
+}
+
+function invalidPageOptions(): never {
+  throw new TimelineMcpError(
+    "timeline.mcp.input.invalid",
+    "timeline page options are invalid",
+  );
+}
+
 function sameJson(left: unknown, right: unknown): boolean {
   return canonicalJson(left as JsonValue) === canonicalJson(right as JsonValue);
 }
@@ -712,32 +847,73 @@ async function readBoundedUtf8(
   path: string,
   maxBytes: number,
 ): Promise<string> {
-  const stream = createReadStream(path);
-  const chunks: Buffer[] = [];
-  let total = 0;
+  const link = await lstat(path);
+  if (!link.isFile()) {
+    throw new TimelineMcpError(
+      "timeline.mcp.store.corrupt",
+      "stored timeline is not a regular file",
+    );
+  }
 
-  for await (const chunk of stream) {
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    total += bytes.length;
-    if (total > maxBytes) {
-      stream.destroy();
+  const flags =
+    process.platform === "win32"
+      ? "r"
+      : fsConstants.O_RDONLY |
+        (fsConstants.O_NOFOLLOW ?? 0) |
+        fsConstants.O_NONBLOCK;
+  const handle = await open(path, flags);
+  try {
+    const stat = await handle.stat();
+    if (
+      !stat.isFile() ||
+      stat.dev !== link.dev ||
+      stat.ino !== link.ino ||
+      !Number.isSafeInteger(stat.size) ||
+      stat.size < 0
+    ) {
+      throw new TimelineMcpError(
+        "timeline.mcp.store.corrupt",
+        "stored timeline changed while opening",
+      );
+    }
+    if (stat.size > maxBytes) {
       throw new TimelineMcpError(
         "timeline.mcp.store.limit",
         "stored timeline exceeds its byte limit",
       );
     }
-    chunks.push(bytes);
-  }
 
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(
-      Buffer.concat(chunks, total),
-    );
-  } catch {
-    throw new TimelineMcpError(
-      "timeline.mcp.store.corrupt",
-      "stored timeline is not valid UTF-8",
-    );
+    const bytes = Buffer.alloc(stat.size + 1);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read(
+        bytes,
+        offset,
+        bytes.byteLength - offset,
+        null,
+      );
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    if (offset !== stat.size) {
+      throw new TimelineMcpError(
+        "timeline.mcp.store.corrupt",
+        "stored timeline changed while reading",
+      );
+    }
+
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(
+        bytes.subarray(0, offset),
+      );
+    } catch {
+      throw new TimelineMcpError(
+        "timeline.mcp.store.corrupt",
+        "stored timeline is not valid UTF-8",
+      );
+    }
+  } finally {
+    await handle.close();
   }
 }
 
@@ -819,5 +995,11 @@ function isFileError(error: unknown, code: string): boolean {
 function assertPositiveSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new RangeError(`${name} must be a positive safe integer`);
+  }
+}
+
+function assertAtMost(value: number, maximum: number, name: string): void {
+  if (value > maximum) {
+    throw new RangeError(`${name} must not exceed ${maximum}`);
   }
 }

@@ -77,12 +77,20 @@ The MCP server applies lower defaults:
 
 - 256 locally stored runs;
 - 2,000 events and 4 MiB per stored run;
+- eight catalog entries per MCP tool call;
 - 1 MiB per incoming MCP message;
 - 32 axes and contexts;
 - 512 points, 256 intervals, and 1,024 assertions;
 - 4,096 solver edges and 2,000,000 operations per request.
 
 The MCP limits are enforced independently from the broader core defaults.
+Continue catalog discovery with the returned opaque cursor and restart from the
+first page if a catalog mutation makes that cursor stale. Standard MCP
+discovery advertises the `timeline://run/{runId}` resource template but does not
+return a partial dynamic resource list. Discover every run ID through
+`timeline_list_runs`, then read the resource directly. Protocol frames that are
+malformed or exceed the message limit terminate the stdio server with a nonzero
+status so a supervisor can distinguish failure from a clean stop.
 
 ## Dispatch and Recovery
 
@@ -123,7 +131,7 @@ modes; an existing parent or data directory must already have suitable access
 controls. On Windows, configure a user-private ACL. Do not place the reference
 store on NFS, SMB, or another shared filesystem.
 
-Each append requires the current whole-run digest. The server validates the
+Each new event requires the current whole-run digest. The server validates the
 complete candidate run, writes canonical bytes to a private temporary file,
 syncs it, and atomically replaces the stored envelope under an exclusive lock.
 Exact event-ID retries are idempotent even if the supplied digest is stale.
@@ -138,7 +146,8 @@ be removed.
 Back up the canonical `.json` files only while the server is stopped or through
 a filesystem snapshot that preserves point-in-time consistency. A restored
 file is accepted only if its canonical envelope, run identity, revision, and
-whole-run digest all verify.
+whole-run digest all verify. Store reads reject symbolic links, FIFOs, devices,
+and other non-regular entries rather than following or blocking on them.
 
 ## Incident Response
 

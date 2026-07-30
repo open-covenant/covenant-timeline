@@ -1,0 +1,26 @@
+{
+  "schema": "covenant.timeline.model-eval.config.v1",
+  "id": "ollama-local-smoke",
+  "benchmarkRevision": "replace-with-source-commit",
+  "adapter": {
+    "id": "ollama-chat",
+    "version": "1"
+  },
+  "model": {
+    "provider": "ollama",
+    "id": "replace-with-installed-model-name",
+    "revision": "replace-with-sha256-model-digest"
+  },
+  "generation": {
+    "temperature": 0,
+    "seed": 42,
+    "maxOutputTokens": 4096,
+    "parameters": {
+      "contextLength": 32768,
+      "runtimeVersion": "replace-with-ollama-runtime-version",
+      "structuredOutput": true,
+      "thinking": false,
+      "topP": 1
+    }
+  }
+}

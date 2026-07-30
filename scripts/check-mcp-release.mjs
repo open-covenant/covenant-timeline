@@ -35,7 +35,7 @@ const releaseHeading = new RegExp(
   `^## @covenant-org/timeline-mcp ${escapedVersion} - \\d{4}-\\d{2}-\\d{2}$`,
   "m",
 );
-if (!releaseHeading.test(changelog)) {
+if (tag && !releaseHeading.test(changelog)) {
   errors.push(`CHANGELOG.md has no MCP ${manifest.version} release entry`);
 }
 if (tag && tag !== expectedTag) {

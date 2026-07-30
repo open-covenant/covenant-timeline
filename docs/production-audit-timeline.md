@@ -193,11 +193,11 @@ graph exhaustion, and temporal-data privacy.
   - catalog calls read at most eight run files and return a
     generation-bound opaque continuation cursor, while standard MCP discovery
     advertises the complete resource template without a partial run list; and
-  - all 59 model-evaluation tests passed, including 41 focused local-Ollama,
+  - all 61 model-evaluation tests passed, including 43 focused local-Ollama,
     OpenAI, and configuration tests. The Ollama adapter verifies the configured
     runtime and installed-model digest before inference, checks the loaded-model
-    digest afterward, and fixes generation settings, but no Ollama evaluation
-    result has been recorded.
+    digest afterward, fixes generation settings, and bounds model-controlled
+    response values. No Ollama result is committed or published.
 - `pnpm audit` and `pnpm audit --prod` reported no known findings on
   2026-07-30. The MCP integration uses the split Model Context Protocol v2
   packages at exact `2.0.0-beta.5` versions; beta API stability remains an

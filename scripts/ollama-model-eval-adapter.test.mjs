@@ -13,6 +13,12 @@ import {
   validateAdapterResponse,
 } from "./model-interface-eval.mjs";
 import {
+  MAX_MODEL_REQUEST_ID_LENGTH,
+  MAX_NARRATIVE_MEMORY_CHARACTERS,
+  MAX_TIMELINE_EVENTS_PER_RESPONSE,
+  MAX_TIMELINE_REFERENCES_PER_EVENT,
+} from "./model-eval-output-schema.mjs";
+import {
   OLLAMA_ADAPTER_ID,
   OLLAMA_ADAPTER_VERSION,
   OLLAMA_CHAT_ENDPOINT,
@@ -185,6 +191,31 @@ test("Ollama request mapping is deterministic and stateless for every arm", () =
     assert.equal(body.think, false);
     assert.equal(body.format.type, "object");
     assert.equal(Object.hasOwn(body.format, "anyOf"), false);
+    assert.equal(
+      body.format.properties.requestId.maxLength,
+      MAX_MODEL_REQUEST_ID_LENGTH,
+    );
+    if (arm === "narrative-memory") {
+      assert.equal(
+        body.format.properties.memory.maxLength,
+        MAX_NARRATIVE_MEMORY_CHARACTERS,
+      );
+    }
+    if (arm === "timeline") {
+      assert.equal(
+        body.format.properties.events.maxItems,
+        MAX_TIMELINE_EVENTS_PER_RESPONSE,
+      );
+      assert.equal(
+        body.format.$defs.evidenceRefs.maxItems,
+        MAX_TIMELINE_REFERENCES_PER_EVENT,
+      );
+      assert.equal(
+        body.format.$defs.nonEmptyIdentifiers.maxItems,
+        MAX_TIMELINE_REFERENCES_PER_EVENT,
+      );
+      assert.equal(body.format.$defs.identifier.maxLength, 128);
+    }
     assert.deepEqual(body.options, {
       temperature: 0,
       seed: 42,
@@ -304,7 +335,6 @@ test("native chat output maps token counts mechanically", () => {
 test("incomplete, ambiguous, and malformed chat output fails closed", () => {
   const failures = [
     createChatResponse(createModelOutput(), { done: false }),
-    createChatResponse(createModelOutput(), { doneReason: "length" }),
     createChatResponse(createModelOutput(), {
       model: "different:latest",
     }),
@@ -338,6 +368,31 @@ test("incomplete, ambiguous, and malformed chat output fails closed", () => {
       },
     );
   }
+});
+
+test("output-token exhaustion is reported without retaining partial output", () => {
+  const response = createChatResponse(
+    { secret: "partial provider output" },
+    { doneReason: "length", outputTokens: 4096 },
+  );
+
+  assert.throws(
+    () => parseOllamaChatResponse(response, model),
+    (error) => {
+      assert.equal(error.code, "provider.output-limit");
+      assert.equal(
+        error.message,
+        "provider reached the configured output-token limit",
+      );
+      assert.deepEqual(error.usage, {
+        inputTokens: 180,
+        outputTokens: 4096,
+        costUsd: null,
+      });
+      assert.equal(error.message.includes("secret"), false);
+      return true;
+    },
+  );
 });
 
 test("adapter binds installed and running model digests to one chat request", async () => {

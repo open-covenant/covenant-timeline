@@ -61,6 +61,10 @@
   eight runs, bind cursors to a catalog generation, cap reference-store
   configuration at its advertised ceilings, and make the source checkout a
   complete agent-integration path.
+- Bound every model-controlled response collection and free-form string, and
+  make exact coordinates, difference direction, current-evidence support,
+  independent corroboration, references, sequences, and duplicate checks
+  explicit in the Timeline extraction prompt.
 
 ### Security
 
@@ -70,6 +74,8 @@
   error amplification.
 - Refuse symlinked and non-regular MCP run files without blocking on special
   filesystem entries.
+- Distinguish local-model output-token exhaustion from other provider failures
+  without retaining partial model output.
 
 ## 0.0.0-alpha.2 - 2026-07-27
 

@@ -17,6 +17,12 @@ import {
   validateAdapterResponse,
 } from "./model-interface-eval.mjs";
 import {
+  MAX_MODEL_REQUEST_ID_LENGTH,
+  MAX_NARRATIVE_MEMORY_CHARACTERS,
+  MAX_TIMELINE_EVENTS_PER_RESPONSE,
+  MAX_TIMELINE_REFERENCES_PER_EVENT,
+} from "./model-eval-output-schema.mjs";
+import {
   OPENAI_ADAPTER_ID,
   OPENAI_ADAPTER_VERSION,
   OPENAI_RESPONSES_ENDPOINT,
@@ -187,6 +193,31 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
     assert.equal(body.text.format.type, "json_schema");
     assert.equal(body.text.format.strict, true);
     assert.equal(
+      body.text.format.schema.properties.requestId.maxLength,
+      MAX_MODEL_REQUEST_ID_LENGTH,
+    );
+    if (arm === "narrative-memory") {
+      assert.equal(
+        body.text.format.schema.properties.memory.maxLength,
+        MAX_NARRATIVE_MEMORY_CHARACTERS,
+      );
+    }
+    if (arm === "timeline") {
+      assert.equal(
+        body.text.format.schema.properties.events.maxItems,
+        MAX_TIMELINE_EVENTS_PER_RESPONSE,
+      );
+      assert.equal(
+        body.text.format.schema.$defs.evidenceRefs.maxItems,
+        MAX_TIMELINE_REFERENCES_PER_EVENT,
+      );
+      assert.equal(
+        body.text.format.schema.$defs.nonEmptyIdentifiers.maxItems,
+        MAX_TIMELINE_REFERENCES_PER_EVENT,
+      );
+      assert.equal(body.text.format.schema.$defs.identifier.maxLength, 128);
+    }
+    assert.equal(
       canonicalJson(body.text.format).includes(request.requestId),
       false,
     );
@@ -250,6 +281,68 @@ test("provider schemas cover every public v1 gold response", async () => {
       }
     }
   }
+});
+
+test("provider schemas reject model-controlled values above their limits", async () => {
+  const [testCase] = (await readFile(casesPath, "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  const [cut] = testCase.cuts;
+  const timelineSchema = createOpenAIResponseFormat("timeline").schema;
+  const narrativeSchema = createOpenAIResponseFormat("narrative-memory").schema;
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validateTimeline = ajv.compile(timelineSchema);
+  const validateNarrative = ajv.compile(narrativeSchema);
+  const timeline = {
+    schema: responseSchema,
+    requestId: "request-bounds",
+    events: cut.goldEvents,
+    query: cut.goldQuery,
+  };
+
+  const atEventLimit = structuredClone(timeline);
+  atEventLimit.events = Array.from(
+    { length: MAX_TIMELINE_EVENTS_PER_RESPONSE },
+    () => structuredClone(cut.goldEvents[0]),
+  );
+  assert.equal(validateTimeline(atEventLimit), true);
+
+  const aboveEventLimit = structuredClone(atEventLimit);
+  aboveEventLimit.events.push(structuredClone(cut.goldEvents[0]));
+  assert.equal(validateTimeline(aboveEventLimit), false);
+
+  const aboveEvidenceLimit = structuredClone(timeline);
+  aboveEvidenceLimit.events[0].assertion.evidenceRefs = Array.from(
+    { length: MAX_TIMELINE_REFERENCES_PER_EVENT + 1 },
+    () => cut.goldEvents[0].assertion.evidenceRefs[0],
+  );
+  assert.equal(validateTimeline(aboveEvidenceLimit), false);
+
+  const aboveSupersessionLimit = structuredClone(timeline);
+  aboveSupersessionLimit.events[0].assertion.supersedes = Array.from(
+    { length: MAX_TIMELINE_REFERENCES_PER_EVENT + 1 },
+    (_, index) => `coordinate.previous.${index}`,
+  );
+  assert.equal(validateTimeline(aboveSupersessionLimit), false);
+
+  const longIdentifier = structuredClone(timeline);
+  longIdentifier.events[0].id = "a".repeat(129);
+  assert.equal(validateTimeline(longIdentifier), false);
+
+  const longRequestId = structuredClone(timeline);
+  longRequestId.requestId = "r".repeat(MAX_MODEL_REQUEST_ID_LENGTH + 1);
+  assert.equal(validateTimeline(longRequestId), false);
+
+  assert.equal(
+    validateNarrative({
+      schema: responseSchema,
+      requestId: "request-bounds",
+      answer: cut.expectedResult,
+      memory: "m".repeat(MAX_NARRATIVE_MEMORY_CHARACTERS + 1),
+    }),
+    false,
+  );
 });
 
 test("configuration mismatches fail before an inference request", async () => {

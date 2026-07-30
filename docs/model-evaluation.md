@@ -120,6 +120,10 @@ node scripts/score-model-interface-eval.mjs \
 On Windows, replace the `/tmp/...` paths with an absolute path outside the
 checkout and use PowerShell backticks for multiline commands.
 
+If Ollama stops at the configured output-token ceiling, the adapter records
+`provider.output-limit`, retains token usage, and discards the partial model
+output. Other incomplete provider responses remain `provider.incomplete`.
+
 No Ollama model result is committed. The adapter tests use a bounded mock
 provider and establish protocol behavior, not model quality.
 

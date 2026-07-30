@@ -315,6 +315,13 @@ export function parseOllamaChatResponse(response, expectedModel) {
       usage,
     );
   }
+  if (response.done_reason === "length") {
+    fail(
+      "provider.output-limit",
+      "provider reached the configured output-token limit",
+      usage,
+    );
+  }
   if (response.done_reason !== undefined && response.done_reason !== "stop") {
     fail(
       "provider.incomplete",

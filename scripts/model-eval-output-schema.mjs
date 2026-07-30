@@ -4,6 +4,11 @@ const QUERY_SCHEMA = "covenant.timeline.query.v0alpha3";
 const SAFE_INTEGER = 9_007_199_254_740_991;
 const IDENTIFIER_PATTERN = "^[a-z0-9][a-z0-9._:/-]*$";
 const DIGEST_PATTERN = "^sha256:[0-9a-f]{64}$";
+const MAX_IDENTIFIER_LENGTH = 128;
+export const MAX_MODEL_REQUEST_ID_LENGTH = 128;
+export const MAX_NARRATIVE_MEMORY_CHARACTERS = 4096;
+export const MAX_TIMELINE_EVENTS_PER_RESPONSE = 8;
+export const MAX_TIMELINE_REFERENCES_PER_EVENT = 8;
 
 const pointRelations = ["before", "equal", "after"];
 const intervalRelations = [
@@ -173,6 +178,7 @@ function semanticDefinitions() {
 function timelineDefinitions() {
   const identifier = {
     type: "string",
+    maxLength: MAX_IDENTIFIER_LENGTH,
     pattern: IDENTIFIER_PATTERN,
   };
   const safeInteger = {
@@ -192,11 +198,13 @@ function timelineDefinitions() {
       pattern: DIGEST_PATTERN,
     },
     minItems: 1,
+    maxItems: MAX_TIMELINE_REFERENCES_PER_EVENT,
   };
   const nonEmptyIdentifiers = {
     type: "array",
     items: identifier,
     minItems: 1,
+    maxItems: MAX_TIMELINE_REFERENCES_PER_EVENT,
   };
 
   const coordinate = {
@@ -322,7 +330,11 @@ function timelineDefinitions() {
 export function createModelEvalOutputSchema(arm) {
   const common = {
     schema: literal(RESPONSE_SCHEMA),
-    requestId: { type: "string" },
+    requestId: {
+      type: "string",
+      minLength: 1,
+      maxLength: MAX_MODEL_REQUEST_ID_LENGTH,
+    },
   };
   let schema;
 
@@ -339,7 +351,10 @@ export function createModelEvalOutputSchema(arm) {
       ...object({
         ...common,
         answer: reference("semanticResult"),
-        memory: { type: "string" },
+        memory: {
+          type: "string",
+          maxLength: MAX_NARRATIVE_MEMORY_CHARACTERS,
+        },
       }),
       $defs: semanticDefinitions(),
     };
@@ -350,6 +365,7 @@ export function createModelEvalOutputSchema(arm) {
         events: {
           type: "array",
           items: reference("event"),
+          maxItems: MAX_TIMELINE_EVENTS_PER_RESPONSE,
         },
         query: reference("query"),
       }),

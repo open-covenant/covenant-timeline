@@ -187,8 +187,11 @@ This is the gold-compatible shape for the second cut of
 request rather than reading gold fields.
 
 The host assigns neither IDs nor event sequences. The response must append
-cleanly to `priorRun` as emitted. The harness then executes the public v0alpha3
-API:
+cleanly to `priorRun` as emitted. The provider schema caps a response at eight
+events and caps each evidence or supersession reference list at eight entries.
+The public corpus requires at most three events and one reference per list;
+admission still enforces the 4096-byte rolling-state budget. The harness then
+executes the public v0alpha3 API:
 
 ```ts
 const run = parseRunDocumentV0Alpha3({

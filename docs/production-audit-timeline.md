@@ -18,15 +18,17 @@ the Temporal adapter survives a worker restart against a real local server; and
 the Python reducer agrees with the TypeScript corpus.
 
 The local MCP alpha adds a bounded stdio integration for the temporal
-substrate. It persists canonical runs across process restarts, uses
-whole-run-digest compare-and-swap for appends, replays corrections at explicit
-knowledge cuts, and returns receipts verified before they leave the server. Its
-model-facing schemas describe the event, concurrency, and query semantics; run
-discovery is paginated; malformed protocol input terminates with a failure
-status; and a source-first pilot exports a restart-spanning artifact for
-separate offline verification. Package and release paths reproduce and inspect
-exact archive bytes, include the full production dependency graph in the SBOM,
-and distinguish npm publication from a later successful workflow retry.
+substrate. Its six tools include a model-proposal boundary that resolves
+request-scoped handles, binds exact source spans, derives ledger records and a
+query, and appends the complete batch atomically. The server persists canonical
+runs across process restarts, uses whole-run-digest compare-and-swap for
+appends, replays corrections at explicit knowledge cuts, and verifies receipts
+before returning them. Run discovery is paginated; malformed protocol input
+terminates with a failure status; and a source-first pilot exports a
+restart-spanning artifact for separate offline verification. Package and
+release paths reproduce and inspect exact archive bytes, include the full
+production dependency graph in the SBOM, and distinguish npm publication from
+a later successful workflow retry.
 
 This is still a production-hardened alpha, not an independently proven
 production protocol. The Temporal.io adapter and Python checkpoint reducer are
@@ -34,7 +36,7 @@ maintained in this repository. The external project represented by the public
 archive did not adopt Timeline. The alpha.2 package includes the Draft v0alpha3
 temporal reference implementation alongside v0alpha1 and v0alpha2 checkpoint
 compatibility APIs. External operation, an independently maintained temporal
-implementation, measured model-side assertion extraction, and RFC completion
+implementation, measured model-side proposal extraction, and RFC completion
 remain blockers to a production protocol claim.
 
 v0alpha3 adds explicit temporal axes, scenario contexts, points, proper
@@ -182,10 +184,11 @@ graph exhaustion, and temporal-data privacy.
     provenance identity, successful and publication workflow attempts,
     credentials, integration pins, and full-graph SBOM substitution.
 - Source-first MCP and model-adapter verification on 2026-07-30:
-  - 41 MCP store, server, CLI, stdio, pagination, restart, correction, schema,
-    and receipt tests passed;
-  - 16 pilot tests crossed two real stdio server sessions, used every MCP tool,
-    bound the transcript and append digest chain to the exported run, reproduced
+  - the MCP store, server, CLI, stdio, pagination, restart, correction, schema,
+    and receipt test suites passed;
+  - 16 pilot tests crossed two real stdio server sessions, exercised run
+    creation, discovery, direct append, projection, and reasoning, bound the
+    transcript and append digest chain to the exported run, reproduced
     historical and corrected conclusions after deleting the input fixture, and
     rejected unsafe, oversized, symlinked, or malformed artifacts and inputs;
   - malformed, duplicate-key, invalid-UTF-8, truncated, and oversized protocol
@@ -193,11 +196,14 @@ graph exhaustion, and temporal-data privacy.
   - catalog calls read at most eight run files and return a
     generation-bound opaque continuation cursor, while standard MCP discovery
     advertises the complete resource template without a partial run list; and
-  - all 61 model-evaluation tests passed, including 43 focused local-Ollama,
-    OpenAI, and configuration tests. The Ollama adapter verifies the configured
-    runtime and installed-model digest before inference, checks the loaded-model
-    digest afterward, fixes generation settings, and bounds model-controlled
-    response values. No Ollama result is committed or published.
+  - the proposal compiler transformed all 36 public benchmark cuts into
+    schema-valid candidate artifacts whose projected state, answers, and proofs
+    matched the gold corpus; and
+  - all 63 model-evaluation tests passed. The Ollama adapter verifies the
+    configured runtime and installed-model digest before inference, checks the
+    loaded-model digest afterward, fixes generation settings, and bounds
+    model-controlled response values. No Ollama result is committed or
+    published.
 - `pnpm audit` and `pnpm audit --prod` reported no known findings on
   2026-07-30. The MCP integration uses the split Model Context Protocol v2
   packages at exact `2.0.0-beta.5` versions; beta API stability remains an
@@ -283,22 +289,25 @@ graph exhaustion, and temporal-data privacy.
       attacker capabilities, replay/effect abuse paths, privacy constraints,
       and adopter obligations.
 - [x] **Provide a bounded agent integration.** The local stdio MCP server
-      exposes five explicit tools and one portable run resource, persists
+      exposes six explicit tools and one portable run resource. Its proposal
+      tool resolves request-scoped model handles, binds exact source spans, and
+      atomically appends the complete compiled batch. The server persists
       canonical runs with crash-aware replacement and writer locks, bounds
       messages, runs, events, bytes, graph work, and proof output, and labels
-      direct writes as unauthenticated. Tool schemas explain the fields a model
-      must preserve, catalog discovery is paginated, fatal protocol input exits
-      nonzero, and the source-first pilot exports a restart-spanning artifact
-      that a separate process verifies offline.
+      writes as unauthenticated. Catalog discovery is paginated, fatal protocol
+      input exits nonzero, and the source-first pilot exports a
+      restart-spanning artifact that a separate process verifies offline.
 - [ ] **Validate the model boundary.** The versioned harness, corpus, and scorer
       now compare Timeline-assisted reasoning with a narrative-memory baseline
       while preserving invalid output and unsupported definite answers as
       failures. Reference adapters now support a digest-verified local Ollama
       model and stateless OpenAI Responses requests while preserving provider
-      failures. No model evaluation has been run, so there is still no
-      controlled evidence that models reliably emit admissible typed
-      assertions and queries or that Timeline improves end-to-end temporal
-      accuracy.
+      failures. One local smoke run exercised raw v0alpha3 event authorship on
+      the visible development suite; it did not exercise the proposal compiler
+      and is not efficacy evidence. No proposal-boundary or blinded model result
+      has been published, so there is still no controlled evidence that models
+      reliably emit admissible temporal proposals or that Timeline improves
+      end-to-end temporal accuracy.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.
@@ -443,8 +452,8 @@ Recommended host metrics:
 
 ## Recommended Architecture Changes
 
-1. Run an external model through the public smoke harness, then complete the
-   preregistered blinded scale evaluation before any efficacy claim.
+1. Run an external model through the proposal-compiler boundary, then complete
+   the preregistered blinded scale evaluation before any efficacy claim.
 2. Obtain one externally operated temporal pilot with the source-first starter;
    publish the MCP package as a distribution step when registry access is
    available.
@@ -460,7 +469,7 @@ Recommended host metrics:
 
 ## Test Coverage Gaps
 
-- No external model evaluation or blinded scale-suite result.
+- No published proposal-boundary model result or blinded scale-suite result.
 - No independently operated temporal pilot.
 - No independently maintained temporal implementation.
 - No production deployment evidence in the public archive.

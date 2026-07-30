@@ -13,7 +13,55 @@ permissions:
   contents: read
 
 jobs:
+  registry-compatibility:
+    if: github.repository == 'open-covenant/covenant-timeline'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        with:
+          version: 10.31.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install --global npm@12.0.1
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: node scripts/check-mcp-release.mjs "$GITHUB_REF_NAME"
+      - run: test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
+      - run: git merge-base --is-ancestor HEAD origin/main
+
+      - id: artifact
+        name: Build disposable MCP package
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination="$RUNNER_TEMP/registry-compatibility"
+          mkdir -p "$destination"
+          pnpm --dir packages/mcp-server pack --pack-destination "$destination"
+          archive="$(find "$destination" -maxdepth 1 -name '*.tgz' -print -quit)"
+          test -n "$archive"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Verify registry dependency graph
+        run: >-
+          node scripts/check-mcp-registry-install.mjs
+          "${{ steps.artifact.outputs.archive }}"
+
+      - run: git diff --exit-code
+
   publish:
+    needs: registry-compatibility
     if: github.repository == 'open-covenant/covenant-timeline'
     runs-on: ubuntu-latest
     timeout-minutes: 20

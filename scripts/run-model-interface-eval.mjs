@@ -44,6 +44,7 @@ import {
   PROMPT_PATHS,
   REQUEST_SCHEMA,
   RESULT_SCHEMA,
+  assertModelTimelineDelta,
   assertValid,
   assertVisibleEvidenceRefs,
   createModelEvalValidators,
@@ -461,6 +462,7 @@ export async function runModelInterfaceEval(options) {
               } else {
                 result.proposedEvents = response.events;
                 result.proposedQuery = response.query;
+                assertModelTimelineDelta(response.events);
                 for (const [index, event] of response.events.entries()) {
                   if (
                     event.type === "point.declared" ||

@@ -13,6 +13,10 @@ import {
   reasonTemporalQueryV0Alpha3,
   verifyTemporalConclusionV0Alpha3,
 } from "../packages/prototype/dist/index.js";
+import {
+  MAX_TIMELINE_EVENTS_PER_RESPONSE,
+  MAX_TIMELINE_REFERENCES_PER_EVENT,
+} from "./model-eval-output-schema.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 export const ARMS = ["direct", "narrative-memory", "timeline"];
@@ -24,6 +28,7 @@ export const RESPONSE_SCHEMA = "covenant.timeline.model-eval.response.v1";
 export const ADAPTER_ERROR_SCHEMA =
   "covenant.timeline.model-eval.adapter-error.v1";
 export const RESULT_SCHEMA = "covenant.timeline.model-eval.result.v1";
+export const DIAGNOSTICS_SCHEMA = "covenant.timeline.model-eval.diagnostics.v1";
 export const CONTINUITY_BUDGET_BYTES = 4 * 1024;
 export const MAX_REPEATS = 20;
 export const MAX_REQUEST_BYTES = 256 * 1024;
@@ -57,6 +62,10 @@ const resultSchemaPath = join(
 const scoreSchemaPath = join(
   root,
   "benchmarks/model-interface/v1/score.schema.json",
+);
+const diagnosticsSchemaPath = join(
+  root,
+  "benchmarks/model-interface/v1/diagnostics.schema.json",
 );
 const schemaDirectory = join(root, "schemas/v0alpha3");
 const schemaFiles = [
@@ -107,6 +116,11 @@ export async function createModelEvalValidators() {
     scoreSchemaPath,
   );
   ajv.addSchema(scoreSchema);
+  const diagnosticsSchema = parseStrictJson(
+    await readFile(diagnosticsSchemaPath, "utf8"),
+    diagnosticsSchemaPath,
+  );
+  ajv.addSchema(diagnosticsSchema);
 
   return {
     config: requireValidator(
@@ -126,6 +140,11 @@ export async function createModelEvalValidators() {
     ),
     result: requireValidator(ajv, resultSchema.$id, "benchmark result"),
     score: requireValidator(ajv, scoreSchema.$id, "benchmark score"),
+    diagnostics: requireValidator(
+      ajv,
+      diagnosticsSchema.$id,
+      "benchmark diagnostics",
+    ),
     semanticResult: requireValidator(
       ajv,
       "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json#/$defs/semanticResult",
@@ -410,11 +429,94 @@ export function assertVisibleEvidenceRefs(event, evidence, label = "event") {
   }
 }
 
+export function assertModelTimelineDelta(
+  events,
+  label = "adapter response.events",
+) {
+  if (events.length > MAX_TIMELINE_EVENTS_PER_RESPONSE) {
+    throw new ModelEvalError(
+      `${label}: must contain at most ${MAX_TIMELINE_EVENTS_PER_RESPONSE} events`,
+      {
+        code: "event.delta-limit",
+        stage: "admission",
+      },
+    );
+  }
+
+  const fingerprints = new Map();
+  for (const [index, event] of events.entries()) {
+    const evidenceRefs = eventEvidenceRefs(event);
+    if (evidenceRefs.length > MAX_TIMELINE_REFERENCES_PER_EVENT) {
+      throw new ModelEvalError(
+        `${label}[${index}]: evidenceRefs must contain at most ${MAX_TIMELINE_REFERENCES_PER_EVENT} entries`,
+        {
+          code: "event.reference-limit",
+          stage: "admission",
+        },
+      );
+    }
+    const supersedes = event?.assertion?.supersedes ?? [];
+    if (supersedes.length > MAX_TIMELINE_REFERENCES_PER_EVENT) {
+      throw new ModelEvalError(
+        `${label}[${index}]: supersedes must contain at most ${MAX_TIMELINE_REFERENCES_PER_EVENT} entries`,
+        {
+          code: "event.reference-limit",
+          stage: "admission",
+        },
+      );
+    }
+
+    const fingerprint = modelEventFingerprint(event);
+    const duplicateIndex = fingerprints.get(fingerprint);
+    if (duplicateIndex !== undefined) {
+      throw new ModelEvalError(
+        `${label}[${index}]: duplicates the temporal claim in ${label}[${duplicateIndex}]`,
+        {
+          code: "event.duplicate-claim",
+          stage: "admission",
+        },
+      );
+    }
+    fingerprints.set(fingerprint, index);
+  }
+}
+
 export function eventEvidenceRefs(event) {
   if (event?.type === "assertion.retracted") {
     return event.evidenceRefs ?? [];
   }
   return event?.assertion?.evidenceRefs ?? [];
+}
+
+function modelEventFingerprint(event) {
+  if (event.type === "assertion.retracted") {
+    return canonicalJson({
+      type: event.type,
+      assertionId: event.assertionId,
+      evidenceRefs: normalizedReferences(event.evidenceRefs),
+    });
+  }
+
+  if (event.assertion === undefined) {
+    const { schema: _schema, id: _id, sequence: _sequence, ...claim } = event;
+    return canonicalJson(claim);
+  }
+
+  const { id: _id, evidenceRefs, supersedes, ...claim } = event.assertion;
+  return canonicalJson({
+    type: event.type,
+    assertion: {
+      ...claim,
+      evidenceRefs: normalizedReferences(evidenceRefs),
+      ...(supersedes === undefined
+        ? {}
+        : { supersedes: normalizedReferences(supersedes) }),
+    },
+  });
+}
+
+function normalizedReferences(references) {
+  return [...references].sort();
 }
 
 export function canonicalEqual(left, right) {

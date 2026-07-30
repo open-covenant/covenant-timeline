@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { TemporalEventV0Alpha3 } from "@covenant-org/timeline";
 import {
   FileMcpRunStore,
   parseMcpRunEnvelopeV0Alpha1,
@@ -22,6 +23,7 @@ import {
   DEFAULT_MAX_RUN_BYTES,
   DEFAULT_MAX_RUNS,
   MAX_LIST_PAGE_SIZE,
+  MAX_MODEL_PROPOSAL_EVENTS,
 } from "./constants.js";
 import { correctionEvents, releaseContract } from "./__tests__/fixtures.js";
 
@@ -298,6 +300,197 @@ describe("FileMcpRunStore", () => {
     ).rejects.toMatchObject({
       code: "timeline.mcp.store.conflict",
     });
+  });
+
+  test("appends a compiled batch atomically and retries it from its bound prefix", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const batch = materializeEvents(correctionEvents.slice(0, 2), 0);
+
+    const applied = await store.appendCompiled(contract.id, batch, {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    });
+    expect(applied).toMatchObject({
+      appended: true,
+      events: [{ sequence: 0 }, { sequence: 1 }],
+      envelope: { revision: 2 },
+    });
+
+    const later = await store.append(
+      contract.id,
+      correctionEvents[2],
+      applied.envelope.runDigest,
+    );
+    const retried = await store.appendCompiled(contract.id, batch, {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    });
+    expect(retried.appended).toBe(false);
+    expect(retried.events).toEqual(batch);
+    expect(retried.envelope).toEqual(later.envelope);
+  });
+
+  test("rejects incomplete, changed, reordered, colliding, and stale occupied prefixes", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const batch = materializeEvents(correctionEvents.slice(0, 2), 0);
+
+    await store.append(
+      contract.id,
+      correctionEvents[0],
+      created.envelope.runDigest,
+    );
+    await expect(
+      store.appendCompiled(contract.id, batch, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    const current = await store.require(contract.id);
+    const changed = structuredClone(batch);
+    if (changed[0]?.type !== "point.declared") {
+      throw new Error("compiled fixture must begin with a point declaration");
+    }
+    changed[0].point.id = "changed";
+    await expect(
+      store.appendCompiled(contract.id, changed, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    const reordered = [
+      { ...batch[1]!, sequence: 0 },
+      { ...batch[0]!, sequence: 1 },
+    ];
+    await expect(
+      store.appendCompiled(contract.id, reordered, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    const colliding = [
+      {
+        ...batch[0]!,
+        sequence: 1,
+      },
+    ];
+    await expect(
+      store.appendCompiled(contract.id, colliding, {
+        revision: 1,
+        runDigest: current.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    await expect(
+      store.appendCompiled(contract.id, [], {
+        revision: 0,
+        runDigest: `sha256:${"0".repeat(64)}`,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+    await expect(
+      store.appendCompiled(contract.id, [], {
+        revision: current.revision + 1,
+        runDigest: current.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+  });
+
+  test("validates a complete compiled batch before replacing stored bytes", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const path = await storedPath(directory);
+    const before = await readFile(path);
+    const events: TemporalEventV0Alpha3[] = [
+      ...materializeEvents(correctionEvents.slice(0, 1), 0),
+      {
+        schema: "covenant.timeline.event.v0alpha3",
+        id: "event.invalid-interval",
+        sequence: 1,
+        type: "interval.declared",
+        interval: {
+          id: "missing",
+          contextId: "actual",
+          startPointId: "not-declared",
+          endPointId: "also-missing",
+        },
+      },
+    ];
+
+    await expect(
+      store.appendCompiled(contract.id, events, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.input.invalid" });
+    expect(await readFile(path)).toEqual(before);
+    expect((await store.require(contract.id)).revision).toBe(0);
+  });
+
+  test("allows only one compiled batch to consume a run prefix", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const first = materializeEvents(correctionEvents.slice(0, 1), 0);
+    const second = materializeEvents(correctionEvents.slice(1, 2), 0);
+    const expected = {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    };
+
+    const writes = await Promise.allSettled([
+      store.appendCompiled(contract.id, first, expected),
+      store.appendCompiled(contract.id, second, expected),
+    ]);
+    expect(writes.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect((await store.require(contract.id)).revision).toBe(1);
+    expect(writes.find(({ status }) => status === "rejected")).toMatchObject({
+      reason: expect.objectContaining({
+        code: expect.stringMatching(/^timeline\.mcp\.store\.(busy|conflict)$/),
+      }),
+    });
+  });
+
+  test("bounds compiled batches and accepts a bound empty no-op", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const empty = await store.appendCompiled(contract.id, [], {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    });
+    expect(empty).toMatchObject({
+      appended: false,
+      events: [],
+      envelope: { revision: 0 },
+    });
+
+    await expect(
+      store.appendCompiled(
+        contract.id,
+        Array.from(
+          { length: MAX_MODEL_PROPOSAL_EVENTS + 1 },
+          (_, sequence) => ({
+            schema: "covenant.timeline.event.v0alpha3",
+            id: `event.limit-${sequence}`,
+            sequence,
+            type: "point.declared",
+            point: {
+              id: `point.limit-${sequence}`,
+              contextId: "actual",
+              axisId: "utc-seconds",
+            },
+          }),
+        ),
+        {
+          revision: 0,
+          runDigest: created.envelope.runDigest,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.limit" });
   });
 
   test("validates complete candidate runs before replacing stored bytes", async () => {
@@ -590,6 +783,20 @@ async function createRuns(
     ids.push(id);
   }
   return ids;
+}
+
+function materializeEvents(
+  drafts: readonly (typeof correctionEvents)[number][],
+  start: number,
+): TemporalEventV0Alpha3[] {
+  return drafts.map(
+    (draft, index) =>
+      ({
+        ...structuredClone(draft),
+        schema: "covenant.timeline.event.v0alpha3",
+        sequence: start + index,
+      }) as TemporalEventV0Alpha3,
+  );
 }
 
 function record(value: unknown): Record<string, unknown> {

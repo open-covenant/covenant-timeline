@@ -2,10 +2,11 @@
 
 ## Definition
 
-Covenant Timeline is a portable, proof-carrying temporal reasoning substrate. A
-model or application proposes explicit temporal records and a typed query. A
-deterministic kernel returns a canonical result and a reasoner-bound proof
-receipt.
+Covenant Timeline is a portable, proof-carrying temporal reasoning substrate.
+Applications can submit explicit temporal records directly. Language models
+submit request-scoped claim and query proposals that a deterministic compiler
+lowers into candidate records. After host admission, the kernel returns a
+canonical result and a reasoner-bound proof receipt.
 
 The experimental v0alpha3 contract declares:
 
@@ -26,11 +27,16 @@ v0alpha1 and v0alpha2 remain replayable checkpoint compatibility formats.
 ## Boundary
 
 ```text
-          adopter or model runtime
-                    │
-          proposed temporal records
-                    ▼
-        evidence and authority admission
+       model runtime          application runtime
+             │                        │
+       model proposal           explicit records
+             │                        │
+             ▼                        │
+ deterministic proposal compiler     │
+             │                        │
+             └───────────┬────────────┘
+                         ▼
+            evidence and authority admission
                     │
                     ▼
 ┌────────────────────────────────────────┐
@@ -164,10 +170,13 @@ reasoner may choose a different valid witness.
 unstructured source
         │
         ▼
-model proposes typed temporal records and query
+model proposes claims, revisions, query intent, and exact quotes
         │
         ▼
-host verifies evidence bytes and authority, then admits records
+deterministic compiler resolves host handles and derives candidate records
+        │
+        ▼
+host verifies evidence, entailment, and authority, then admits records
         │
         ▼
 deterministic temporal kernel
@@ -180,10 +189,12 @@ deterministic temporal kernel
 model continues from bound temporal state
 ```
 
-The model is a probabilistic semantic compiler and planner, not temporal
-authority. Extraction, admission, solver, and response errors remain separate.
-The host retains source spans and evidence bytes, verifies their declared
-digests, authenticates authority, and surfaces rejected records.
+The model proposes semantics, not ledger mechanics or temporal authority. The
+host owns the request-scoped handle catalogs. The compiler derives identifiers,
+sequences, evidence digests, and exact quote spans. Extraction, compilation,
+admission, solver, and response errors remain separate. The host retains
+evidence bytes, authenticates authority, checks whether each quote supports its
+claim, and surfaces rejected candidates.
 
 Using the kernel as a tool is tool-integrated temporal reasoning. Calling it
 inside a constrained generation loop is inference-integrated temporal

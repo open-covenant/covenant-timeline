@@ -115,6 +115,8 @@ node scripts/run-model-interface-eval.mjs \
   -- node scripts/ollama-model-eval-adapter.mjs
 node scripts/score-model-interface-eval.mjs \
   --results /tmp/covenant-timeline-ollama-smoke.jsonl
+node scripts/diagnose-model-interface-eval.mjs \
+  --results /tmp/covenant-timeline-ollama-smoke.jsonl
 ```
 
 On Windows, replace the `/tmp/...` paths with an absolute path outside the
@@ -360,6 +362,24 @@ record. Corpus and prompt digests, coverage, Timeline state, kernel conclusions,
 and proofs are verified in the same pass.
 The aggregate output conforms to the benchmark
 [`score.schema.json`](../benchmarks/model-interface/v1/score.schema.json).
+The companion diagnostics command performs the same artifact replay before
+describing rolling trajectories:
+
+```sh
+node scripts/diagnose-model-interface-eval.mjs \
+  --results /path/to/results.jsonl
+```
+
+Its `covenant.timeline.model-eval.diagnostics.v1` output conforms to
+[`diagnostics.schema.json`](../benchmarks/model-interface/v1/diagnostics.schema.json).
+Each direct observation is independent. Narrative-memory and Timeline
+observations are grouped by case and repeat in cut order. The output records the
+first observed error in each trajectory, identifies later recorded
+observations, and reports exact or degraded Timeline prior projected state
+against the gold state at the same cut. It also counts errors recorded after
+Timeline state admission by stage and code. These are descriptive diagnostics,
+not causal attribution. Counts retain their raw totals; missing observations
+remain visible in `coverage` and trajectory expected-versus-recorded counts.
 
 Lead reports with paired answer-accuracy `timelineVsNarrativeMemory` and
 `timelineVsDirect` win/loss/tie counts, then report:

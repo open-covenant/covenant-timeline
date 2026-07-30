@@ -1,8 +1,14 @@
 import * as z from "zod/v4";
+import type {
+  StandardSchemaV1,
+  StandardSchemaWithJSON,
+} from "@modelcontextprotocol/server";
 import {
   MAX_LIST_PAGE_SIZE,
   MCP_ADMISSION,
   MCP_KERNEL_LIMITS,
+  MCP_MODEL_PROPOSAL_LIMITS,
+  MAX_MODEL_PROPOSAL_EVENTS,
 } from "./constants.js";
 
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
@@ -330,6 +336,258 @@ export const eventSchema = z.discriminatedUnion("type", [
   retractionDraftSchema.extend(eventRecordFields),
 ]);
 
+const modelCandidateEventSchema = z.discriminatedUnion("type", [
+  constraintDraftSchema.extend(eventRecordFields),
+  coordinateDraftSchema.extend(eventRecordFields),
+  retractionDraftSchema.extend(eventRecordFields),
+]);
+
+const modelProposalSupportSchema = z
+  .object({
+    evidenceId: identifierSchema.describe(
+      "Caller-provided evidence handle. Timeline does not authenticate this handle.",
+    ),
+    quote: z
+      .string()
+      .min(1)
+      .max(MCP_MODEL_PROPOSAL_LIMITS.maxQuoteBytes)
+      .describe(
+        "Exact supporting quote. Runtime validation applies the limit to UTF-8 bytes and requires one occurrence in the referenced evidence.",
+      ),
+  })
+  .strict();
+
+const modelProposalSupportsSchema = z
+  .array(modelProposalSupportSchema)
+  .min(1)
+  .max(MCP_MODEL_PROPOSAL_LIMITS.maxSupportsPerChange);
+
+const modelProposalBoundsSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("exact"),
+      value: safeIntegerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("lower-bound"),
+      minimum: safeIntegerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("upper-bound"),
+      maximum: safeIntegerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("closed-range"),
+      minimum: safeIntegerSchema,
+      maximum: safeIntegerSchema,
+    })
+    .strict(),
+]);
+
+const modelProposalRevisionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("keep") }).strict(),
+  z
+    .object({
+      type: z.literal("supersede"),
+      assertionHandle: identifierSchema,
+    })
+    .strict(),
+]);
+
+const modelProposalChangeSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("coordinate"),
+      pointHandle: identifierSchema,
+      bounds: modelProposalBoundsSchema,
+      supports: modelProposalSupportsSchema,
+      revision: modelProposalRevisionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("constraint"),
+      differenceHandle: identifierSchema,
+      bounds: modelProposalBoundsSchema,
+      supports: modelProposalSupportsSchema,
+      revision: modelProposalRevisionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("retraction"),
+      assertionHandle: identifierSchema,
+      supports: modelProposalSupportsSchema,
+    })
+    .strict(),
+]);
+
+const modelKnowledgeCutSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("current") }).strict(),
+  z
+    .object({
+      type: z.literal("prior"),
+      cutHandle: identifierSchema,
+    })
+    .strict(),
+]);
+
+const modelQueryIntentSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("consistency"),
+      targetHandle: identifierSchema,
+      knowledgeCut: modelKnowledgeCutSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("difference"),
+      targetHandle: identifierSchema,
+      knowledgeCut: modelKnowledgeCutSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("point-relation"),
+      targetHandle: identifierSchema,
+      knowledgeCut: modelKnowledgeCutSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("interval-relation"),
+      targetHandle: identifierSchema,
+      knowledgeCut: modelKnowledgeCutSchema,
+    })
+    .strict(),
+]);
+
+export const modelProposalSchema = z
+  .object({
+    schema: z.literal("covenant.timeline.model-proposal.v1"),
+    requestId: identifierSchema,
+    changes: z
+      .array(modelProposalChangeSchema)
+      .max(MCP_MODEL_PROPOSAL_LIMITS.maxChanges),
+    query: modelQueryIntentSchema,
+  })
+  .strict();
+
+const modelEvidenceCatalogSchema = z
+  .array(
+    z
+      .object({
+        id: identifierSchema,
+        status: z.enum(["current", "stale"]),
+        text: z
+          .string()
+          .max(MCP_MODEL_PROPOSAL_LIMITS.maxEvidenceBytes)
+          .describe(
+            "Transient evidence text. Timeline hashes its UTF-8 bytes but does not write or return the text.",
+          ),
+      })
+      .strict(),
+  )
+  .max(MCP_MODEL_PROPOSAL_LIMITS.maxEvidenceCatalogEntries);
+
+const modelReferenceCatalogSchema = z
+  .array(
+    z.discriminatedUnion("type", [
+      z
+        .object({
+          type: z.literal("context"),
+          handle: identifierSchema,
+          contextId: identifierSchema,
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal("point"),
+          handle: identifierSchema,
+          pointId: identifierSchema,
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal("difference"),
+          handle: identifierSchema,
+          fromPointId: identifierSchema,
+          toPointId: identifierSchema,
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal("point-relation"),
+          handle: identifierSchema,
+          leftPointId: identifierSchema,
+          rightPointId: identifierSchema,
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal("interval-relation"),
+          handle: identifierSchema,
+          leftIntervalId: identifierSchema,
+          rightIntervalId: identifierSchema,
+        })
+        .strict(),
+    ]),
+  )
+  .max(MCP_MODEL_PROPOSAL_LIMITS.maxReferenceCatalogEntries);
+
+const modelAssertionCatalogSchema = z
+  .array(
+    z
+      .object({
+        handle: identifierSchema,
+        assertionId: identifierSchema,
+      })
+      .strict(),
+  )
+  .max(MCP_MODEL_PROPOSAL_LIMITS.maxAssertionCatalogEntries);
+
+const modelKnowledgeCutCatalogSchema = z
+  .array(
+    z
+      .object({
+        handle: identifierSchema,
+        recordedThrough: recordedThroughSchema,
+      })
+      .strict(),
+  )
+  .max(MCP_MODEL_PROPOSAL_LIMITS.maxKnowledgeCutCatalogEntries);
+
+const modelSupportReceiptSchema = z
+  .object({
+    evidenceId: identifierSchema,
+    evidenceRef: digestSchema,
+    quoteDigest: digestSchema,
+    utf8StartByte: sequenceSchema,
+    utf8EndByte: sequenceSchema,
+  })
+  .strict();
+
+const modelCandidateProvenanceSchema = z
+  .object({
+    candidateEventId: identifierSchema,
+    evidenceRefs: z
+      .array(digestSchema)
+      .min(1)
+      .max(MCP_KERNEL_LIMITS.maxEvidenceRefs),
+    supports: z
+      .array(modelSupportReceiptSchema)
+      .min(1)
+      .max(MCP_MODEL_PROPOSAL_LIMITS.maxSupportsPerChange),
+  })
+  .strict();
+
 const queryFields = {
   id: identifierSchema.describe("Stable identifier for this exact query."),
   contextId: identifierSchema.describe(
@@ -655,6 +913,120 @@ export const appendEventOutputSchema = z
   })
   .strict();
 
+export const applyModelProposalInputSchema = z
+  .object({
+    runId: identifierSchema.describe("Existing run to update."),
+    expectedRevision: sequenceSchema.describe(
+      "Run revision paired with expectedRunDigest. Event-equivalent retries may bind an earlier append-only prefix.",
+    ),
+    expectedRunDigest: digestSchema.describe(
+      "Digest of the run prefix at expectedRevision. The store rechecks this prefix under its writer lock.",
+    ),
+    expectedRequestId: identifierSchema.describe(
+      "Host-generated request identifier that the model proposal must echo.",
+    ),
+    proposal: modelProposalSchema,
+    evidenceCatalog: modelEvidenceCatalogSchema.describe(
+      "Caller-supplied, unauthenticated evidence. Text is used transiently for exact quote matching and is never stored or returned.",
+    ),
+    referenceCatalog: modelReferenceCatalogSchema.describe(
+      "Caller-supplied handles mapped to declarations in the bound run prefix.",
+    ),
+    assertionCatalog: modelAssertionCatalogSchema
+      .describe(
+        "Optional caller-supplied handles for active assertions that may be superseded or retracted.",
+      )
+      .optional(),
+    knowledgeCutCatalog: modelKnowledgeCutCatalogSchema
+      .describe(
+        "Optional caller-supplied handles for prior record cuts in the bound run prefix.",
+      )
+      .optional(),
+  })
+  .strict();
+
+export const applyModelProposalOutputSchema = z
+  .object({
+    applied: z
+      .boolean()
+      .describe(
+        "true when this call appended the candidate events; false when identical candidate event bytes already occupied the bound prefix.",
+      ),
+    requestId: identifierSchema,
+    proposalDigest: digestSchema,
+    baseRevision: sequenceSchema,
+    baseRunDigest: digestSchema,
+    events: z.array(modelCandidateEventSchema).max(MAX_MODEL_PROPOSAL_EVENTS),
+    timeline: metadataSchema,
+    query: querySchema,
+    provenance: z
+      .array(modelCandidateProvenanceSchema)
+      .max(MAX_MODEL_PROPOSAL_EVENTS)
+      .describe(
+        "Source bindings produced by this compilation. They are not a durable record of the call that originally appended an event-equivalent batch.",
+      ),
+    admission: admissionSchema,
+  })
+  .strict()
+  .superRefine(({ events, provenance }, context) => {
+    if (events.length !== provenance.length) {
+      context.addIssue({
+        code: "custom",
+        message: "events and provenance must have equal length",
+        path: ["provenance"],
+      });
+      return;
+    }
+
+    events.forEach((event, index) => {
+      const eventProvenance = provenance[index];
+      if (!eventProvenance) return;
+      if (event.id !== eventProvenance.candidateEventId) {
+        context.addIssue({
+          code: "custom",
+          message: "provenance must match event order",
+          path: ["provenance", index, "candidateEventId"],
+        });
+      }
+      const eventEvidenceRefs =
+        event.type === "assertion.retracted"
+          ? event.evidenceRefs
+          : event.assertion.evidenceRefs;
+      if (
+        eventEvidenceRefs.length !== eventProvenance.evidenceRefs.length ||
+        eventEvidenceRefs.some(
+          (reference, referenceIndex) =>
+            reference !== eventProvenance.evidenceRefs[referenceIndex],
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "provenance evidence references must match the event",
+          path: ["provenance", index, "evidenceRefs"],
+        });
+      }
+      const supportEvidenceRefs = [
+        ...new Set(
+          eventProvenance.supports.map(({ evidenceRef }) => evidenceRef),
+        ),
+      ].sort();
+      const uniqueEventEvidenceRefs = [...new Set(eventEvidenceRefs)].sort();
+      if (
+        supportEvidenceRefs.length !== uniqueEventEvidenceRefs.length ||
+        supportEvidenceRefs.some(
+          (reference, referenceIndex) =>
+            reference !== uniqueEventEvidenceRefs[referenceIndex],
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "support evidence references must match the event",
+          path: ["provenance", index, "supports"],
+        });
+      }
+    });
+  });
+
 export const projectStateInputSchema = z
   .object({
     runId: identifierSchema.describe("Existing run to project."),
@@ -674,9 +1046,11 @@ export const projectStateOutputSchema = z
 export const reasonInputSchema = z
   .object({
     runId: identifierSchema.describe("Existing run to reason over."),
-    query: queryDraftSchema.describe(
-      "Exact temporal query draft. Do not send schema; the server assigns it. Always pin recordedThrough explicitly.",
-    ),
+    query: z
+      .union([queryDraftSchema, querySchema])
+      .describe(
+        "Exact temporal query. A draft omits schema; a query returned by timeline_apply_model_proposal may be passed unchanged. Always pin recordedThrough explicitly.",
+      ),
   })
   .strict();
 export const reasonOutputSchema = z
@@ -691,5 +1065,32 @@ export const reasonOutputSchema = z
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;
 export type ListRunsInput = z.infer<typeof listRunsInputSchema>;
 export type AppendEventInput = z.infer<typeof appendEventInputSchema>;
+export type ApplyModelProposalInput = z.infer<
+  typeof applyModelProposalInputSchema
+>;
 export type ProjectStateInput = z.infer<typeof projectStateInputSchema>;
 export type ReasonInput = z.infer<typeof reasonInputSchema>;
+
+export function privateToolInputSchema<T extends z.ZodType>(
+  schema: T,
+): StandardSchemaWithJSON<z.input<T>, z.output<T>> {
+  const standard = schema["~standard"];
+  return {
+    "~standard": {
+      ...standard,
+      validate(value, options) {
+        const result = standard.validate(value, options);
+        return result instanceof Promise
+          ? result.then(redactValidationIssues)
+          : redactValidationIssues(result);
+      },
+    },
+  };
+}
+
+function redactValidationIssues<Output>(
+  result: StandardSchemaV1.Result<Output>,
+): StandardSchemaV1.Result<Output> {
+  if (!result.issues) return result;
+  return { issues: [{ message: "tool input is invalid" }] };
+}

@@ -18,6 +18,7 @@ import {
   FAMILIES,
   PROMPT_PATHS,
   REQUEST_SCHEMA,
+  assertModelTimelineDelta,
   assertNoCredentialFields,
   assertValid,
   assertVisibleEvidenceRefs,
@@ -476,6 +477,19 @@ function assertObjectKeys(value, expected, label) {
 }
 
 function validateStoredDelta(result, testCase, label) {
+  try {
+    assertModelTimelineDelta(
+      result.proposedEvents ?? [],
+      `${label}.proposedEvents`,
+    );
+  } catch (error) {
+    return {
+      code:
+        error && typeof error === "object" && "code" in error
+          ? error.code
+          : "event.delta-invalid",
+    };
+  }
   for (const [index, event] of (result.proposedEvents ?? []).entries()) {
     if (event.type === "point.declared" || event.type === "interval.declared") {
       return { code: "event.declaration-not-allowed" };
@@ -921,7 +935,7 @@ function knowledgeCut(cut, events) {
   };
 }
 
-function projectedStateSignature(run, setupEvents) {
+export function projectedStateSignature(run, setupEvents) {
   const recordedThrough =
     run.events.length === 0 ? null : run.events.length - 1;
   const points = setupEvents

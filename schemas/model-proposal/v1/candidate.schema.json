@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/schemas/model-proposal/v1/candidate.schema.json",
+  "title": "Covenant Timeline model proposal candidate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "requestId",
+    "baseRunDigest",
+    "proposalDigest",
+    "candidateEvents",
+    "candidateQuery",
+    "provenance"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-proposal-candidate.v1"
+    },
+    "requestId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "baseRunDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "proposalDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "candidateEvents": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/candidateEvent"
+      }
+    },
+    "candidateQuery": {
+      "$ref": "../../v0alpha3/query.schema.json"
+    },
+    "provenance": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/provenance"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._:/-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "safeInteger": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/digest"
+      }
+    },
+    "coordinate": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum"],
+          "properties": {
+            "minimum": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maximum"],
+          "properties": {
+            "maximum": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": {
+              "$ref": "#/$defs/safeInteger"
+            },
+            "maximum": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          }
+        }
+      ]
+    },
+    "differenceConstraint": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fromPointId", "toPointId", "minimum"],
+          "properties": {
+            "fromPointId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "toPointId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "minimum": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fromPointId", "toPointId", "maximum"],
+          "properties": {
+            "fromPointId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "toPointId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "maximum": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fromPointId", "toPointId", "minimum", "maximum"],
+          "properties": {
+            "fromPointId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "toPointId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "minimum": {
+              "$ref": "#/$defs/safeInteger"
+            },
+            "maximum": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          }
+        }
+      ]
+    },
+    "coordinateAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "pointId", "coordinate", "evidenceRefs"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "pointId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "coordinate": {
+          "$ref": "#/$defs/coordinate"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "supersedes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "constraintAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contextId", "constraint", "evidenceRefs"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contextId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "constraint": {
+          "$ref": "#/$defs/differenceConstraint"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "supersedes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "candidateEvent": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "id", "sequence", "type", "assertion"],
+          "properties": {
+            "schema": {
+              "const": "covenant.timeline.event.v0alpha3"
+            },
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "sequence": {
+              "$ref": "#/$defs/sequence"
+            },
+            "type": {
+              "const": "coordinate.asserted"
+            },
+            "assertion": {
+              "$ref": "#/$defs/coordinateAssertion"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "id", "sequence", "type", "assertion"],
+          "properties": {
+            "schema": {
+              "const": "covenant.timeline.event.v0alpha3"
+            },
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "sequence": {
+              "$ref": "#/$defs/sequence"
+            },
+            "type": {
+              "const": "constraint.asserted"
+            },
+            "assertion": {
+              "$ref": "#/$defs/constraintAssertion"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "id",
+            "sequence",
+            "type",
+            "assertionId",
+            "evidenceRefs"
+          ],
+          "properties": {
+            "schema": {
+              "const": "covenant.timeline.event.v0alpha3"
+            },
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "sequence": {
+              "$ref": "#/$defs/sequence"
+            },
+            "type": {
+              "const": "assertion.retracted"
+            },
+            "assertionId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "evidenceRefs": {
+              "$ref": "#/$defs/evidenceRefs"
+            }
+          }
+        }
+      ]
+    },
+    "supportReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "evidenceRef",
+        "quoteDigest",
+        "utf8EndByte",
+        "utf8StartByte"
+      ],
+      "properties": {
+        "evidenceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "evidenceRef": {
+          "$ref": "#/$defs/digest"
+        },
+        "quoteDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "utf8EndByte": {
+          "$ref": "#/$defs/sequence"
+        },
+        "utf8StartByte": {
+          "$ref": "#/$defs/sequence"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateEventId", "evidenceRefs", "supports"],
+      "properties": {
+        "candidateEventId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "supports": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/supportReceipt"
+          }
+        }
+      }
+    }
+  }
+}

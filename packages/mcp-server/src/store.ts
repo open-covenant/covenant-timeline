@@ -30,11 +30,14 @@ import {
   MCP_IMPLEMENTATION,
   MCP_KERNEL_LIMITS,
   MAX_LIST_PAGE_SIZE,
+  MAX_MODEL_PROPOSAL_EVENTS,
 } from "./constants.js";
 import { TimelineMcpError } from "./errors.js";
 import type {
+  AppendCompiledEventsResultV0Alpha1,
   AppendEventResultV0Alpha1,
   CreateRunResultV0Alpha1,
+  ExpectedRunPrefixV0Alpha1,
   McpRunEnvelopeV0Alpha1,
   McpRunImplementationV0Alpha1,
   McpRunListPageOptionsV0Alpha1,
@@ -67,6 +70,11 @@ export interface McpRunStore {
     draft: unknown,
     expectedRunDigest: string,
   ): Promise<AppendEventResultV0Alpha1>;
+  appendCompiled(
+    runId: string,
+    events: unknown,
+    expected: ExpectedRunPrefixV0Alpha1,
+  ): Promise<AppendCompiledEventsResultV0Alpha1>;
 }
 
 export class FileMcpRunStore implements McpRunStore {
@@ -282,6 +290,66 @@ export class FileMcpRunStore implements McpRunStore {
       const envelope = createEnvelope(run);
       await this.persist(runId, envelope);
       return { envelope, event, appended: true };
+    });
+  }
+
+  async appendCompiled(
+    runId: string,
+    eventValues: unknown,
+    expected: ExpectedRunPrefixV0Alpha1,
+  ): Promise<AppendCompiledEventsResultV0Alpha1> {
+    assertRunId(runId);
+    const prefix = parseExpectedPrefix(expected);
+    const events = parseCompiledEvents(eventValues, prefix.revision);
+    await this.ensureDirectory();
+
+    return this.withLock(this.lockPath(runId), async () => {
+      const current = await this.loadUnlocked(runId);
+      if (!current) {
+        throw new TimelineMcpError(
+          "timeline.mcp.store.not-found",
+          "timeline does not exist",
+        );
+      }
+      bindRunPrefix(current, prefix);
+
+      const existing = current.run.events.slice(
+        prefix.revision,
+        prefix.revision + events.length,
+      );
+      if (existing.length === events.length) {
+        if (existing.every((event, index) => sameJson(event, events[index]))) {
+          return {
+            envelope: current,
+            events: existing,
+            appended: false,
+          };
+        }
+        throw batchConflict();
+      }
+      if (
+        existing.length > 0 ||
+        current.revision !== prefix.revision ||
+        events.some((candidate) =>
+          current.run.events.some(({ id }) => id === candidate.id),
+        )
+      ) {
+        throw batchConflict();
+      }
+
+      const run = parseInputRun({
+        ...current.run,
+        events: [...current.run.events, ...events],
+      });
+      const envelope = createEnvelope(run);
+      if (events.length > 0) {
+        await this.persist(runId, envelope);
+      }
+      return {
+        envelope,
+        events,
+        appended: events.length > 0,
+      };
     });
   }
 
@@ -551,6 +619,23 @@ export function metadataForEnvelope(
   };
 }
 
+export function bindRunPrefix(
+  envelope: McpRunEnvelopeV0Alpha1,
+  expectedValue: ExpectedRunPrefixV0Alpha1,
+): TimelineRunDocumentV0Alpha3 {
+  const expected = parseExpectedPrefix(expectedValue);
+  if (expected.revision > envelope.revision) throw batchConflict();
+  const run: TimelineRunDocumentV0Alpha3 = {
+    schema: "covenant.timeline.run.v0alpha3",
+    contract: envelope.run.contract,
+    events: envelope.run.events.slice(0, expected.revision),
+  };
+  if (contentDigest(run as unknown as JsonValue) !== expected.runDigest) {
+    throw batchConflict();
+  }
+  return run;
+}
+
 function parseContractInput(value: unknown): TimelineContractV0Alpha3 {
   try {
     const contract = parseContractV0Alpha3(value, MCP_DOCUMENT_LIMITS);
@@ -589,6 +674,77 @@ function parseDraft(value: unknown): TemporalEventDraftV0Alpha3 {
   }
   materializeEvent(draft as TemporalEventDraftV0Alpha3, 0);
   return draft as TemporalEventDraftV0Alpha3;
+}
+
+function parseExpectedPrefix(
+  value: unknown,
+): ExpectedRunPrefixV0Alpha1 & { runDigest: `sha256:${string}` } {
+  const prefix = exactInputRecord(value, ["revision", "runDigest"], "prefix");
+  if (
+    typeof prefix.revision !== "number" ||
+    !Number.isSafeInteger(prefix.revision) ||
+    prefix.revision < 0
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "expected revision must be a non-negative safe integer",
+    );
+  }
+  if (typeof prefix.runDigest !== "string" || !DIGEST.test(prefix.runDigest)) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "expected run digest must be a SHA-256 digest",
+    );
+  }
+  return prefix as unknown as ExpectedRunPrefixV0Alpha1 & {
+    runDigest: `sha256:${string}`;
+  };
+}
+
+function parseCompiledEvents(
+  value: unknown,
+  expectedRevision: number,
+): readonly TemporalEventV0Alpha3[] {
+  if (!Array.isArray(value)) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "compiled events must be an array",
+    );
+  }
+  if (value.length > MAX_MODEL_PROPOSAL_EVENTS) {
+    throw new TimelineMcpError(
+      "timeline.mcp.store.limit",
+      `compiled event count must not exceed ${MAX_MODEL_PROPOSAL_EVENTS}`,
+    );
+  }
+  if (expectedRevision + value.length > Number.MAX_SAFE_INTEGER) {
+    throw new TimelineMcpError(
+      "timeline.mcp.store.limit",
+      "compiled event sequence exceeds the safe integer range",
+    );
+  }
+  const events = value.map((event) => {
+    try {
+      return parseEventV0Alpha3(event, MCP_DOCUMENT_LIMITS);
+    } catch {
+      throw new TimelineMcpError(
+        "timeline.mcp.input.invalid",
+        "compiled event is invalid",
+      );
+    }
+  });
+  if (
+    events.some(({ sequence }, index) => sequence !== expectedRevision + index)
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "compiled event sequence does not match the expected run prefix",
+    );
+  }
+  if (new Set(events.map(({ id }) => id)).size !== events.length) {
+    throw batchConflict();
+  }
+  return events;
 }
 
 function materializeEvent(
@@ -718,6 +874,39 @@ function exactRecord(
   return record;
 }
 
+function exactInputRecord(
+  value: unknown,
+  keys: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      `${label} must be an object`,
+    );
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    Object.getOwnPropertySymbols(record).length > 0 ||
+    Object.values(Object.getOwnPropertyDescriptors(record)).some(
+      (descriptor) => !("value" in descriptor),
+    ) ||
+    Object.keys(record).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(record, key))
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      `${label} fields are invalid`,
+    );
+  }
+  return record;
+}
+
 function assertConstantObject(
   value: unknown,
   expected: Readonly<Record<string, string>>,
@@ -841,6 +1030,13 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 function corrupt(message: string): never {
   throw new TimelineMcpError("timeline.mcp.store.corrupt", message);
+}
+
+function batchConflict(): TimelineMcpError {
+  return new TimelineMcpError(
+    "timeline.mcp.store.conflict",
+    "compiled event batch does not match the expected timeline prefix",
+  );
 }
 
 async function readBoundedUtf8(

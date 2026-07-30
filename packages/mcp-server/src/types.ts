@@ -59,3 +59,14 @@ export interface AppendEventResultV0Alpha1 {
   event: TemporalEventV0Alpha3;
   appended: boolean;
 }
+
+export interface AppendCompiledEventsResultV0Alpha1 {
+  envelope: McpRunEnvelopeV0Alpha1;
+  events: readonly TemporalEventV0Alpha3[];
+  appended: boolean;
+}
+
+export interface ExpectedRunPrefixV0Alpha1 {
+  revision: number;
+  runDigest: string;
+}

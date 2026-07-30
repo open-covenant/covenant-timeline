@@ -14,6 +14,10 @@ that another process can check.
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
+The proposal compiler is available from a pinned source revision until the next
+package release. The published `0.0.0-alpha.2` package contains the temporal
+kernel.
+
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
 [Run a source-first agent pilot](./examples/mcp-agent-pilot) ·
@@ -160,15 +164,17 @@ Then add the built server to an MCP client using absolute paths:
 }
 ```
 
-The server lets an agent create and recover runs, append typed records, project
-state at an exact knowledge cut, and request verified temporal conclusions. It
-also exports the complete portable run required for independent receipt
-verification.
+The server lets an agent create and recover runs, compile and atomically apply
+evidence-backed model proposals, append exact typed records, project state at a
+knowledge cut, and request verified temporal conclusions. It also exports the
+complete portable run required for independent receipt verification.
 
 Direct MCP writes are structurally validated but unauthenticated. Evidence
-payloads remain outside the server, and each new event requires the current
-whole-run digest for optimistic concurrency. An exact same-ID retry remains
-idempotent. The process exposes no network transport.
+payloads remain outside the durable store. The proposal tool accepts source
+text transiently, returns digest-and-span provenance without echoing the text,
+and commits the complete compiled batch or nothing. Prefix-bound optimistic
+concurrency makes an event-equivalent retry idempotent, including after later
+events have been appended. The process exposes no network transport.
 
 See the
 [Timeline MCP server guide](./packages/mcp-server/README.md)
@@ -177,9 +183,10 @@ production boundary.
 
 The
 [source-first pilot starter](./examples/mcp-agent-pilot)
-drives all five tools across a server restart, exports the evidence, run,
-queries, conclusions, environment, and exact call transcript, then verifies the
-artifact in a separate offline process.
+drives the create, recovery, append, projection, and reasoning workflow across a
+server restart. It exports the evidence, run, queries, conclusions, environment,
+and exact call transcript, then verifies the artifact in a separate offline
+process.
 
 ## Use the temporal API
 
@@ -224,7 +231,10 @@ paths.
 source evidence
       │
       ▼
-model or application proposes typed records
+model proposes claims, revisions, query intent, and exact quotes
+      │
+      ▼
+Timeline compiles deterministic records + source-span provenance
       │
       ▼
 host authenticates evidence and admits records
@@ -239,18 +249,23 @@ deterministic reasoner returns result + proof receipt
 another process verifies the conclusion
 ```
 
-The model-facing boundary is deliberate. A model can extract dates,
-dependencies, corrections, and queries, but its output remains a proposal.
-The host decides which evidence and assertions are admissible. Timeline reasons
-only over accepted records.
+Models work with request-scoped handles rather than ledger identifiers, evidence
+digests, sequence numbers, or raw knowledge-cut indices. The proposal compiler
+resolves those handles, hashes exact evidence bytes, checks unique quote
+locations, derives the ledger mechanics, and rejects the whole proposal on any
+error. A separate verifier recompiles against the same host inputs and compares
+the complete candidate artifact. Neither operation authenticates evidence or
+admits a claim.
 
-The [model interface](./docs/model-interface.md) defines this loop. The
+The [model interface](./docs/model-interface.md) and
+[complete proposal artifact](./docs/model-proposal.md) define this loop. The
 [model-interface benchmark](./benchmarks/model-interface/v1/README.md) measures
 extraction, admission, query selection, and final answers separately across
 direct text, narrative memory, and Timeline-backed state.
-Reference adapters support a digest-verified local Ollama model or the OpenAI
-Responses API; neither adapter changes the benchmark protocol or repairs model
-output.
+Its low-level Timeline arm keeps raw ledger authorship visible as a research
+diagnostic; production integrations should use the proposal compiler. Reference
+adapters support a digest-verified local Ollama model or the OpenAI Responses
+API, and neither repairs model output.
 
 ## Temporal model
 

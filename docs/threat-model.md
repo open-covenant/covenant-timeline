@@ -26,6 +26,11 @@ untrusted JSON ──► strict parser ──► validator ──► projector /
                                                         │
 checked result + proof ◄────────────────────────────────┘
 
+model proposal + caller catalogs ──► proposal compiler ──► candidate records
+          │                                                    │
+          └──── transient evidence text + exact quotes         ▼
+                                                    adopter admission
+
 legacy checkpoint event ──► pure reducer ──► command request
                                                    │
                                                    ▼
@@ -53,6 +58,8 @@ Assume an attacker can:
 - reorder, omit, truncate, or enlarge event streams;
 - inject unsafe coordinates, contradictory constraints, false contexts, stale
   observations, and malicious proof receipts;
+- supply false catalog mappings, ambiguous or unsupported quotes, stale
+  evidence, oversized source text, and cross-request model responses;
 - construct dense graphs, long revision chains, or relation queries intended to
   exhaust memory, arithmetic, or operation budgets;
 - call every locally configured MCP tool, submit false but structurally valid
@@ -71,34 +78,36 @@ policy, or compromise the host process.
 
 ## Abuse Paths and Mitigations
 
-| Abuse path                        | Mitigation                                                                        | Residual responsibility                                                                        |
-| --------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Same-ID contract substitution     | State pins canonical contract digest                                              | Host persists the original contract bytes                                                      |
-| Misleading policy label           | v0alpha2 pins profile and policy digest in contract bytes                         | Profile resolves and authenticates actual policy bytes                                         |
-| Duplicate effect eligibility      | Accepted checkpoint is final in one run                                           | Host dispatches only newly emitted commands                                                    |
-| Replay executes an effect         | Core has no adapter or network entrypoint                                         | Host separates replay from dispatch                                                            |
-| Duplicate or ambiguous JSON keys  | Strict parser stops at the first duplicate or syntax error                        | Non-CLI hosts use `parseJson` or equivalent                                                    |
-| Oversized input or deep values    | CLI and MCP message limits plus canonical depth/node limits                       | Host sets tighter deployment limits when needed                                                |
-| Prototype-name identifiers        | Own-property membership checks                                                    | None                                                                                           |
-| Forged evidence claims            | Profile proof digest and contract policy binding                                  | Profile verifies payload digest, signature, freshness, and producer authority                  |
-| Forged effect receipt             | Receipt is only a structural declaration                                          | Adapter verifies the external system result                                                    |
-| Temporal proof substitution       | Receipt binds state, query, result, and reasoner digests                          | Consumer verifies the supplied certificate before use                                          |
-| Scenario confusion                | Contexts are isolated in projection and query evaluation                          | Host labels and admits model-extracted contexts correctly                                      |
-| Hindsight leakage                 | Every query pins an explicit event-prefix knowledge cut                           | Host does not add later source content to an earlier extraction                                |
-| Chronology presented as causality | Core exposes temporal relations only                                              | Model and domain policy do not infer causal authority from order                               |
-| Constraint-graph exhaustion       | Node, edge, event, proof, and operation limits fail closed                        | Host sets lower tenant-specific byte and compute limits                                        |
-| Integer precision loss            | Coordinates, bounds, and closure arithmetic require safe integers                 | Profiles normalize external clocks without floating-point coercion                             |
-| False temporal assertions         | Assertions retain evidence content digests; generic core claims no truth          | Host retains bytes, checks digests, authenticates sources, and preserves extraction provenance |
-| Untrusted model writes            | MCP labels direct writes as structural-only and unauthenticated                   | Host authenticates sources and controls which client may use the server                        |
-| Catalog scan amplification        | MCP discovery reads at most eight run files; cursors bind a catalog generation    | Programmatic store callers restart pagination when a catalog change invalidates the cursor     |
-| Concurrent or repeated appends    | Whole-run CAS, exclusive locks, complete-run validation, idempotent IDs           | Client reloads after conflict and never changes content under an event ID                      |
-| Crash during MCP persistence      | Synced temporary file and same-directory atomic replacement                       | Client reloads after an indeterminate result; operator resolves stale locks                    |
-| MCP store tampering               | Store rejects special files; envelope, identity, revision, and digest fail closed | Protect, back up, and monitor the data directory                                               |
-| Run-ID path traversal             | Store filenames are SHA-256 identities, not caller-controlled paths               | Use a dedicated local filesystem directory                                                     |
-| Accidental remote MCP exposure    | Packaged server exposes stdio only                                                | Do not wrap it in a network transport without authentication and tenant isolation              |
-| Sensitive identifiers in logs     | Core performs no implicit logging                                                 | Host uses low-cardinality codes and redacts IDs                                                |
-| Compromised registry token        | Scoped short-lived fallback, protected environment, post-run revocation           | OIDC trusted publisher and required environment reviewer remain unconfigured                   |
-| Artifact replacement              | Reproducible tarball, checksum, SBOM, npm provenance, GitHub attestations         | Consumer verifies provenance and pins versions                                                 |
+| Abuse path                        | Mitigation                                                                                                                                  | Residual responsibility                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Same-ID contract substitution     | State pins canonical contract digest                                                                                                        | Host persists the original contract bytes                                                      |
+| Misleading policy label           | v0alpha2 pins profile and policy digest in contract bytes                                                                                   | Profile resolves and authenticates actual policy bytes                                         |
+| Duplicate effect eligibility      | Accepted checkpoint is final in one run                                                                                                     | Host dispatches only newly emitted commands                                                    |
+| Replay executes an effect         | Core has no adapter or network entrypoint                                                                                                   | Host separates replay from dispatch                                                            |
+| Duplicate or ambiguous JSON keys  | Strict parser stops at the first duplicate or syntax error                                                                                  | Non-CLI hosts use `parseJson` or equivalent                                                    |
+| Oversized input or deep values    | CLI and MCP message limits plus canonical depth/node limits                                                                                 | Host sets tighter deployment limits when needed                                                |
+| Prototype-name identifiers        | Own-property membership checks                                                                                                              | None                                                                                           |
+| Forged evidence claims            | Profile proof digest and contract policy binding                                                                                            | Profile verifies payload digest, signature, freshness, and producer authority                  |
+| Forged effect receipt             | Receipt is only a structural declaration                                                                                                    | Adapter verifies the external system result                                                    |
+| Temporal proof substitution       | Receipt binds state, query, result, and reasoner digests                                                                                    | Consumer verifies the supplied certificate before use                                          |
+| Scenario confusion                | Contexts are isolated in projection and query evaluation                                                                                    | Host labels and admits model-extracted contexts correctly                                      |
+| Hindsight leakage                 | Every query pins an explicit event-prefix knowledge cut                                                                                     | Host does not add later source content to an earlier extraction                                |
+| Chronology presented as causality | Core exposes temporal relations only                                                                                                        | Model and domain policy do not infer causal authority from order                               |
+| Constraint-graph exhaustion       | Node, edge, event, proof, and operation limits fail closed                                                                                  | Host sets lower tenant-specific byte and compute limits                                        |
+| Integer precision loss            | Coordinates, bounds, and closure arithmetic require safe integers                                                                           | Profiles normalize external clocks without floating-point coercion                             |
+| False temporal assertions         | Assertions retain evidence content digests; generic core claims no truth                                                                    | Host retains bytes, checks digests, authenticates sources, and preserves extraction provenance |
+| Untrusted model writes            | Proposal compiler bounds JSON bytes, depth, values, and errors; resolves host handles; hashes source bytes; and requires unique quote spans | Host authenticates sources, checks entailment, and controls which client may use the server    |
+| Candidate artifact substitution   | Candidate verifier recompiles against the proposal, base run, and host catalogs before comparing the complete artifact                      | Consumer retains the exact proposal and host inputs used for compilation                       |
+| Proposal source-text disclosure   | Compiler candidates and MCP outputs contain digests and byte spans, not source text or quotes                                               | Client, transport, and host logs must protect the tool input and external evidence store       |
+| Catalog scan amplification        | MCP discovery reads at most eight run files; cursors bind a catalog generation                                                              | Programmatic store callers restart pagination when a catalog change invalidates the cursor     |
+| Concurrent or repeated appends    | Whole-run CAS, prefix-bound revision and digest checks, exclusive locks, atomic batch validation, and idempotent IDs                        | Client reloads after conflict and never changes content under an event ID                      |
+| Crash during MCP persistence      | Synced temporary file and same-directory atomic replacement                                                                                 | Client reloads after an indeterminate result; operator resolves stale locks                    |
+| MCP store tampering               | Store rejects special files; envelope, identity, revision, and digest fail closed                                                           | Protect, back up, and monitor the data directory                                               |
+| Run-ID path traversal             | Store filenames are SHA-256 identities, not caller-controlled paths                                                                         | Use a dedicated local filesystem directory                                                     |
+| Accidental remote MCP exposure    | Packaged server exposes stdio only                                                                                                          | Do not wrap it in a network transport without authentication and tenant isolation              |
+| Sensitive identifiers in logs     | Core performs no implicit logging                                                                                                           | Host uses low-cardinality codes and redacts IDs                                                |
+| Compromised registry token        | Scoped short-lived fallback, protected environment, post-run revocation                                                                     | OIDC trusted publisher and required environment reviewer remain unconfigured                   |
+| Artifact replacement              | Reproducible tarball, checksum, SBOM, npm provenance, GitHub attestations                                                                   | Consumer verifies provenance and pins versions                                                 |
 
 Alpha releases may use the documented short-lived token fallback with
 post-release secret removal, token revocation, and failed reauthentication.
@@ -120,6 +129,10 @@ relationships. Public artifacts must use neutral or synthetic identifiers.
 Hosts should encrypt run archives at rest, limit access by tenant, and avoid
 putting identifiers into metric labels.
 
+Evidence and quote digests are identifiers, not encryption. Low-entropy quotes
+and evidence can be dictionary-tested; treat `evidenceRef`, `quoteDigest`, and
+byte spans as sensitive metadata even when source text is absent.
+
 Temporal coordinates, intervals, observation histories, scenarios, and
 corrections can reveal schedules, behavior, research activity, or health
 information even when proposition payloads are opaque. Hosts must minimize
@@ -133,6 +146,11 @@ The MCP store writes run metadata and temporal coordinates as plaintext. Its
 owner-only POSIX modes are not encryption, and Windows mode flags are not ACLs.
 Use a private directory, operating-system access controls, and storage
 encryption appropriate to the data classification.
+
+The model-proposal tool receives evidence text and exact quotes through the MCP
+request even though it does not write or return them. MCP clients, process
+supervisors, terminal capture, and transport wrappers may log request bodies.
+Disable body logging or redact these fields before using sensitive evidence.
 
 ## Required Adopter Controls
 
@@ -164,11 +182,12 @@ When using the MCP server, the adopter must also:
 1. grant tool access only to the intended local client;
 2. place the data directory on a dedicated local filesystem with private
    permissions or ACLs;
-3. treat direct writes as unverified proposals until an external admission
-   policy authenticates their provenance;
-4. preserve the current run digest for optimistic concurrency;
-5. reload after conflict or indeterminate errors; and
-6. verify that no writer is active before manually removing a stale lock.
+3. treat direct and compiled writes as unverified until an external admission
+   policy authenticates their provenance and checks quote entailment;
+4. retain evidence bytes and digest-and-span provenance outside the MCP store;
+5. preserve the current run revision and digest for optimistic concurrency;
+6. reload after conflict or indeterminate errors; and
+7. verify that no writer is active before manually removing a stale lock.
 
 ## Out of Scope
 

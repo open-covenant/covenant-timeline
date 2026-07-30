@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { canonicalJson } from "../packages/prototype/dist/index.js";
 import {
+  assertModelTimelineDelta,
   createModelEvalValidators,
   digestText,
   loadBenchmarkCases,
@@ -34,6 +35,70 @@ test("the model-interface corpus is kernel-derived and balanced", async () => {
     36,
   );
   assert.equal(new Set(cases.map(({ id }) => id)).size, 12);
+});
+
+test("Timeline deltas reject duplicate claims and benchmark-scale excess", async () => {
+  const [testCase] = await loadBenchmarkCases(casesPath);
+  const [event] = testCase.cuts[0].goldEvents;
+  const duplicate = {
+    ...structuredClone(event),
+    id: "duplicate-event",
+    sequence: event.sequence + 1,
+    assertion: {
+      ...structuredClone(event.assertion),
+      id: "duplicate-assertion",
+    },
+  };
+
+  assert.throws(
+    () => assertModelTimelineDelta([event, duplicate]),
+    (error) => error.code === "event.duplicate-claim",
+  );
+
+  const lower = structuredClone(event);
+  lower.assertion.coordinate = {
+    minimum: event.assertion.coordinate.minimum,
+  };
+  const upper = {
+    ...structuredClone(event),
+    id: "upper-event",
+    sequence: event.sequence + 1,
+    assertion: {
+      ...structuredClone(event.assertion),
+      id: "upper-assertion",
+      coordinate: {
+        maximum: event.assertion.coordinate.maximum,
+      },
+    },
+  };
+  assert.doesNotThrow(() => assertModelTimelineDelta([lower, upper]));
+
+  assert.throws(
+    () =>
+      assertModelTimelineDelta(
+        Array.from({ length: 9 }, (_, index) => ({
+          ...structuredClone(event),
+          id: `event-${index}`,
+          sequence: index,
+          assertion: {
+            ...structuredClone(event.assertion),
+            id: `assertion-${index}`,
+            coordinate: { minimum: index, maximum: index },
+          },
+        })),
+      ),
+    (error) => error.code === "event.delta-limit",
+  );
+
+  const excessiveReferences = structuredClone(event);
+  excessiveReferences.assertion.evidenceRefs = Array.from(
+    { length: 9 },
+    (_, index) => `sha256:${index.toString(16).padStart(64, "0")}`,
+  );
+  assert.throws(
+    () => assertModelTimelineDelta([excessiveReferences]),
+    (error) => error.code === "event.reference-limit",
+  );
 });
 
 test("run configuration rejects unreported settings", async () => {
@@ -605,7 +670,7 @@ test("runner preserves semantic, memory, and admission failures", async (t) => {
     results
       .filter((result) => result.arm === "timeline")
       .map((result) => result.error?.code),
-    ["evidence.not-visible", "state.over-budget", "response.query"],
+    ["evidence.not-visible", "event.delta-limit", "response.query"],
   );
   assert.ok(
     results

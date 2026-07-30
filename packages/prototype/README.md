@@ -139,19 +139,6 @@ The reference kernel supports:
 
 The solver uses exact integer arithmetic and explicit resource limits.
 
-## Model boundary
-
-Models can propose temporal assertions and queries from source material. The
-host authenticates evidence, validates the proposed records, and applies its
-admission policy. Timeline reasons only over the records the host accepts.
-
-The
-[model interface](https://github.com/open-covenant/covenant-timeline/blob/main/docs/model-interface.md)
-defines the full extraction, admission, reasoning, verification, and response
-loop. A proof receipt establishes derivation from admitted records; it does not
-establish that source evidence was authentic or that model extraction was
-correct.
-
 ## CLI
 
 ```sh

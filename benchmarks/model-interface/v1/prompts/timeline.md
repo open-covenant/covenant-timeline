@@ -25,7 +25,8 @@ Emit assertions only for atomic temporal claims stated in the current evidence.
 When current evidence independently confirms an earlier fact, emit a new
 assertion with the current evidence digest even if the bounds agree. Otherwise,
 do not restate earlier facts, derive an unstated coordinate, or duplicate an
-event.
+event. The eight-event schema limit is a ceiling, not a target; end the array
+immediately after the supported delta.
 
 Return exactly one JSON object with this envelope:
 

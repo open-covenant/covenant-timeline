@@ -39,7 +39,7 @@ Configure the client with absolute paths:
 The server uses local stdio, makes no network requests, and persists canonical
 append-only runs under the selected data directory. Direct writes are
 structurally valid but unauthenticated. See the
-[MCP server guide](../packages/mcp-server/README.md) for its five tools,
+[MCP server guide](../packages/mcp-server/README.md) for its six tools,
 portable run resource, restart semantics, and operating limits.
 
 To exercise the complete integration before connecting an agent, run the

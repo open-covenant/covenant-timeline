@@ -25,6 +25,11 @@ The schemas, conformance corpus, CLI, reference kernel, correction-and-replay
 example, model interface, and development benchmark are public. They establish
 a working substrate, not adoption or model-quality evidence.
 
+The repository also provides deterministic model-proposal compilation with
+exact source-span provenance and an atomic local MCP write path. The compiler
+reproduces the admitted state and checked result for all 36 cuts in the public
+corpus. That establishes lowering equivalence, not model extraction quality.
+
 ## Evidence gates
 
 ### 1. Model reliability
@@ -38,6 +43,9 @@ Responses adapter.
 
 No external model result has been published. The visible corpus is too small
 and too exposed to support a performance claim.
+
+The next evaluation must measure the proposal boundary directly and compare it
+with both narrative memory and raw ledger authorship.
 
 The model gate requires a preregistered blinded suite that:
 
@@ -63,19 +71,22 @@ and final-answer errors.
 ### 2. Low-friction agent integration
 
 The separate local stdio MCP server keeps the portable kernel dependency-light
-while giving MCP-capable agents durable temporal state through five explicit
+while giving MCP-capable agents durable temporal state through six explicit
 tools:
 
 1. create a run from an exact v0alpha3 contract;
 2. list bounded run metadata after a new session;
 3. append one structurally validated event under optimistic concurrency;
-4. project active state at an explicit knowledge cut; and
-5. reason over an exact query and return a verified conclusion.
+4. compile and atomically apply an evidence-backed model proposal against an
+   exact run prefix;
+5. project active state at an explicit knowledge cut; and
+6. reason over an exact query and return a verified conclusion.
 
 The server requires a data directory, retains only evidence digests, makes no
-network calls, and classifies direct model writes as structurally valid but
-unauthenticated. It does not provide semantic memory search, civil-time
-normalization, remote hosting, or evidence authority.
+network calls, and classifies direct and compiled writes as structurally valid
+but unauthenticated. Proposal evidence text is processed transiently and is not
+written or returned. The server does not provide semantic memory search,
+civil-time normalization, remote hosting, or evidence authority.
 
 The source-first pilot creates a run, appends a correction, stops and restarts
 the server, projects both historical and current state, exports the complete

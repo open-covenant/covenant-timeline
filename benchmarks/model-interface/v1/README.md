@@ -187,11 +187,11 @@ This is the gold-compatible shape for the second cut of
 request rather than reading gold fields.
 
 The host assigns neither IDs nor event sequences. The response must append
-cleanly to `priorRun` as emitted. The provider schema caps a response at eight
-events and caps each evidence or supersession reference list at eight entries.
-The public corpus requires at most three events and one reference per list;
-admission still enforces the 4096-byte rolling-state budget. The harness then
-executes the public v0alpha3 API:
+cleanly to `priorRun` as emitted. Both the provider schema and the harness cap a
+response at eight events and cap each evidence or supersession reference list
+at eight entries. The public corpus requires at most three events and one
+reference per list; admission still enforces the 4096-byte rolling-state budget.
+The harness then executes the public v0alpha3 API:
 
 ```ts
 const run = parseRunDocumentV0Alpha3({
@@ -212,10 +212,13 @@ arm is `conclusion.result`, not an answer written by the model.
 
 The generic v0alpha3 parser validates the form of an evidence digest; it does
 not authenticate source authority or prove that the referenced text supports
-the assertion. The benchmark adds two admission rules: a model delta may not
-declare points or intervals, and each `evidenceRefs` entry must match evidence
-introduced at the current cut. Every corpus digest must match the exact UTF-8
-evidence text. An unknown, stale, or mismatched digest is an admission failure.
+the assertion. The benchmark also rejects point or interval declarations,
+semantic duplicate claims within one delta, responses above the benchmark
+collection caps, and any `evidenceRefs` entry that does not match evidence
+introduced at the current cut. Duplicate detection ignores model-owned event
+and assertion IDs and sequence values while preserving claim, evidence, and
+supersession semantics. Every corpus digest must match the exact UTF-8 evidence
+text. An unknown, stale, or mismatched digest is an admission failure.
 The canonical UTF-8 size of the model-generated events carried in the candidate
 `priorRun`, excluding trusted `setupEvents`, plus `knowledgeCuts` must remain
 within the fixed 4096-byte `stateBudgetBytes`. Static contract, entity, and
@@ -443,6 +446,17 @@ Every completed or observation-scoped case, arm, repeat, and cut produces one
 omitted from the denominator. Run-scoped setup failures abort before publishing
 the output target. Aggregate scorer output conforms to
 [`score.schema.json`](./score.schema.json).
+
+The optional companion command
+`node scripts/diagnose-model-interface-eval.mjs --results <results.jsonl>`
+replays the same artifact checks and emits
+[`diagnostics.schema.json`](./diagnostics.schema.json). It treats each direct
+observation independently and groups narrative-memory and Timeline observations
+into rolling case/repeat trajectories. The artifact records the first observed
+error, later recorded observations, exact versus degraded Timeline prior
+projected state against gold, and errors recorded after state admission by
+stage and code. These fields describe the recorded trajectory without assigning
+cause. Raw expected, recorded, exact, degraded, and error counts are retained.
 
 The result distinguishes:
 

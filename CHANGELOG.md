@@ -12,6 +12,14 @@
   cases, paired direct, narrative-memory, and Timeline arms, a one-shot JSONL adapter
   protocol, strict admission and capacity limits, replayable request and
   response artifacts, paired scoring, and adversarial harness tests.
+- Add deterministic model-proposal compilation with request-scoped handles,
+  exact UTF-8 quote provenance, content-addressed ledger candidates, closed JSON
+  Schemas, bounded hostile-input validation, complete candidate
+  re-verification, and lowering-equivalence coverage across all 36 public
+  benchmark cuts.
+- Add companion trajectory diagnostics that preserve the benchmark score while
+  exposing first errors, later rolling observations, degraded prior state, and
+  admitted-with-error counts.
 - Add a stateless OpenAI Responses benchmark adapter with model-revision
   verification, arm-specific Structured Outputs, mock-provider conformance
   tests, a separate adapter-error protocol, and source-bound configuration
@@ -25,10 +33,11 @@
   Sigstore verification to GitHub CLI, binds provenance and SBOM statements to
   the recorded release, and runs npm signature checks plus a clean
   installed-package temporal proof.
-- Add a local stdio MCP server with five bounded temporal-state tools, a
-  portable run resource template, explicit knowledge cuts, structural-only
-  admission labels, optimistic concurrency, canonical append-only persistence,
-  restart recovery, and a separate reproducible release workflow.
+- Add a local stdio MCP server with six bounded temporal-state tools, including
+  atomic prefix-bound model-proposal compilation and persistence; a portable
+  run resource template; explicit knowledge cuts; structural-only admission
+  labels; optimistic concurrency; canonical append-only persistence; restart
+  recovery; and a separate reproducible release workflow.
 - Add a source-first MCP pilot starter that crosses a server restart, hashes
   retained evidence, chains append digests, exports the complete pilot artifact
   and tool transcript, and verifies historical and corrected conclusions in a
@@ -65,6 +74,9 @@
   make exact coordinates, difference direction, current-evidence support,
   independent corroboration, references, sequences, and duplicate checks
   explicit in the Timeline extraction prompt.
+- Reject semantically duplicate Timeline claims and benchmark-scale excess in
+  the host admission path without renumbering, deduplicating, or repairing model
+  output.
 
 ### Security
 

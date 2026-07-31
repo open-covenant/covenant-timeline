@@ -138,3 +138,49 @@ After an operationally valid run, the decision is binary:
 
 A failed model gate does not invalidate the kernel's deterministic replay,
 reasoning, or proof-verification properties.
+
+## Recorded outcome
+
+The first operationally valid run completed on 2026-07-31 against source commit
+`a5c803de3dfb5fa7502f04a0dca417c775f1e38e` using GPT-5.6 Sol. It completed
+all 324 primary observations and all 108 teacher-forced observations without an
+operational error or formal retry.
+
+| Measure                                      | Result                |
+| -------------------------------------------- | --------------------- |
+| Timeline assertion F1                        | 0.9574                |
+| Timeline answer exactness                    | 106/108               |
+| Timeline end-to-end exactness                | 106/108               |
+| Timeline proof verification                  | 108/108               |
+| Narrative-memory answer exactness            | 65/108                |
+| Structured-extraction answer exactness       | 107/108               |
+| Timeline vs narrative-memory difference      | +0.3796, `p = 0.0078` |
+| Timeline vs structured-extraction difference | -0.0093, `p = 0.875`  |
+| Teacher-forced answer/end-to-end exactness   | 108/108               |
+
+The failed checks were:
+
+- `timeline.vs-structured-extraction.difference`;
+- `timeline.vs-structured-extraction.case-cluster-p`; and
+- `repeat-1.vs-structured-extraction`.
+
+The recorded decision is **Kill**. Timeline met every absolute quality
+threshold and beat narrative memory, but it did not demonstrate the required
+answer-accuracy advantage over structured extraction.
+
+The
+[release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+contains the exact configuration, raw results, scores, diagnostics, gate output,
+run record, and checksums. The configuration ID
+`openai-responses-smoke` is an inert label inherited from the generator
+template; the source revision, model, and generation settings are bound
+separately.
+
+This was one provider model over 12 synthetic semantic cases with three
+stability repeats. The held-out corpus was withheld from prompt and schema
+development, not independently blinded or private. The provider model has no
+dated snapshot, so provider-level reproduction may drift. A temperature field
+was removed after a pre-inference HTTP 400 and before any held-out request; no
+case, prompt, threshold, or decision rule changed. Two narrative-memory
+protocol failures counted as incorrect as specified and do not affect the
+failed structured-extraction comparison.

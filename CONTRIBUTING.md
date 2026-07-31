@@ -5,7 +5,9 @@
 Current priorities are:
 
 - independent review and reproduction of the public
-  [model-interface v1 frontier-model gate](./benchmarks/model-interface/v1/PREREGISTRATION.md),
+  [model-interface v1 frontier-model gate](./benchmarks/model-interface/v1/PREREGISTRATION.md)
+  and its
+  [published result](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31),
   plus adapter validation runs and failure cases;
 - one externally operated
   [long-running-agent pilot](./docs/temporal-pilot.md); and
@@ -25,7 +27,8 @@ affects normative semantics, compatibility, security, or governance.
 ## Model-interface benchmark
 
 The checked-in v1 suite includes a public development corpus and a
-preregistered public paraphrase corpus with no published frontier-model result.
+preregistered public paraphrase corpus. Its fixed result is negative: Timeline
+did not beat stateless full-context structured extraction on answer accuracy.
 Its cases, prompts, adapters, scorers, gates, and result submissions are
 non-normative evaluation artifacts. They use ordinary pull-request review and
 do not require an RFC unless they also change protocol semantics, schemas,

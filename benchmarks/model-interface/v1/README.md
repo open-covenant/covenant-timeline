@@ -16,11 +16,11 @@ model-generated assertion is a failure even when the kernel behaves correctly.
 No output is repaired by a person or by the harness.
 
 Version 1 includes a public development corpus and a separately materialized
-paraphrase corpus held out from prompt and schema development. It has no
-published frontier-model result and is not evidence that Timeline improves a
-model. The [frontier-model gate](./PREREGISTRATION.md) fixes the model,
-configuration, primary arms, thresholds, and stopping rule before the first
-formal run.
+paraphrase corpus held out from prompt and schema development. The
+[frontier-model gate](./PREREGISTRATION.md) fixed the model, configuration,
+primary arms, thresholds, and stopping rule before the first formal run. The
+[published run](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+returned `kill`.
 
 ## Scope
 
@@ -651,14 +651,22 @@ raw HTTP response.
 
 ## Interpretation
 
-The suite is deliberately small and public. It can falsify the current
-model-memory thesis, but it cannot establish broad temporal intelligence,
-production safety, domain transfer, or clinical or regulatory fitness. There is
-no frontier-model result for v1 yet.
+The GPT-5.6 Sol evaluation completed all 324 primary observations and 108
+teacher-forced observations. Timeline produced 106/108 exact answers, 106/108
+exact end-to-end artifacts, 0.9574 assertion F1, and 108/108 verified proofs.
+It beat bounded narrative memory, which produced 65/108 exact answers, but not
+stateless full-context structured extraction, which produced 107/108. The
+paired Timeline difference against structured extraction was -0.0093 with
+case-cluster `p = 0.875`.
 
-The structured-extraction arm controls for typed output and deterministic
-reasoning. The paired primary result therefore asks whether rolling Timeline
-state improves on both bounded narrative memory and re-extraction from the full
-record. Teacher-forced diagnostics separate local extraction from propagated
-state errors. A failed gate retires the standalone thesis without changing the
-kernel's independently tested deterministic properties.
+The gate returned `kill` because every preregistered check had to pass. Timeline
+did have higher descriptive end-to-end exactness than structured extraction,
+106/108 versus 100/108, but comparative end-to-end superiority was not part of
+the decision rule and does not override it. Teacher forcing produced 108/108
+exact answers and end-to-end artifacts, which points to rolling continuity
+rather than current-cut extraction as the likely model-interface boundary.
+
+The suite is deliberately small, synthetic, and public. The result rejects the
+specified standalone model-memory accuracy claim for this model, interface, and
+corpus. It does not establish broad inferiority or equivalence, and it does not
+change the kernel's independently tested deterministic properties.

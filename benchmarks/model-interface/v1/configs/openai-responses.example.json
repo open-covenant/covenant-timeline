@@ -1,6 +1,6 @@
 {
   "schema": "covenant.timeline.model-eval.config.v1",
-  "id": "openai-responses-smoke",
+  "id": "openai-responses-model-interface-v1",
   "benchmarkRevision": "replace-with-source-commit",
   "adapter": {
     "id": "openai-responses",

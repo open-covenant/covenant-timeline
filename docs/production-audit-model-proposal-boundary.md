@@ -1,13 +1,15 @@
 # Production audit: model proposal boundary
 
-Date: 2026-07-30
+Date: 2026-07-31
 
 ## Decision
 
 The model proposal boundary is suitable for an engineering alpha. It is not yet
 evidence of model quality, independent adoption, or production effectiveness.
-No performance claim should be published until the blinded evaluation and
-external pilot gates are met.
+The lower-level preregistered model-interface gate returned `kill` after
+Timeline failed to beat structured extraction on answer accuracy. No
+proposal-boundary performance claim should be published without a new,
+separately preregistered operational hypothesis.
 
 This audit covers:
 
@@ -31,7 +33,7 @@ This audit covers:
 | Artifact integrity         | Pass    | Requests, responses, output schemas, source state, runtime state, corpus, and results are content-bound                         |
 | Scoring integrity          | Pass    | The scorer reconstructs trusted schemas and replay state before evaluating stored outcomes                                      |
 | Provider compatibility     | Partial | A generated schema completed one local Ollama 0.31.2 preflight; OpenAI remains contract-tested but not live-tested              |
-| Model-quality evidence     | Open    | No model result is published                                                                                                    |
+| Model-quality evidence     | Not met | Lower-level gate returned `kill`; no proposal-boundary model result is published                                                |
 | Independent adoption       | Open    | No external operator or second implementation has completed the defined pilot                                                   |
 
 ## Resolved findings
@@ -66,12 +68,15 @@ This audit covers:
 ### Evidence, not implementation
 
 The public corpus is visible and small. It proves representability, replay, and
-failure accounting; it cannot establish generalization or a win over narrative
-memory. The lower-level model-interface benchmark now preregisters a fixed
-frontier-model falsification run on a public paraphrase corpus against
-narrative memory and stateless structured extraction. A passing result would
-justify a blinded proposal-boundary suite with longer histories, distractors,
-fixed budgets, and reserved variants.
+failure accounting; it cannot establish generalization or a model benefit. The
+lower-level model-interface benchmark completed its fixed frontier-model run on
+a public paraphrase corpus. Timeline beat narrative memory but did not beat
+stateless structured extraction, so the gate returned `kill`.
+
+That result blocks escalation to a broader standalone efficacy suite under the
+v1 claim. A future proposal-boundary model run requires a new operational
+hypothesis and preregistered decision rule; it cannot be presented as a
+post-hoc rescue of v1.
 
 The adoption gate remains one independent long-running-agent pilot that crosses
 a restart, admits delayed or corrected evidence, and publishes a redacted run

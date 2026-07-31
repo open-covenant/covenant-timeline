@@ -31,6 +31,7 @@ test("config creation injects the source revision and exact model snapshot", asy
       output,
     );
     const config = JSON.parse(await readFile(output, "utf8"));
+    assert.equal(config.id, "openai-responses-model-interface-v1");
     assert.equal(config.benchmarkRevision, revision);
     assert.equal(config.model.id, "gpt-4o-mini-2024-07-18");
     assert.equal(config.model.revision, config.model.id);
@@ -64,7 +65,7 @@ test("config creation selects the proposal benchmark contract", async () => {
       config.schema,
       "covenant.timeline.model-proposal-eval.config.v1",
     );
-    assert.equal(config.id, "openai-proposal-smoke");
+    assert.equal(config.id, "openai-responses-model-proposal-v1");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

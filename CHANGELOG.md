@@ -57,6 +57,11 @@
 
 ### Changed
 
+- Publish the preregistered GPT-5.6 Sol model-interface result and record its
+  `kill` decision after Timeline failed to beat stateless full-context
+  structured extraction on answer accuracy. Stop standalone model-memory
+  expansion while retaining the deterministic kernel, replay, and proof
+  verifier.
 - Lead the repository and npm package with the long-running-agent correction
   workflow, one installable temporal API, the actual proof receipt, and explicit
   distinctions from event sourcing, bitemporal databases, established STN

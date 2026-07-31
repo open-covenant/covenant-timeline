@@ -342,29 +342,30 @@ Before production use, review the
 [threat model](./docs/threat-model.md), and
 [production audit](./docs/production-audit-timeline.md).
 
-## Proving the model boundary
+## Model evaluation
 
-The repository includes deterministic model-interface and proposal-boundary
-benchmarks, a digest-verified local Ollama adapter, and a stateless OpenAI
-Responses adapter. They measure whether a model can turn evidence into typed
-temporal state and verified conclusions across rolling knowledge cuts. No
-frontier-model result has been published.
+The preregistered GPT-5.6 Sol evaluation completed 432 requests across three
+primary arms and a teacher-forced diagnostic. Timeline produced exact answers
+and end-to-end artifacts on 106 of 108 observations, reached 0.9574 assertion
+F1, and returned 108 independently verified proofs. It substantially
+outperformed bounded narrative memory on answer accuracy, 106/108 versus
+65/108, but did not outperform stateless full-context structured extraction,
+which scored 107/108.
 
-The first decision gate is
-[preregistered](./benchmarks/model-interface/v1/PREREGISTRATION.md): one fixed
-frontier model, three repeats, and a public paraphrase corpus held out from
-prompt and schema development. Timeline must clear high assertion and
-end-to-end accuracy thresholds and beat both bounded narrative memory and
-stateless full-context structured extraction. Teacher-forced prior state
-separates current-cut extraction failures from continuity failures. The suite
-is intentionally small: it can kill the standalone model-memory thesis, but a
-pass would justify broader blinded evaluation rather than prove general
-temporal intelligence. See [Model evaluation](./docs/model-evaluation.md) and
-the [roadmap](./ROADMAP.md).
+The fixed gate therefore returned `kill`. This result does not support the
+claim that rolling Timeline state improves frontier-model answer accuracy over
+a simpler structured-extraction pipeline on this suite. It does not change the
+kernel's deterministic replay, reasoning, or proof-verification properties.
+The [preregistration](./benchmarks/model-interface/v1/PREREGISTRATION.md),
+[methodology](./docs/model-evaluation.md), and
+[complete result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+are public.
 
-The second gate is one independent long-running-agent pilot that crosses a
-restart, admits delayed or corrected evidence, and publishes a redacted run
-another process can reproduce. The
+Development now focuses on reproducible temporal state, audit, and replay in
+real integrations rather than a model-accuracy claim. The remaining evidence
+gate is one independent long-running-agent pilot that crosses a restart,
+admits delayed or corrected evidence, and publishes a redacted run another
+process can reproduce. The
 [temporal pilot](./docs/temporal-pilot.md) defines the minimum evidence.
 
 Timeline is also seeking a second implementer for the bounded RFC 0009

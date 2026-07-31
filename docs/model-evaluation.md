@@ -6,11 +6,35 @@ full visible record, and rolling Covenant Timeline state with deterministic
 reasoning. Full-context direct answering remains a secondary reference.
 
 Version 1 includes a 12-case development corpus and a preregistered 12-case
-paraphrase corpus held out from prompt and schema development. No frontier-model
-result has been published. The
+paraphrase corpus held out from prompt and schema development. The
 [benchmark protocol](../benchmarks/model-interface/v1/README.md) and
 [frontier-model gate](../benchmarks/model-interface/v1/PREREGISTRATION.md) are
 canonical.
+
+## Published reference result
+
+The 2026-07-31 GPT-5.6 Sol run completed 324 primary and 108 teacher-forced
+observations without an operational error. Timeline met every absolute
+threshold and substantially beat bounded narrative memory, but it did not beat
+stateless full-context structured extraction on answer accuracy:
+
+| Arm                   | Exact answers |
+| --------------------- | ------------- |
+| Narrative memory      | 65/108        |
+| Structured extraction | 107/108       |
+| Timeline              | 106/108       |
+
+Timeline reached 0.9574 assertion F1, 106/108 end-to-end exactness, and 108/108
+proof verification. Its paired answer difference against structured extraction
+was -0.0093 with case-cluster `p = 0.875`, so the preregistered gate returned
+`kill`. Teacher-forced prior state produced 108/108 exact answers and
+end-to-end artifacts; it is diagnostic and does not alter the primary result.
+
+The
+[immutable release](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+contains the configuration, raw JSONL, scores, diagnostics, gate output,
+execution record, and checksums. It is bound to source commit
+`a5c803de3dfb5fa7502f04a0dca417c775f1e38e`.
 
 ## Adapter contract
 
@@ -522,10 +546,10 @@ controls. Disclose those provider conditions with a published run. It records
 provider-reported input and output token totals, but not cached-token,
 reasoning-token, or raw response metadata.
 
-The public paraphrase suite is held out from prompt and schema development, but
-it is still small and is no longer secret after preregistration. It does not
-establish open-domain extraction, civil time, time zones, calendar recurrence,
-causality, source authority, domain transfer, production safety, or clinical or
-regulatory fitness. Its purpose is to continue or kill the standalone
-model-memory thesis under the fixed gate, not to claim general temporal
-intelligence.
+The public paraphrase suite was held out from prompt and schema development,
+but it is small, synthetic, and no longer secret. It does not establish
+open-domain extraction, civil time, time zones, calendar recurrence, causality,
+source authority, domain transfer, production safety, or clinical or regulatory
+fitness. Version 1 returned `kill` under its fixed rule. Future executions are
+reproductions or separate evaluations, not opportunities to reverse that
+recorded decision.

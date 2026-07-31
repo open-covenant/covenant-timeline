@@ -36,8 +36,10 @@ maintained in this repository. The external project represented by the public
 archive did not adopt Timeline. The alpha.2 package includes the Draft v0alpha3
 temporal reference implementation alongside v0alpha1 and v0alpha2 checkpoint
 compatibility APIs. External operation, an independently maintained temporal
-implementation, measured model-side proposal extraction, and RFC completion
-remain blockers to a production protocol claim.
+implementation, production proposal-boundary evidence, and RFC completion
+remain blockers to a production protocol claim. The lower-level frontier-model
+gate is complete and returned `kill`; it does not support a standalone
+model-memory accuracy claim.
 
 v0alpha3 adds explicit temporal axes, scenario contexts, points, proper
 intervals, digest-referenced coordinate and difference assertions, historical
@@ -76,10 +78,10 @@ local gate requires:
 
 It is not production-ready until a second implementation agrees on semantic
 results and verifies supported receipts, an external operator runs a real
-temporal workflow, a controlled benchmark shows that models can emit useful
-admissible assertions more reliably than narrative memory, RFC governance
-completes, and security review covers model extraction, proof substitution,
-graph exhaustion, and temporal-data privacy.
+temporal workflow, RFC governance completes, and security review covers model
+extraction, proof substitution, graph exhaustion, and temporal-data privacy.
+Any production model integration must validate its own proposal boundary; the
+published lower-level result does not establish a general model benefit.
 
 ## Evidence Reviewed
 
@@ -204,6 +206,18 @@ graph exhaustion, and temporal-data privacy.
     loaded-model digest afterward, fixes generation settings, and bounds
     model-controlled response values. No Ollama result is committed or
     published.
+- Preregistered GPT-5.6 Sol model-interface evaluation on 2026-07-31:
+  - all 324 primary and 108 teacher-forced observations completed without an
+    operational error or formal retry;
+  - Timeline produced 106/108 exact answers, 106/108 exact end-to-end
+    artifacts, 0.9574 assertion F1, and 108/108 verified proofs;
+  - bounded narrative memory produced 65/108 exact answers and stateless
+    full-context structured extraction produced 107/108;
+  - the paired Timeline difference against structured extraction was -0.0093
+    with case-cluster `p = 0.875`; and
+  - the fixed gate returned `kill`. The source-bound
+    [release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+    contains raw results, scores, diagnostics, gate output, and checksums.
 - `pnpm audit` and `pnpm audit --prod` reported no known findings on
   2026-07-30. The MCP integration uses the split Model Context Protocol v2
   packages at exact `2.0.0-beta.5` versions; beta API stability remains an
@@ -297,17 +311,12 @@ graph exhaustion, and temporal-data privacy.
       writes as unauthenticated. Catalog discovery is paginated, fatal protocol
       input exits nonzero, and the source-first pilot exports a
       restart-spanning artifact that a separate process verifies offline.
-- [ ] **Validate the model boundary.** The versioned harness, corpora, and
-      scorer now compare rolling Timeline state with bounded narrative memory
-      and stateless full-context structured extraction while preserving invalid
-      output and unsupported definite answers as failures. Reference adapters
-      support a digest-verified local Ollama model and stateless OpenAI
-      Responses requests while preserving provider failures. A fixed
-      frontier-model gate and teacher-forced diagnostic are preregistered
-      against a public paraphrase corpus. No formal frontier-model or
-      proposal-boundary result has been published, so there is still no
-      controlled evidence that models reliably emit admissible temporal
-      proposals or that Timeline improves end-to-end temporal accuracy.
+- [x] **Run the frontier-model gate.** The operationally valid GPT-5.6 Sol run
+      met every absolute quality threshold and beat bounded narrative memory,
+      but failed the required answer-accuracy comparison with stateless
+      full-context structured extraction. The recorded `kill` decision stops
+      standalone model-memory expansion. No production proposal-boundary model
+      result has been published.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.
@@ -452,8 +461,9 @@ Recommended host metrics:
 
 ## Recommended Architecture Changes
 
-1. Complete the preregistered frontier-model falsification gate, then run a
-   broader blinded proposal-boundary evaluation before any efficacy claim.
+1. Maintain the temporal kernel as an audit and replay component inside
+   Covenant or another system with a measured need; do not expand the
+   standalone model-memory product under the failed v1 claim.
 2. Obtain one externally operated temporal pilot with the source-first starter;
    publish the MCP package as a distribution step when registry access is
    available.
@@ -469,8 +479,8 @@ Recommended host metrics:
 
 ## Test Coverage Gaps
 
-- No published formal frontier-model, proposal-boundary, or blinded scale-suite
-  result.
+- No published proposal-boundary or blinded scale-suite model result. The
+  lower-level frontier-model result is published and negative.
 - No independently operated temporal pilot.
 - No independently maintained temporal implementation.
 - No production deployment evidence in the public archive.
@@ -488,9 +498,10 @@ Recommended host metrics:
 ## Action Plan
 
 1. Preserve v0alpha1 replay and the v0alpha2 migration corpus on every release.
-2. Complete and publish the preregistered frontier-model gate, then use a
-   passing result to design the broader blinded proposal-boundary evaluation.
-3. Complete one external temporal pilot with replayable evidence.
+2. Integrate the deterministic kernel where Covenant needs temporal audit or
+   replay, and measure the operational value.
+3. Complete one external temporal pilot with replayable evidence if an
+   independent operator has the same need.
 4. Support a separately maintained temporal implementation through the shared
    conformance target.
 5. Record real correction incidents before specifying branch semantics.

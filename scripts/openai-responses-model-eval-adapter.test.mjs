@@ -17,6 +17,12 @@ import {
   validateAdapterResponse,
 } from "./model-interface-eval.mjs";
 import {
+  MAX_MODEL_REQUEST_ID_LENGTH,
+  MAX_NARRATIVE_MEMORY_CHARACTERS,
+  MAX_TIMELINE_EVENTS_PER_RESPONSE,
+  MAX_TIMELINE_REFERENCES_PER_EVENT,
+} from "./model-eval-output-schema.mjs";
+import {
   OPENAI_ADAPTER_ID,
   OPENAI_ADAPTER_VERSION,
   OPENAI_RESPONSES_ENDPOINT,
@@ -39,7 +45,7 @@ const adapterErrorSchema = "covenant.timeline.model-eval.adapter-error.v1";
 function createConfig(overrides = {}) {
   const model = overrides.model ?? "gpt-4o-mini-2024-07-18";
   return {
-    schema: "covenant.timeline.model-eval.config.v1",
+    schema: overrides.schema ?? "covenant.timeline.model-eval.config.v1",
     id: "openai-reference-test",
     benchmarkRevision: overrides.benchmarkRevision ?? "test-revision",
     adapter: {
@@ -52,7 +58,9 @@ function createConfig(overrides = {}) {
       revision: overrides.revision ?? model,
     },
     generation: {
-      temperature: overrides.temperature ?? 0,
+      temperature: Object.hasOwn(overrides, "temperature")
+        ? overrides.temperature
+        : null,
       seed: overrides.seed ?? null,
       maxOutputTokens: overrides.maxOutputTokens ?? 4096,
       parameters: overrides.parameters ?? {
@@ -67,7 +75,7 @@ function createRequest(arm = "direct", overrides = {}) {
   return {
     schema: "covenant.timeline.model-eval.request.v1",
     requestId: overrides.requestId ?? "request-17",
-    benchmark: "model-interface-v1",
+    benchmark: overrides.benchmark ?? "model-interface-v1",
     config,
     configDigest: overrides.configDigest ?? contentDigest(config),
     caseId: "case-01",
@@ -80,6 +88,44 @@ function createRequest(arm = "direct", overrides = {}) {
       question: "When did deployment happen?",
       evidence: [],
     },
+  };
+}
+
+function createProposalSchema() {
+  return {
+    type: "object",
+    properties: {
+      schema: {
+        type: "string",
+        enum: ["covenant.timeline.model-proposal.v1"],
+      },
+      requestId: { type: "string", enum: ["request-17"] },
+      changes: {
+        type: "array",
+        items: { type: "object" },
+        maxItems: 2,
+      },
+    },
+    required: ["schema", "requestId", "changes"],
+    additionalProperties: false,
+  };
+}
+
+function createProposalRequest(overrides = {}) {
+  const outputSchema = overrides.outputSchema ?? createProposalSchema();
+  return {
+    ...createRequest("proposal", {
+      ...overrides,
+      benchmark: "model-proposal-boundary-v1",
+      config:
+        overrides.config ??
+        createConfig({
+          schema: "covenant.timeline.model-proposal-eval.config.v1",
+        }),
+    }),
+    outputSchema,
+    outputSchemaDigest:
+      overrides.outputSchemaDigest ?? contentDigest(outputSchema),
   };
 }
 
@@ -156,7 +202,12 @@ async function readBody(request) {
 }
 
 test("OpenAI request mapping is exact and stateless for every arm", () => {
-  for (const arm of ["direct", "narrative-memory", "timeline"]) {
+  for (const arm of [
+    "direct",
+    "narrative-memory",
+    "structured-extraction",
+    "timeline",
+  ]) {
     const config = createConfig({
       parameters: {
         structuredOutput: true,
@@ -180,12 +231,37 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
       },
     ]);
     assert.equal(body.max_output_tokens, 4096);
-    assert.equal(body.temperature, 0);
+    assert.equal(Object.hasOwn(body, "temperature"), false);
     assert.equal(body.top_p, 0.9);
     assert.deepEqual(body.reasoning, { effort: "low" });
     assert.equal(body.text.verbosity, "low");
     assert.equal(body.text.format.type, "json_schema");
     assert.equal(body.text.format.strict, true);
+    assert.equal(
+      body.text.format.schema.properties.requestId.maxLength,
+      MAX_MODEL_REQUEST_ID_LENGTH,
+    );
+    if (arm === "narrative-memory") {
+      assert.equal(
+        body.text.format.schema.properties.memory.maxLength,
+        MAX_NARRATIVE_MEMORY_CHARACTERS,
+      );
+    }
+    if (arm === "structured-extraction" || arm === "timeline") {
+      assert.equal(
+        body.text.format.schema.properties.events.maxItems,
+        MAX_TIMELINE_EVENTS_PER_RESPONSE,
+      );
+      assert.equal(
+        body.text.format.schema.$defs.evidenceRefs.maxItems,
+        MAX_TIMELINE_REFERENCES_PER_EVENT,
+      );
+      assert.equal(
+        body.text.format.schema.$defs.nonEmptyIdentifiers.maxItems,
+        MAX_TIMELINE_REFERENCES_PER_EVENT,
+      );
+      assert.equal(body.text.format.schema.$defs.identifier.maxLength, 128);
+    }
     assert.equal(
       canonicalJson(body.text.format).includes(request.requestId),
       false,
@@ -211,6 +287,63 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
   }
 });
 
+test("OpenAI request mapping preserves an explicit supported temperature", () => {
+  const request = createRequest("direct", {
+    config: createConfig({ temperature: 0 }),
+  });
+  assert.equal(createOpenAIRequestBody(request).temperature, 0);
+});
+
+test("proposal requests use a strict wrapper around the request-bound schema", () => {
+  const request = createProposalRequest();
+  const body = createOpenAIRequestBody(request);
+
+  assert.deepEqual(body.text.format, {
+    type: "json_schema",
+    name: "covenant_timeline_model_proposal_v1",
+    strict: true,
+    schema: request.outputSchema,
+  });
+  assert.equal(body.text.format.schema, request.outputSchema);
+  assert.deepEqual(body.input, [
+    {
+      role: "user",
+      content: canonicalJson({
+        requestId: request.requestId,
+        input: request.input,
+      }),
+    },
+  ]);
+});
+
+test("benchmark-specific schema fields fail closed", () => {
+  const schema = createProposalSchema();
+  const invalid = [
+    createProposalRequest({
+      outputSchemaDigest:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    }),
+    {
+      ...createRequest("proposal", {
+        benchmark: "model-proposal-boundary-v1",
+      }),
+      outputSchema: schema,
+    },
+    {
+      ...createRequest(),
+      outputSchema: schema,
+      outputSchemaDigest: contentDigest(schema),
+    },
+    createRequest("direct", {
+      benchmark: "model-proposal-boundary-v1",
+    }),
+  ];
+
+  for (const request of invalid) {
+    assert.throws(() => createOpenAIRequestBody(request));
+  }
+});
+
 test("provider schemas cover every public v1 gold response", async () => {
   const cases = (await readFile(casesPath, "utf8"))
     .trim()
@@ -218,7 +351,12 @@ test("provider schemas cover every public v1 gold response", async () => {
     .map(JSON.parse);
   const ajv = new Ajv2020({ allErrors: true, strict: false });
 
-  for (const arm of ["direct", "narrative-memory", "timeline"]) {
+  for (const arm of [
+    "direct",
+    "narrative-memory",
+    "structured-extraction",
+    "timeline",
+  ]) {
     const requestId = `schema-${arm}`;
     const format = createOpenAIResponseFormat(arm);
     assert.equal(format.schema.type, "object");
@@ -229,7 +367,7 @@ test("provider schemas cover every public v1 gold response", async () => {
     for (const testCase of cases) {
       for (const cut of testCase.cuts) {
         const response =
-          arm === "timeline"
+          arm === "structured-extraction" || arm === "timeline"
             ? {
                 schema: responseSchema,
                 requestId,
@@ -252,6 +390,68 @@ test("provider schemas cover every public v1 gold response", async () => {
   }
 });
 
+test("provider schemas reject model-controlled values above their limits", async () => {
+  const [testCase] = (await readFile(casesPath, "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  const [cut] = testCase.cuts;
+  const timelineSchema = createOpenAIResponseFormat("timeline").schema;
+  const narrativeSchema = createOpenAIResponseFormat("narrative-memory").schema;
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validateTimeline = ajv.compile(timelineSchema);
+  const validateNarrative = ajv.compile(narrativeSchema);
+  const timeline = {
+    schema: responseSchema,
+    requestId: "request-bounds",
+    events: cut.goldEvents,
+    query: cut.goldQuery,
+  };
+
+  const atEventLimit = structuredClone(timeline);
+  atEventLimit.events = Array.from(
+    { length: MAX_TIMELINE_EVENTS_PER_RESPONSE },
+    () => structuredClone(cut.goldEvents[0]),
+  );
+  assert.equal(validateTimeline(atEventLimit), true);
+
+  const aboveEventLimit = structuredClone(atEventLimit);
+  aboveEventLimit.events.push(structuredClone(cut.goldEvents[0]));
+  assert.equal(validateTimeline(aboveEventLimit), false);
+
+  const aboveEvidenceLimit = structuredClone(timeline);
+  aboveEvidenceLimit.events[0].assertion.evidenceRefs = Array.from(
+    { length: MAX_TIMELINE_REFERENCES_PER_EVENT + 1 },
+    () => cut.goldEvents[0].assertion.evidenceRefs[0],
+  );
+  assert.equal(validateTimeline(aboveEvidenceLimit), false);
+
+  const aboveSupersessionLimit = structuredClone(timeline);
+  aboveSupersessionLimit.events[0].assertion.supersedes = Array.from(
+    { length: MAX_TIMELINE_REFERENCES_PER_EVENT + 1 },
+    (_, index) => `coordinate.previous.${index}`,
+  );
+  assert.equal(validateTimeline(aboveSupersessionLimit), false);
+
+  const longIdentifier = structuredClone(timeline);
+  longIdentifier.events[0].id = "a".repeat(129);
+  assert.equal(validateTimeline(longIdentifier), false);
+
+  const longRequestId = structuredClone(timeline);
+  longRequestId.requestId = "r".repeat(MAX_MODEL_REQUEST_ID_LENGTH + 1);
+  assert.equal(validateTimeline(longRequestId), false);
+
+  assert.equal(
+    validateNarrative({
+      schema: responseSchema,
+      requestId: "request-bounds",
+      answer: cut.expectedResult,
+      memory: "m".repeat(MAX_NARRATIVE_MEMORY_CHARACTERS + 1),
+    }),
+    false,
+  );
+});
+
 test("configuration mismatches fail before an inference request", async () => {
   const cases = [
     createRequest("direct", {
@@ -261,6 +461,9 @@ test("configuration mismatches fail before an inference request", async () => {
     }),
     createRequest("direct", {
       config: createConfig({ seed: 42 }),
+    }),
+    createRequest("direct", {
+      config: createConfig({ temperature: -0.1 }),
     }),
     createRequest("direct", {
       config: createConfig({
@@ -348,6 +551,27 @@ test("native Responses output is traversed once and usage is mechanical", () => 
       costUsd: null,
     },
   });
+});
+
+test("native Responses output preserves proposal fields with adapter usage", () => {
+  const proposal = {
+    schema: "covenant.timeline.model-proposal.v1",
+    requestId: "request-17",
+    changes: [],
+    query: {
+      type: "consistency",
+      targetHandle: "delivery",
+      knowledgeCut: { type: "current" },
+    },
+  };
+
+  assert.deepEqual(
+    parseOpenAIResponse(
+      createProviderResponse(proposal, { usage: null }),
+      "gpt-4o-mini-2024-07-18",
+    ),
+    proposal,
+  );
 });
 
 test("provider refusals, incomplete responses, and ambiguous output fail closed", () => {
@@ -590,6 +814,31 @@ test("provider HTTP failures become safe protocol error envelopes", async (t) =>
   }
 });
 
+test("provider HTTP 400 is a run-scoped request failure", async () => {
+  const request = createRequest();
+  const stdout = capture();
+  const stderr = capture();
+  const exitCode = await runAdapter({
+    apiKey: "inert-adapter-secret",
+    fetchImpl: async () => new Response("", { status: 400 }),
+    input: Readable.from([`${canonicalJson(request)}\n`]),
+    output: stdout.stream,
+    diagnostics: stderr.stream,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stderr.value(), "");
+  assert.deepEqual(JSON.parse(stdout.value()), {
+    schema: adapterErrorSchema,
+    requestId: request.requestId,
+    error: {
+      code: "provider.http-400",
+      message: "OpenAI Responses API returned HTTP 400",
+      scope: "run",
+    },
+  });
+});
+
 test("adapter error envelopes remain valid for adversarial config keys", async () => {
   const config = createConfig({
     parameters: {
@@ -677,9 +926,9 @@ test("HTTP status failures are classified without reading provider bodies", asyn
   }
 });
 
-test("HTTP authentication failures are run-scoped without hiding capacity failures", async () => {
+test("HTTP request and authentication failures are run-scoped", async () => {
   for (const [status, scope] of [
-    [400, "observation"],
+    [400, "run"],
     [401, "run"],
     [403, "run"],
     [404, "run"],

@@ -17,8 +17,16 @@ const REQUEST_SCHEMA = "covenant.timeline.model-eval.request.v1";
 const RESPONSE_SCHEMA = "covenant.timeline.model-eval.response.v1";
 const ADAPTER_ERROR_SCHEMA = "covenant.timeline.model-eval.adapter-error.v1";
 const CONFIG_SCHEMA = "covenant.timeline.model-eval.config.v1";
-const BENCHMARK = "model-interface-v1";
-const ARMS = new Set(["direct", "narrative-memory", "timeline"]);
+const MODEL_PROPOSAL_CONFIG_SCHEMA =
+  "covenant.timeline.model-proposal-eval.config.v1";
+const MODEL_INTERFACE_BENCHMARK = "model-interface-v1";
+const MODEL_PROPOSAL_BENCHMARK = "model-proposal-boundary-v1";
+const MODEL_INTERFACE_ARMS = new Set([
+  "direct",
+  "narrative-memory",
+  "structured-extraction",
+  "timeline",
+]);
 const MAX_REQUEST_BYTES = 256 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
 const MIN_OUTPUT_TOKENS = 16;
@@ -87,24 +95,57 @@ function requireExactKeys(value, allowed, label) {
   }
 }
 
+function validateBenchmark(request) {
+  if (request.benchmark === MODEL_INTERFACE_BENCHMARK) {
+    if (!MODEL_INTERFACE_ARMS.has(request.arm)) {
+      fail("adapter.request", "adapter request uses an unsupported arm");
+    }
+    if (
+      Object.hasOwn(request, "outputSchema") ||
+      Object.hasOwn(request, "outputSchemaDigest")
+    ) {
+      fail(
+        "adapter.request",
+        "model-interface requests must not contain an output schema",
+      );
+    }
+    return undefined;
+  }
+
+  if (request.benchmark !== MODEL_PROPOSAL_BENCHMARK) {
+    fail("adapter.request", "adapter request uses an unsupported benchmark");
+  }
+  if (request.arm !== "proposal") {
+    fail("adapter.request", "adapter request uses an unsupported arm");
+  }
+  requireRecord(request.outputSchema, "adapter request.outputSchema");
+  requireNonEmptyString(
+    request.outputSchemaDigest,
+    "adapter request.outputSchemaDigest",
+  );
+  if (contentDigest(request.outputSchema) !== request.outputSchemaDigest) {
+    fail("adapter.output-schema-digest", "output schema digest does not match");
+  }
+  return request.outputSchema;
+}
+
 function validateRequest(request) {
   requireRecord(request, "adapter request");
   if (request.schema !== REQUEST_SCHEMA) {
     fail("adapter.request", "adapter request uses an unsupported schema");
   }
-  if (request.benchmark !== BENCHMARK) {
-    fail("adapter.request", "adapter request uses an unsupported benchmark");
-  }
   requireNonEmptyString(request.requestId, "adapter request.requestId");
   requireNonEmptyString(request.prompt, "adapter request.prompt");
   requireRecord(request.input, "adapter request.input");
-  if (!ARMS.has(request.arm)) {
-    fail("adapter.request", "adapter request uses an unsupported arm");
-  }
+  const outputSchema = validateBenchmark(request);
 
   const config = request.config;
   requireRecord(config, "adapter request.config");
-  if (config.schema !== CONFIG_SCHEMA) {
+  const expectedConfigSchema =
+    request.benchmark === MODEL_PROPOSAL_BENCHMARK
+      ? MODEL_PROPOSAL_CONFIG_SCHEMA
+      : CONFIG_SCHEMA;
+  if (config.schema !== expectedConfigSchema) {
     fail("adapter.config", "run configuration uses an unsupported schema");
   }
   requireNonEmptyString(
@@ -157,14 +198,15 @@ function validateRequest(request) {
   const generation = config.generation;
   requireRecord(generation, "run configuration.generation");
   if (
-    typeof generation.temperature !== "number" ||
-    !Number.isFinite(generation.temperature) ||
-    generation.temperature < 0 ||
-    generation.temperature > 2
+    generation.temperature !== null &&
+    (typeof generation.temperature !== "number" ||
+      !Number.isFinite(generation.temperature) ||
+      generation.temperature < 0 ||
+      generation.temperature > 2)
   ) {
     fail(
       "adapter.config",
-      "run configuration temperature must be between 0 and 2",
+      "run configuration temperature must be null or between 0 and 2",
     );
   }
   if (generation.seed !== null) {
@@ -225,14 +267,24 @@ function validateRequest(request) {
   return {
     config,
     generation,
+    outputSchema,
     parameters,
   };
 }
 
 export function createOpenAIRequestBody(request) {
-  const { config, generation, parameters } = validateRequest(request);
+  const { config, generation, outputSchema, parameters } =
+    validateRequest(request);
   const text = {
-    format: createOpenAIResponseFormat(request.arm),
+    format:
+      outputSchema === undefined
+        ? createOpenAIResponseFormat(request.arm)
+        : {
+            type: "json_schema",
+            name: "covenant_timeline_model_proposal_v1",
+            strict: true,
+            schema: outputSchema,
+          },
     ...(parameters.verbosity === undefined
       ? {}
       : { verbosity: parameters.verbosity }),
@@ -251,7 +303,9 @@ export function createOpenAIRequestBody(request) {
       },
     ],
     max_output_tokens: generation.maxOutputTokens,
-    temperature: generation.temperature,
+    ...(generation.temperature === null
+      ? {}
+      : { temperature: generation.temperature }),
     ...(parameters.topP === undefined ? {} : { top_p: parameters.topP }),
     ...(parameters.reasoningEffort === undefined
       ? {}
@@ -570,6 +624,8 @@ function errorScope(code) {
   if (code.startsWith("adapter.") || RUN_SCOPED_ERROR_CODES.has(code)) {
     return "run";
   }
+  const status = Number(code.match(/[.-]http-(\d{3})$/u)?.[1]);
+  if (status === 400) return "run";
   return "observation";
 }
 

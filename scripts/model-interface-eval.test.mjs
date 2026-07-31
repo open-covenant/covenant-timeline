@@ -5,13 +5,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { canonicalJson } from "../packages/prototype/dist/index.js";
+import { byteDigest, canonicalJson } from "../packages/prototype/dist/index.js";
 import {
+  assertModelTimelineDelta,
   createModelEvalValidators,
   digestText,
   loadBenchmarkCases,
   loadRunConfig,
   readJsonLines,
+  readJsonLinesArtifact,
   validateAdapterResponse,
 } from "./model-interface-eval.mjs";
 import { runModelInterfaceEval } from "./run-model-interface-eval.mjs";
@@ -34,6 +36,90 @@ test("the model-interface corpus is kernel-derived and balanced", async () => {
     36,
   );
   assert.equal(new Set(cases.map(({ id }) => id)).size, 12);
+});
+
+test("JSONL parsing and digests bind the same UTF-8 bytes", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "covenant-timeline-jsonl-artifact-"),
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "artifact.jsonl");
+  const bytes = Buffer.from('{"value":1}\n', "utf8");
+  await writeFile(path, bytes);
+
+  const artifact = await readJsonLinesArtifact(path);
+  assert.deepEqual(artifact.records, [{ value: 1 }]);
+  assert.equal(artifact.digest, byteDigest(bytes));
+
+  await writeFile(
+    path,
+    Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]),
+  );
+  await assert.rejects(readJsonLinesArtifact(path), /not valid UTF-8/u);
+});
+
+test("Timeline deltas reject duplicate claims and benchmark-scale excess", async () => {
+  const [testCase] = await loadBenchmarkCases(casesPath);
+  const [event] = testCase.cuts[0].goldEvents;
+  const duplicate = {
+    ...structuredClone(event),
+    id: "duplicate-event",
+    sequence: event.sequence + 1,
+    assertion: {
+      ...structuredClone(event.assertion),
+      id: "duplicate-assertion",
+    },
+  };
+
+  assert.throws(
+    () => assertModelTimelineDelta([event, duplicate]),
+    (error) => error.code === "event.duplicate-claim",
+  );
+
+  const lower = structuredClone(event);
+  lower.assertion.coordinate = {
+    minimum: event.assertion.coordinate.minimum,
+  };
+  const upper = {
+    ...structuredClone(event),
+    id: "upper-event",
+    sequence: event.sequence + 1,
+    assertion: {
+      ...structuredClone(event.assertion),
+      id: "upper-assertion",
+      coordinate: {
+        maximum: event.assertion.coordinate.maximum,
+      },
+    },
+  };
+  assert.doesNotThrow(() => assertModelTimelineDelta([lower, upper]));
+
+  assert.throws(
+    () =>
+      assertModelTimelineDelta(
+        Array.from({ length: 9 }, (_, index) => ({
+          ...structuredClone(event),
+          id: `event-${index}`,
+          sequence: index,
+          assertion: {
+            ...structuredClone(event.assertion),
+            id: `assertion-${index}`,
+            coordinate: { minimum: index, maximum: index },
+          },
+        })),
+      ),
+    (error) => error.code === "event.delta-limit",
+  );
+
+  const excessiveReferences = structuredClone(event);
+  excessiveReferences.assertion.evidenceRefs = Array.from(
+    { length: 9 },
+    (_, index) => `sha256:${index.toString(16).padStart(64, "0")}`,
+  );
+  assert.throws(
+    () => assertModelTimelineDelta([excessiveReferences]),
+    (error) => error.code === "event.reference-limit",
+  );
 });
 
 test("run configuration rejects unreported settings", async () => {
@@ -265,7 +351,7 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
 
   const run = await runModelInterfaceEval({
     adapter: [process.execPath, adapterPath, casesPath],
-    arms: ["direct", "narrative-memory", "timeline"],
+    arms: ["narrative-memory", "structured-extraction", "timeline"],
     caseIds: [],
     cases: casesPath,
     config: configPath,
@@ -283,17 +369,17 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
   assert.deepEqual(
     orderedResults.slice(0, 9).map(({ arm }) => arm),
     [
-      ...Array(3).fill("direct"),
       ...Array(3).fill("narrative-memory"),
+      ...Array(3).fill("structured-extraction"),
       ...Array(3).fill("timeline"),
     ],
   );
   assert.deepEqual(
     orderedResults.slice(9, 18).map(({ arm }) => arm),
     [
-      ...Array(3).fill("narrative-memory"),
+      ...Array(3).fill("structured-extraction"),
       ...Array(3).fill("timeline"),
-      ...Array(3).fill("direct"),
+      ...Array(3).fill("narrative-memory"),
     ],
   );
 
@@ -308,8 +394,8 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
     complete: true,
     repeats: 1,
   });
-  assert.equal(score.arms.direct.answerExactRate.value, 1);
   assert.equal(score.arms["narrative-memory"].answerExactRate.value, 1);
+  assert.equal(score.arms["structured-extraction"].endToEndExactRate.value, 1);
   assert.equal(score.arms.timeline.endToEndExactRate.value, 1);
   assert.equal(score.arms.timeline.answerExactRate.value, 1);
   assert.equal(score.arms.timeline.admissionRate.value, 1);
@@ -317,13 +403,19 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
   assert.equal(score.arms.timeline.projectedStateExactRate.value, 1);
   assert.equal(score.arms.timeline.queryExactRate.value, 1);
   assert.equal(score.arms.timeline.proofVerificationRate.value, 1);
-  assert.deepEqual(score.paired.timelineVsDirect, {
+  const tiedComparison = {
     win: 0,
     loss: 0,
     tie: 36,
     bothCorrect: 36,
     bothIncorrect: 0,
-  });
+    answerExactDifference: 0,
+    caseClusterCount: 12,
+    caseClusterSignFlipP: 1,
+  };
+  assert.deepEqual(score.paired.timelineVsNarrativeMemory, tiedComparison);
+  assert.deepEqual(score.paired.timelineVsStructuredExtraction, tiedComparison);
+  assert.equal(score.paired.timelineVsDirect, null);
 
   const tamperedPath = join(temporaryDirectory, "tampered-results.jsonl");
   const tampered = await readJsonLines(resultsPath);
@@ -340,7 +432,7 @@ test("gold fixture exercises the runner and scorer end to end", async (t) => {
       cases: casesPath,
       results: tamperedPath,
     }),
-    /answer does not match stored response/,
+    /narrative output does not match stored response/,
   );
 
   const hiddenPriorPath = join(
@@ -605,7 +697,7 @@ test("runner preserves semantic, memory, and admission failures", async (t) => {
     results
       .filter((result) => result.arm === "timeline")
       .map((result) => result.error?.code),
-    ["evidence.not-visible", "state.over-budget", "response.query"],
+    ["evidence.not-visible", "event.delta-limit", "response.query"],
   );
   assert.ok(
     results
@@ -1121,7 +1213,13 @@ input.on("line", (line) => {
     requestId: request.requestId,
   };
   const ids = assertionIds.get(request.caseId);
-  const events = cut.goldEvents.map((event) => {
+  const sourceEvents =
+    request.arm === "structured-extraction"
+      ? testCase.cuts
+          .slice(0, request.cut + 1)
+          .flatMap(({ goldEvents }) => goldEvents)
+      : cut.goldEvents;
+  const events = sourceEvents.map((event) => {
     const renamed = {
       ...event,
       id: "model-event-" + event.sequence,
@@ -1143,7 +1241,7 @@ input.on("line", (line) => {
     return renamed;
   });
   const response =
-    request.arm === "timeline"
+    request.arm === "timeline" || request.arm === "structured-extraction"
       ? {
           ...common,
           events,

@@ -88,10 +88,33 @@ export function validateRunDocumentV0Alpha3(
   value: unknown,
   options: TimelineLimitOptions = {},
 ): ValidationIssue[] {
+  return validateRunDocument(value, options);
+}
+
+export function validateRunDocumentV0Alpha3Bounded(
+  value: unknown,
+  maximumIssues: number,
+  options: TimelineLimitOptions = {},
+): ValidationIssue[] {
+  if (!Number.isSafeInteger(maximumIssues) || maximumIssues < 1) {
+    throw new RangeError("maximumIssues must be a positive safe integer");
+  }
+  return validateRunDocument(value, options, maximumIssues);
+}
+
+function validateRunDocument(
+  value: unknown,
+  options: TimelineLimitOptions,
+  maximumIssues?: number,
+): ValidationIssue[] {
   const limits = resolveTimelineLimits(options);
-  const issues: ValidationIssue[] = [];
+  const collector = createIssueCollector(maximumIssues);
+  const issues = collector.issues;
   const run = asRecord(value);
-  if (!run) return [{ path: "$", message: "must be an object" }];
+  if (!run) {
+    issues.push({ path: "$", message: "must be an object" });
+    return collector.finish();
+  }
 
   validateKeys(run, ["schema", "contract", "events"], "$", issues);
   if (run.schema !== "covenant.timeline.run.v0alpha3") {
@@ -105,7 +128,7 @@ export function validateRunDocumentV0Alpha3(
   if (!Array.isArray(run.events)) {
     issues.push({ path: "events", message: "must be an array" });
     appendCanonicalIssue(run, issues, limits);
-    return issues;
+    return collector.finish();
   }
   if (run.events.length > limits.maxEvents) {
     issues.push({
@@ -417,7 +440,43 @@ export function validateRunDocumentV0Alpha3(
   });
 
   appendCanonicalIssue(run, issues, limits);
-  return issues;
+  return collector.finish();
+}
+
+function createIssueCollector(maximumIssues?: number): {
+  readonly issues: ValidationIssue[];
+  finish(): ValidationIssue[];
+} {
+  const issues: ValidationIssue[] = [];
+  if (maximumIssues === undefined) {
+    return { issues, finish: () => issues };
+  }
+
+  const detailLimit = maximumIssues - 1;
+  let omitted = 0;
+  Object.defineProperty(issues, "push", {
+    configurable: true,
+    value: (...entries: ValidationIssue[]): number => {
+      const available = Math.max(0, detailLimit - issues.length);
+      Array.prototype.push.apply(issues, entries.slice(0, available));
+      omitted += Math.max(0, entries.length - available);
+      return issues.length;
+    },
+  });
+
+  return {
+    issues,
+    finish: () => {
+      delete (issues as { push?: unknown }).push;
+      if (omitted > 0) {
+        issues.push({
+          path: "$",
+          message: `validation omitted ${omitted} additional issues`,
+        });
+      }
+      return issues;
+    },
+  };
 }
 
 export function parseRunDocumentV0Alpha3(

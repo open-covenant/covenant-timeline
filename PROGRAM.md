@@ -1,20 +1,22 @@
 # Covenant Timeline Program
 
-## Current hypothesis
+## Recorded result
 
 Long-running agents need more than a transcript or summary to reason coherently
 about time. They need explicit events, intervals, uncertainty, corrections, and
 historical knowledge states that survive context compaction and process
 restarts.
 
-Covenant Timeline is testing a portable interface for that job. A model
-proposes typed temporal assertions and questions. A deterministic kernel
-returns bounded conclusions, possible relations, schedules, or contradictions
-with independently checkable evidence.
+Covenant Timeline implements a portable interface for that job. A model can
+propose typed temporal assertions and questions. A deterministic kernel returns
+bounded conclusions, possible relations, schedules, or contradictions with
+independently checkable evidence.
 
-The kernel is implemented. The central product question is whether models can
-reliably produce assertions and queries worth admitting. Broad adoption claims
-depend on evidence at that boundary.
+The preregistered model-interface evaluation found strong extraction and
+end-to-end accuracy, but rolling Timeline state did not outperform stateless
+full-context structured extraction on answer accuracy. The result rejects the
+current standalone model-memory claim. It does not change the kernel's
+deterministic properties.
 
 ## What exists
 
@@ -35,13 +37,16 @@ responsibility.
 
 ## Evidence program
 
-The [roadmap](./ROADMAP.md) is the canonical source for the project's three
-current gates: model reliability, operational value, and protocol portability.
+The [roadmap](./ROADMAP.md) records the completed model gate and the two
+remaining evidence tracks: operational value and protocol portability.
 
-The checked-in model-interface v1 suite is a public development and smoke
-benchmark. It has no published model result and cannot close the model gate.
-That requires the preregistered blinded scale evaluation defined in the
-roadmap. Pilot and interoperability work advance through exported evidence.
+The model-interface v1 suite includes a public development corpus and a
+preregistered public paraphrase corpus. Its 2026-07-31 GPT-5.6 Sol run completed
+all 432 observations and returned `kill`: Timeline beat bounded narrative
+memory but not stateless full-context structured extraction. The immutable
+[result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+contains the configuration, raw responses, scores, diagnostics, gate output,
+and checksums.
 
 ## Product boundary
 
@@ -66,24 +71,21 @@ It does not own:
 Existing agent and workflow runtimes should host Timeline through adapters.
 Covenant is the first reference adopter, not a required service.
 
-## What the evidence decides
+## What continues
 
-If the blinded model evaluation succeeds, the next interface work should follow
-its observed extraction and repair failures. If the pilot succeeds,
-operational features should follow the operator's measured friction. If the
-independent implementation succeeds, the interoperable subset can advance
-through the RFC process.
+Standalone model-memory expansion has stopped under the predeclared rule.
+Remaining work is limited to deterministic kernel maintenance, integration
+inside Covenant or systems that need audit and replay, independently operated
+pilots, and interoperability evidence. A new model-side product claim requires
+a separate preregistration; v1 is a fixed negative result.
 
-Until then, new protocol breadth is secondary to:
+New protocol breadth remains secondary to:
 
-- end-to-end temporal answer accuracy;
-- unsupported-definite and contradiction error rates;
 - reproducibility across knowledge cuts, restarts, and package versions;
 - semantic agreement across implementations; and
 - time and effort required for an external operator to adopt the system.
 
-Pause expansion if pinned inputs produce different semantic results, later
-corrections leak into earlier knowledge cuts, proofs cannot be checked from
-their bound inputs, model-generated assertions lose evidence references, or a
-claimed gain disappears when extraction and solver performance are measured
-separately.
+Pause kernel expansion if pinned inputs produce different semantic results,
+later corrections leak into earlier knowledge cuts, proofs cannot be checked
+from their bound inputs, or model-generated assertions lose evidence
+references.

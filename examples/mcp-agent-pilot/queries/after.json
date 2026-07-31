@@ -1,0 +1,8 @@
+{
+  "id": "query.review-minus-deploy.after",
+  "contextId": "actual",
+  "recordedThrough": 5,
+  "type": "difference.bounds",
+  "fromPointId": "deployed",
+  "toPointId": "review-finished"
+}

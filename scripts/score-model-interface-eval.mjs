@@ -18,18 +18,19 @@ import {
   FAMILIES,
   PROMPT_PATHS,
   REQUEST_SCHEMA,
+  assertModelTimelineDelta,
   assertNoCredentialFields,
+  assertStructuredEventOrder,
   assertValid,
   assertVisibleEvidenceRefs,
   canonicalEqual,
   continuityStateBytes,
   createModelEvalValidators,
   currentEvidence,
-  digestFile,
   digestText,
-  loadBenchmarkCases,
+  loadBenchmarkCasesArtifact,
   memoryBudgetBytes,
-  readJsonLines,
+  readJsonLinesArtifact,
   validateAdapterResponse,
   visibleEvidence,
 } from "./model-interface-eval.mjs";
@@ -41,11 +42,27 @@ export async function scoreModelInterfaceEval({
   results: resultsPath,
   cases: casesPath = defaultCasesPath,
 }) {
+  return (
+    await scoreModelInterfaceEvalArtifacts({
+      results: resultsPath,
+      cases: casesPath,
+    })
+  ).score;
+}
+
+export async function scoreModelInterfaceEvalArtifacts({
+  results: resultsPath,
+  cases: casesPath = defaultCasesPath,
+}) {
   const validators = await createModelEvalValidators();
-  const cases = await loadBenchmarkCases(casesPath, validators);
-  const results = await readJsonLines(resultsPath);
+  const [corpusArtifact, resultsArtifact] = await Promise.all([
+    loadBenchmarkCasesArtifact(casesPath, validators),
+    readJsonLinesArtifact(resultsPath),
+  ]);
+  const cases = corpusArtifact.cases;
+  const results = resultsArtifact.records;
   if (results.length === 0) throw new Error("results file is empty");
-  const corpusDigest = await digestFile(casesPath);
+  const corpusDigest = corpusArtifact.digest;
   const prompts = Object.fromEntries(
     await Promise.all(
       ARMS.map(async (arm) => [arm, await readFile(PROMPT_PATHS[arm], "utf8")]),
@@ -106,6 +123,12 @@ export async function scoreModelInterfaceEval({
     throw new Error("results were produced from different prompt files");
   }
   const selection = results[0].run.selection;
+  if (
+    selection.priorStateMode === "teacher-forced" &&
+    (selection.arms.length !== 1 || selection.arms[0] !== "timeline")
+  ) {
+    throw new Error("teacher-forced artifacts may contain only Timeline");
+  }
   const selectedCases = selection.cases.map((id) => {
     const testCase = caseById.get(id);
     if (!testCase) throw new Error(`run selection contains unknown case ${id}`);
@@ -156,6 +179,15 @@ export async function scoreModelInterfaceEval({
   }
   if (selection.arms.includes("timeline")) {
     attachTimelineDiagnostics(
+      observations,
+      selectedCases,
+      selection.repeats,
+      requests,
+      selection.priorStateMode,
+    );
+  }
+  if (selection.arms.includes("structured-extraction")) {
+    attachStructuredExtractionDiagnostics(
       observations,
       selectedCases,
       selection.repeats,
@@ -212,21 +244,54 @@ export async function scoreModelInterfaceEval({
       ];
     }),
   );
+  const repeatMetrics = Array.from(
+    { length: selection.repeats },
+    (_, repeat) => {
+      const repeatObservations = observations.filter(
+        (entry) => entry.repeat === repeat,
+      );
+      return {
+        repeat,
+        arms: Object.fromEntries(
+          selection.arms.map((arm) => [
+            arm,
+            metricsFor(
+              repeatObservations.filter((entry) => entry.arm === arm),
+              arm,
+            ),
+          ]),
+        ),
+        paired: pairedMetrics(repeatObservations),
+      };
+    },
+  );
 
   const score = {
     schema: "covenant.timeline.model-eval.score.v1",
     benchmark: BENCHMARK,
+    diagnosticOnly: selection.priorStateMode === "teacher-forced",
     run: results[0].run,
-    resultsDigest: await digestFile(resultsPath),
+    resultsDigest: resultsArtifact.digest,
     corpusDigest,
     coverage,
     arms,
+    teacherForcedPriorCuts:
+      selection.priorStateMode === "teacher-forced"
+        ? metricsFor(
+            observations.filter(
+              (entry) => entry.arm === "timeline" && entry.cut.index > 0,
+            ),
+            "timeline",
+            observations,
+          )
+        : null,
     families,
+    repeatMetrics,
     paired: pairedMetrics(observations),
     failures: failureCounts(results),
   };
   assertValid(validators.score, score, "benchmark score");
-  return score;
+  return { score, cases, results };
 }
 
 function validateResult(result, caseById, label) {
@@ -420,6 +485,7 @@ function validateStoredRequest(result, caseById, prompts, label) {
     ...(result.arm === "timeline"
       ? ["priorRun", "knowledgeCuts", "stateBudgetBytes"]
       : []),
+    ...(result.arm === "structured-extraction" ? ["stateBudgetBytes"] : []),
   ];
   assertObjectKeys(request.input, expectedKeys, `${label}.requestText.input`);
   const cut = testCase.cuts[result.cut];
@@ -461,6 +527,12 @@ function validateStoredRequest(result, caseById, prompts, label) {
       throw new Error(`${label}: stored Timeline continuity input is invalid`);
     }
   }
+  if (
+    result.arm === "structured-extraction" &&
+    request.input.stateBudgetBytes !== memoryBudgetBytes(testCase, result.cut)
+  ) {
+    throw new Error(`${label}: stored structured-extraction budget is invalid`);
+  }
   return request;
 }
 
@@ -476,6 +548,19 @@ function assertObjectKeys(value, expected, label) {
 }
 
 function validateStoredDelta(result, testCase, label) {
+  try {
+    assertModelTimelineDelta(
+      result.proposedEvents ?? [],
+      `${label}.proposedEvents`,
+    );
+  } catch (error) {
+    return {
+      code:
+        error && typeof error === "object" && "code" in error
+          ? error.code
+          : "event.delta-invalid",
+    };
+  }
   for (const [index, event] of (result.proposedEvents ?? []).entries()) {
     if (event.type === "point.declared" || event.type === "interval.declared") {
       return { code: "event.declaration-not-allowed" };
@@ -483,7 +568,9 @@ function validateStoredDelta(result, testCase, label) {
     try {
       assertVisibleEvidenceRefs(
         event,
-        currentEvidence(testCase, result.cut),
+        result.arm === "structured-extraction"
+          ? visibleEvidence(testCase, result.cut)
+          : currentEvidence(testCase, result.cut),
         `${label}.proposedEvents[${index}]`,
       );
     } catch (error) {
@@ -492,6 +579,22 @@ function validateStoredDelta(result, testCase, label) {
           error && typeof error === "object" && "code" in error
             ? error.code
             : "evidence.not-visible",
+      };
+    }
+  }
+  if (result.arm === "structured-extraction") {
+    try {
+      assertStructuredEventOrder(
+        result.proposedEvents ?? [],
+        visibleEvidence(testCase, result.cut),
+        `${label}.proposedEvents`,
+      );
+    } catch (error) {
+      return {
+        code:
+          error && typeof error === "object" && "code" in error
+            ? error.code
+            : "event.evidence-order",
       };
     }
   }
@@ -592,11 +695,19 @@ function validateRawResponse(result, validators, label) {
     !canonicalEqual(response.events, result.proposedEvents) ||
     !canonicalEqual(response.query, result.proposedQuery)
   ) {
-    throw new Error(`${label}: Timeline output does not match stored response`);
+    throw new Error(
+      `${label}: structured output does not match stored response`,
+    );
   }
 }
 
-function attachTimelineDiagnostics(observations, cases, repeats, requests) {
+function attachTimelineDiagnostics(
+  observations,
+  cases,
+  repeats,
+  requests,
+  priorStateMode,
+) {
   const timeline = new Map(
     observations
       .filter((entry) => entry.arm === "timeline")
@@ -620,6 +731,14 @@ function attachTimelineDiagnostics(observations, cases, repeats, requests) {
       let missingEarlierCut = false;
 
       for (const cut of testCase.cuts) {
+        if (priorStateMode === "teacher-forced") {
+          predictedPrior = [...goldPrior];
+          predictedKnowledgeCuts.splice(
+            0,
+            predictedKnowledgeCuts.length,
+            ...goldKnowledgeCuts,
+          );
+        }
         const observation = timeline.get(
           resultKey({
             caseId: testCase.id,
@@ -711,15 +830,151 @@ function attachTimelineDiagnostics(observations, cases, repeats, requests) {
           observation.queryExact &&
           observation.stateSemanticExact;
 
-        if (observation.result?.admitted === true) {
+        if (
+          priorStateMode === "rolling" &&
+          observation.result?.admitted === true
+        ) {
           predictedPrior = predictedCandidate;
         }
-        predictedKnowledgeCuts.push(knowledgeCut(cut.index, predictedPrior));
+        if (priorStateMode === "rolling") {
+          predictedKnowledgeCuts.push(knowledgeCut(cut.index, predictedPrior));
+        }
         goldPrior = goldCandidate;
         goldKnowledgeCuts.push(knowledgeCut(cut.index, goldPrior));
       }
     }
   }
+}
+
+function attachStructuredExtractionDiagnostics(
+  observations,
+  cases,
+  repeats,
+  requests,
+) {
+  const records = new Map(
+    observations
+      .filter((entry) => entry.arm === "structured-extraction")
+      .map((entry) => [
+        resultKey({
+          caseId: entry.testCase.id,
+          arm: entry.arm,
+          repeat: entry.repeat,
+          cut: entry.cut.index,
+        }),
+        entry,
+      ]),
+  );
+
+  for (let repeat = 0; repeat < repeats; repeat += 1) {
+    for (const testCase of cases) {
+      const goldEvents = [...testCase.setupEvents];
+      const goldKnowledgeCuts = [];
+      for (const cut of testCase.cuts) {
+        goldEvents.push(...cut.goldEvents);
+        goldKnowledgeCuts.push(knowledgeCut(cut.index, goldEvents));
+        const observation = records.get(
+          resultKey({
+            caseId: testCase.id,
+            arm: "structured-extraction",
+            repeat,
+            cut: cut.index,
+          }),
+        );
+        if (!observation?.result) continue;
+
+        const request = requests.get(observation.result.requestId);
+        if (
+          !canonicalEqual(
+            request.input.evidence,
+            visibleEvidence(testCase, cut.index),
+          )
+        ) {
+          throw new Error(
+            `${testCase.id} repeat ${repeat} cut ${cut.index}: structured extraction did not receive the complete visible record`,
+          );
+        }
+
+        const proposed = observation.result.proposedEvents ?? [];
+        const candidateEvents = [...testCase.setupEvents, ...proposed];
+        const candidateKnowledgeCuts = inferStructuredKnowledgeCuts(
+          testCase,
+          cut.index,
+          proposed,
+        );
+        observation.assertions = multisetComparison(
+          normalizeAssertionDelta(testCase.setupEvents, proposed),
+          normalizeAssertionDelta(
+            testCase.setupEvents,
+            goldEvents.slice(testCase.setupEvents.length),
+          ),
+        );
+        observation.queryExact =
+          observation.result.proposedQuery !== null &&
+          canonicalEqual(
+            normalizeQuery(
+              observation.result.proposedQuery,
+              candidateKnowledgeCuts,
+            ),
+            normalizeQuery(cut.goldQuery, goldKnowledgeCuts),
+          );
+
+        const label = `${testCase.id} repeat ${repeat} cut ${cut.index}`;
+        const predictedRun = reproduceTimelineResult(
+          observation.result,
+          testCase,
+          cut,
+          candidateEvents,
+          [],
+          label,
+        );
+        const goldRun = parseRunDocumentV0Alpha3({
+          schema: "covenant.timeline.run.v0alpha3",
+          contract: testCase.contract,
+          events: goldEvents,
+        });
+        observation.stateSemanticExact =
+          observation.result.admitted === true &&
+          canonicalEqual(
+            projectedStateSignature(predictedRun, testCase.setupEvents),
+            projectedStateSignature(goldRun, testCase.setupEvents),
+          );
+        observation.endToEndExact =
+          observation.answerExact &&
+          observation.result.admitted === true &&
+          observation.result.proofVerified === true &&
+          observation.queryExact &&
+          observation.stateSemanticExact;
+      }
+    }
+  }
+}
+
+function inferStructuredKnowledgeCuts(testCase, currentCut, events) {
+  const evidenceCut = new Map(
+    testCase.evidence.map((evidence) => [evidence.digest, evidence.cut]),
+  );
+  let eventIndex = 0;
+  let recordedThrough =
+    testCase.setupEvents.length === 0 ? null : testCase.setupEvents.length - 1;
+  return testCase.cuts.slice(0, currentCut + 1).map((cut) => {
+    while (eventIndex < events.length) {
+      const event = events[eventIndex];
+      const references =
+        event.type === "assertion.retracted"
+          ? event.evidenceRefs
+          : event.assertion.evidenceRefs;
+      const eventCut = Math.max(
+        ...references.map(
+          (reference) => evidenceCut.get(reference) ?? Infinity,
+        ),
+      );
+      if (eventCut > cut.index) break;
+      recordedThrough = event.sequence;
+      eventIndex += 1;
+    }
+    return { cut: cut.index, recordedThrough };
+  });
 }
 
 function reproduceTimelineResult(
@@ -921,7 +1176,7 @@ function knowledgeCut(cut, events) {
   };
 }
 
-function projectedStateSignature(run, setupEvents) {
+export function projectedStateSignature(run, setupEvents) {
   const recordedThrough =
     run.events.length === 0 ? null : run.events.length - 1;
   const points = setupEvents
@@ -1071,7 +1326,7 @@ function groupBy(values, keyFor) {
   return groups;
 }
 
-function metricsFor(observations, arm) {
+function metricsFor(observations, arm, historyObservations = observations) {
   const answerExact = observations.filter((entry) => entry.answerExact).length;
   const unsupported = observations.filter((entry) =>
     entry.cut.traits.includes("unsupported-definite-risk"),
@@ -1129,7 +1384,7 @@ function metricsFor(observations, arm) {
     ),
     historicalReconstructionAccuracy: rate(
       historical.filter(
-        (entry) => entry.exact && matchesInitialCut(entry, observations),
+        (entry) => entry.exact && matchesInitialCut(entry, historyObservations),
       ).length,
       historical.length,
     ),
@@ -1155,7 +1410,7 @@ function metricsFor(observations, arm) {
     ),
   };
 
-  if (arm === "timeline") {
+  if (arm === "structured-extraction" || arm === "timeline") {
     const assertionCounts = observations.reduce(
       (total, entry) => ({
         truePositive:
@@ -1247,6 +1502,10 @@ function pairedMetrics(observations) {
       arms.has("timeline") && arms.has("narrative-memory")
         ? compareArms(observations, "timeline", "narrative-memory")
         : null,
+    timelineVsStructuredExtraction:
+      arms.has("timeline") && arms.has("structured-extraction")
+        ? compareArms(observations, "timeline", "structured-extraction")
+        : null,
     timelineVsDirect:
       arms.has("timeline") && arms.has("direct")
         ? compareArms(observations, "timeline", "direct")
@@ -1265,6 +1524,7 @@ function compareArms(observations, candidateArm, baselineArm) {
   let loss = 0;
   let bothCorrect = 0;
   let bothIncorrect = 0;
+  const clusterDeltas = new Map();
 
   for (const entry of observations.filter(
     (item) => item.arm === candidateArm,
@@ -1276,14 +1536,45 @@ function compareArms(observations, candidateArm, baselineArm) {
     else if (!entry.answerExact && baseline.answerExact) loss += 1;
     else if (entry.answerExact) bothCorrect += 1;
     else bothIncorrect += 1;
+    const deltas = clusterDeltas.get(entry.testCase.id) ?? [];
+    deltas.push(Number(entry.answerExact) - Number(baseline.answerExact));
+    clusterDeltas.set(entry.testCase.id, deltas);
   }
+  const total = win + loss + bothCorrect + bothIncorrect;
+  const caseMeans = [...clusterDeltas.values()].map(
+    (values) => values.reduce((sum, value) => sum + value, 0) / values.length,
+  );
   return {
     win,
     loss,
     tie: bothCorrect + bothIncorrect,
     bothCorrect,
     bothIncorrect,
+    answerExactDifference: total === 0 ? null : (win - loss) / total,
+    caseClusterCount: caseMeans.length,
+    caseClusterSignFlipP: exactSignFlipP(caseMeans),
   };
+}
+
+export function exactSignFlipP(values) {
+  if (values.length === 0) return null;
+  if (values.length > 20) {
+    throw new Error("exact sign-flip comparison supports at most 20 clusters");
+  }
+  const observed =
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const permutations = 2 ** values.length;
+  let atLeastObserved = 0;
+  for (let mask = 0; mask < permutations; mask += 1) {
+    let total = 0;
+    for (let index = 0; index < values.length; index += 1) {
+      total += (mask & (2 ** index) ? 1 : -1) * values[index];
+    }
+    if (total / values.length >= observed - 1e-12) {
+      atLeastObserved += 1;
+    }
+  }
+  return atLeastObserved / permutations;
 }
 
 function normalizeAssertionDelta(priorEvents, delta) {

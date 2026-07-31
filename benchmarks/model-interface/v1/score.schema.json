@@ -23,6 +23,11 @@
       "minimum": 0,
       "maximum": 1
     },
+    "signedUnitInterval": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1
+    },
     "nullableFiniteNonNegativeNumber": {
       "oneOf": [
         {
@@ -299,13 +304,16 @@
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
-      "maxProperties": 3,
+      "maxProperties": 4,
       "properties": {
         "direct": {
           "$ref": "#/$defs/commonMetrics"
         },
         "narrative-memory": {
           "$ref": "#/$defs/commonMetrics"
+        },
+        "structured-extraction": {
+          "$ref": "#/$defs/timelineMetrics"
         },
         "timeline": {
           "$ref": "#/$defs/timelineMetrics"
@@ -315,7 +323,16 @@
     "pairedCounts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["win", "loss", "tie", "bothCorrect", "bothIncorrect"],
+      "required": [
+        "win",
+        "loss",
+        "tie",
+        "bothCorrect",
+        "bothIncorrect",
+        "answerExactDifference",
+        "caseClusterCount",
+        "caseClusterSignFlipP"
+      ],
       "properties": {
         "win": {
           "$ref": "#/$defs/count"
@@ -331,6 +348,22 @@
         },
         "bothIncorrect": {
           "$ref": "#/$defs/count"
+        },
+        "answerExactDifference": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/signedUnitInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "caseClusterCount": {
+          "$ref": "#/$defs/count"
+        },
+        "caseClusterSignFlipP": {
+          "$ref": "#/$defs/nullableUnitInterval"
         }
       }
     },
@@ -347,9 +380,16 @@
     "pairedMetrics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["timelineVsNarrativeMemory", "timelineVsDirect"],
+      "required": [
+        "timelineVsNarrativeMemory",
+        "timelineVsStructuredExtraction",
+        "timelineVsDirect"
+      ],
       "properties": {
         "timelineVsNarrativeMemory": {
+          "$ref": "#/$defs/nullablePairedCounts"
+        },
+        "timelineVsStructuredExtraction": {
           "$ref": "#/$defs/nullablePairedCounts"
         },
         "timelineVsDirect": {
@@ -362,6 +402,24 @@
       "additionalProperties": false,
       "required": ["arms", "paired"],
       "properties": {
+        "arms": {
+          "$ref": "#/$defs/armMetrics"
+        },
+        "paired": {
+          "$ref": "#/$defs/pairedMetrics"
+        }
+      }
+    },
+    "repeatMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repeat", "arms", "paired"],
+      "properties": {
+        "repeat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 19
+        },
         "arms": {
           "$ref": "#/$defs/armMetrics"
         },
@@ -476,12 +534,15 @@
   "required": [
     "schema",
     "benchmark",
+    "diagnosticOnly",
     "run",
     "resultsDigest",
     "corpusDigest",
     "coverage",
     "arms",
+    "teacherForcedPriorCuts",
     "families",
+    "repeatMetrics",
     "paired",
     "failures"
   ],
@@ -491,6 +552,9 @@
     },
     "benchmark": {
       "const": "model-interface-v1"
+    },
+    "diagnosticOnly": {
+      "type": "boolean"
     },
     "run": {
       "$ref": "https://covenant-timeline.org/benchmarks/model-interface/v1/result.schema.json#/$defs/runMetadata"
@@ -507,8 +571,26 @@
     "arms": {
       "$ref": "#/$defs/armMetrics"
     },
+    "teacherForcedPriorCuts": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/timelineMetrics"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "families": {
       "$ref": "#/$defs/families"
+    },
+    "repeatMetrics": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/repeatMetric"
+      }
     },
     "paired": {
       "$ref": "#/$defs/pairedMetrics"

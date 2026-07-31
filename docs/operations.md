@@ -53,8 +53,13 @@ metric labels. They create high cardinality and may disclose relationships.
 ## Logging
 
 Log stable codes, counts, pinned versions, and digests. Treat complete reports
-as potentially sensitive. Never log evidence payloads, credentials, signature
-material, or raw external-system responses by default.
+as potentially sensitive. Never log evidence payloads, model-proposal source
+text or quotes, credentials, signature material, or raw external-system
+responses by default.
+
+Do not treat evidence or quote digests as confidential substitutes for source
+text. Low-entropy source material can be dictionary-tested, so restrict and
+redact digests and byte spans according to the source's sensitivity.
 
 ## Limits
 
@@ -77,12 +82,51 @@ The MCP server applies lower defaults:
 
 - 256 locally stored runs;
 - 2,000 events and 4 MiB per stored run;
+- eight run-discovery entries per list call;
 - 1 MiB per incoming MCP message;
 - 32 axes and contexts;
 - 512 points, 256 intervals, and 1,024 assertions;
 - 4,096 solver edges and 2,000,000 operations per request.
 
+The model-proposal tool lowers these limits again:
+
+- eight changes and eight supports per change;
+- 32 evidence entries, 64 KiB per entry, and 256 KiB in total;
+- 4 KiB per exact quote;
+- 128 reference handles and 128 assertion handles;
+- 32 historical knowledge-cut handles; and
+- 512 KiB, 2,048 JSON values, and 12 nesting levels per proposal.
+
+Evidence and quote limits are enforced on UTF-8 bytes by the compiler. The MCP
+schema also bounds collections and strings for tool discovery.
+
+The core proposal compiler accepts at most 32 changes, eight supports per
+change, 1,310,720 encoded proposal bytes, 4,096 JSON values, and 12 nesting
+levels. Option overrides can only lower exported defaults. Validation returns
+at most 64 bounded, control-character-escaped issues. Consumers receiving a
+candidate across a process boundary should retain the exact proposal and host
+inputs and call `verifyTemporalModelProposalCandidateV1`; JSON Schema
+validation alone does not establish artifact integrity.
+
+The request-scoped provider schema has lower non-configurable ceilings: eight
+changes, four supports per change, 512 catalog values, 1,000 emitted enum
+entries, 15,000 characters in a string enum above 250 values, and 64 KiB of
+schema JSON. Projection hosts are also capped at 64 MiB, 1.1 million JSON
+values, and 128 nesting levels. The projection omits quote-length and
+safe-integer ranges to keep provider grammar construction bounded; the compiler
+applies those checks to the model response. Narrow the host catalogs or split
+the work into multiple requests when schema generation reaches a ceiling.
+Never truncate an exposed catalog or fall back silently to unconstrained text
+generation.
+
 The MCP limits are enforced independently from the broader core defaults.
+Continue catalog discovery with the returned opaque cursor and restart from the
+first page if a catalog mutation makes that cursor stale. Standard MCP
+discovery advertises the `timeline://run/{runId}` resource template but does not
+return a partial dynamic resource list. Discover every run ID through
+`timeline_list_runs`, then read the resource directly. Protocol frames that are
+malformed or exceed the message limit terminate the stdio server with a nonzero
+status so a supervisor can distinguish failure from a clean stop.
 
 ## Dispatch and Recovery
 
@@ -123,10 +167,27 @@ modes; an existing parent or data directory must already have suitable access
 controls. On Windows, configure a user-private ACL. Do not place the reference
 store on NFS, SMB, or another shared filesystem.
 
-Each append requires the current whole-run digest. The server validates the
-complete candidate run, writes canonical bytes to a private temporary file,
-syncs it, and atomically replaces the stored envelope under an exclusive lock.
-Exact event-ID retries are idempotent even if the supplied digest is stale.
+Each direct event requires the current whole-run digest. A model-proposal batch
+requires the exact base revision and whole-run digest. The server reconstructs
+and verifies that prefix, compiles against it, validates the complete candidate
+run, writes canonical bytes to a private temporary file, syncs it, and
+atomically replaces the stored envelope under an exclusive lock.
+
+An exact same-ID event retry is idempotent even if its supplied digest is stale.
+A proposal retry is idempotent when the same candidate event bytes already
+occupy the bound prefix, including after later events have been appended. An
+incomplete prefix match, changed order or content, or competing identifier
+fails with a conflict rather than being merged or repaired.
+
+The MCP store does not retain proposal, query, or quote-span metadata. When
+`applied` is `false`, the returned proposal digest, query, and provenance
+describe the current compilation. They are not evidence of which proposal or
+source span originally produced the event-equivalent stored batch.
+
+Proposal evidence text and quotes are processed transiently. They are not
+written to the Timeline data directory or returned by the tool. Retain the
+evidence bytes and returned digest-and-span provenance in an appropriately
+protected external store.
 
 After `timeline.mcp.store.indeterminate`, reload the run before retrying because
 the write may have committed. After an unclean exit, verify that no writer is
@@ -138,7 +199,8 @@ be removed.
 Back up the canonical `.json` files only while the server is stopped or through
 a filesystem snapshot that preserves point-in-time consistency. A restored
 file is accepted only if its canonical envelope, run identity, revision, and
-whole-run digest all verify.
+whole-run digest all verify. Store reads reject symbolic links, FIFOs, devices,
+and other non-regular entries rather than following or blocking on them.
 
 ## Incident Response
 

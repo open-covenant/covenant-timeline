@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { TextDecoder } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import {
@@ -13,9 +14,23 @@ import {
   reasonTemporalQueryV0Alpha3,
   verifyTemporalConclusionV0Alpha3,
 } from "../packages/prototype/dist/index.js";
+import {
+  MAX_TIMELINE_EVENTS_PER_RESPONSE,
+  MAX_TIMELINE_REFERENCES_PER_EVENT,
+} from "./model-eval-output-schema.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
-export const ARMS = ["direct", "narrative-memory", "timeline"];
+export const ARMS = [
+  "direct",
+  "narrative-memory",
+  "structured-extraction",
+  "timeline",
+];
+export const DEFAULT_ARMS = [
+  "narrative-memory",
+  "structured-extraction",
+  "timeline",
+];
 export const BENCHMARK = "model-interface-v1";
 export const CASE_SCHEMA = "covenant.timeline.model-eval.case.v1";
 export const CONFIG_SCHEMA = "covenant.timeline.model-eval.config.v1";
@@ -24,6 +39,7 @@ export const RESPONSE_SCHEMA = "covenant.timeline.model-eval.response.v1";
 export const ADAPTER_ERROR_SCHEMA =
   "covenant.timeline.model-eval.adapter-error.v1";
 export const RESULT_SCHEMA = "covenant.timeline.model-eval.result.v1";
+export const DIAGNOSTICS_SCHEMA = "covenant.timeline.model-eval.diagnostics.v1";
 export const CONTINUITY_BUDGET_BYTES = 4 * 1024;
 export const MAX_REPEATS = 20;
 export const MAX_REQUEST_BYTES = 256 * 1024;
@@ -33,6 +49,8 @@ export const PROMPT_PATHS = {
   direct: "benchmarks/model-interface/v1/prompts/direct.md",
   "narrative-memory":
     "benchmarks/model-interface/v1/prompts/narrative-memory.md",
+  "structured-extraction":
+    "benchmarks/model-interface/v1/prompts/structured-extraction.md",
   timeline: "benchmarks/model-interface/v1/prompts/timeline.md",
 };
 
@@ -57,6 +75,14 @@ const resultSchemaPath = join(
 const scoreSchemaPath = join(
   root,
   "benchmarks/model-interface/v1/score.schema.json",
+);
+const diagnosticsSchemaPath = join(
+  root,
+  "benchmarks/model-interface/v1/diagnostics.schema.json",
+);
+const gateSchemaPath = join(
+  root,
+  "benchmarks/model-interface/v1/gate.schema.json",
 );
 const schemaDirectory = join(root, "schemas/v0alpha3");
 const schemaFiles = [
@@ -107,6 +133,16 @@ export async function createModelEvalValidators() {
     scoreSchemaPath,
   );
   ajv.addSchema(scoreSchema);
+  const diagnosticsSchema = parseStrictJson(
+    await readFile(diagnosticsSchemaPath, "utf8"),
+    diagnosticsSchemaPath,
+  );
+  ajv.addSchema(diagnosticsSchema);
+  const gateSchema = parseStrictJson(
+    await readFile(gateSchemaPath, "utf8"),
+    gateSchemaPath,
+  );
+  ajv.addSchema(gateSchema);
 
   return {
     config: requireValidator(
@@ -126,6 +162,12 @@ export async function createModelEvalValidators() {
     ),
     result: requireValidator(ajv, resultSchema.$id, "benchmark result"),
     score: requireValidator(ajv, scoreSchema.$id, "benchmark score"),
+    diagnostics: requireValidator(
+      ajv,
+      diagnosticsSchema.$id,
+      "benchmark diagnostics",
+    ),
+    gate: requireValidator(ajv, gateSchema.$id, "frontier-model gate"),
     semanticResult: requireValidator(
       ajv,
       "https://covenant-timeline.org/schemas/v0alpha3/conclusion.schema.json#/$defs/semanticResult",
@@ -150,7 +192,16 @@ export async function loadRunConfig(path, validator) {
 
 export async function loadBenchmarkCases(path = defaultCasesPath, validators) {
   validators ??= await createModelEvalValidators();
-  const cases = await readJsonLines(path, maxCorpusBytes);
+  return (await loadBenchmarkCasesArtifact(path, validators)).cases;
+}
+
+export async function loadBenchmarkCasesArtifact(
+  path = defaultCasesPath,
+  validators,
+) {
+  validators ??= await createModelEvalValidators();
+  const artifact = await readJsonLinesArtifact(path, maxCorpusBytes);
+  const cases = artifact.records;
   const ids = new Set();
   const modelCaseIds = new Set();
   const familyCounts = new Map(FAMILIES.map((family) => [family, 0]));
@@ -302,20 +353,39 @@ export async function loadBenchmarkCases(path = defaultCasesPath, validators) {
     }
   }
 
-  return cases;
+  return { cases, digest: artifact.digest };
 }
 
 export async function readJsonLines(path, maxBytes = MAX_RESULTS_BYTES) {
-  const text = await readBoundedText(path, maxBytes);
-  const withoutFinalNewline = text.endsWith("\n") ? text.slice(0, -1) : text;
-  if (withoutFinalNewline.length === 0) return [];
+  return (await readJsonLinesArtifact(path, maxBytes)).records;
+}
 
-  return withoutFinalNewline.split("\n").map((line, index) => {
+export async function readJsonLinesArtifact(
+  path,
+  maxBytes = MAX_RESULTS_BYTES,
+) {
+  const bytes = await readBoundedBytes(path, maxBytes);
+  let text;
+  try {
+    text = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+  } catch {
+    fail(`${path}: file is not valid UTF-8`);
+  }
+  const withoutFinalNewline = text.endsWith("\n") ? text.slice(0, -1) : text;
+  if (withoutFinalNewline.length === 0) {
+    return { records: [], digest: byteDigest(bytes) };
+  }
+
+  const records = withoutFinalNewline.split("\n").map((line, index) => {
     if (line.trim().length === 0) {
       fail(`${path}:${index + 1}: blank JSONL record`);
     }
     return parseStrictJson(line, `${path}:${index + 1}`);
   });
+  return { records, digest: byteDigest(bytes) };
 }
 
 export async function digestFile(path, maxBytes = MAX_RESULTS_BYTES) {
@@ -341,6 +411,18 @@ export async function digestFile(path, maxBytes = MAX_RESULTS_BYTES) {
 }
 
 async function readBoundedText(path, maxBytes) {
+  const bytes = await readBoundedBytes(path, maxBytes);
+  try {
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+  } catch {
+    fail(`${path}: file is not valid UTF-8`);
+  }
+}
+
+async function readBoundedBytes(path, maxBytes) {
   const metadata = await stat(path);
   if (!metadata.isFile()) throw new ModelEvalError(`${path}: must be a file`);
   if (metadata.size > maxBytes) {
@@ -359,7 +441,7 @@ async function readBoundedText(path, maxBytes) {
     }
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks, bytes).toString("utf8");
+  return Buffer.concat(chunks, bytes);
 }
 
 export function visibleEvidence(testCase, cut) {
@@ -410,11 +492,122 @@ export function assertVisibleEvidenceRefs(event, evidence, label = "event") {
   }
 }
 
+export function assertStructuredEventOrder(
+  events,
+  evidence,
+  label = "adapter response.events",
+) {
+  const cutByDigest = new Map(evidence.map(({ cut, digest }) => [digest, cut]));
+  let previousCut = -1;
+  for (const [index, event] of events.entries()) {
+    const cuts = eventEvidenceRefs(event).map((reference) =>
+      cutByDigest.get(reference),
+    );
+    if (cuts.length === 0 || cuts.some((cut) => !Number.isSafeInteger(cut))) {
+      continue;
+    }
+    const eventCut = Math.max(...cuts);
+    if (eventCut < previousCut) {
+      throw new ModelEvalError(
+        `${label}[${index}]: events must follow evidence-cut order`,
+        {
+          code: "event.evidence-order",
+          stage: "admission",
+        },
+      );
+    }
+    previousCut = eventCut;
+  }
+}
+
+export function assertModelTimelineDelta(
+  events,
+  label = "adapter response.events",
+) {
+  if (events.length > MAX_TIMELINE_EVENTS_PER_RESPONSE) {
+    throw new ModelEvalError(
+      `${label}: must contain at most ${MAX_TIMELINE_EVENTS_PER_RESPONSE} events`,
+      {
+        code: "event.delta-limit",
+        stage: "admission",
+      },
+    );
+  }
+
+  const fingerprints = new Map();
+  for (const [index, event] of events.entries()) {
+    const evidenceRefs = eventEvidenceRefs(event);
+    if (evidenceRefs.length > MAX_TIMELINE_REFERENCES_PER_EVENT) {
+      throw new ModelEvalError(
+        `${label}[${index}]: evidenceRefs must contain at most ${MAX_TIMELINE_REFERENCES_PER_EVENT} entries`,
+        {
+          code: "event.reference-limit",
+          stage: "admission",
+        },
+      );
+    }
+    const supersedes = event?.assertion?.supersedes ?? [];
+    if (supersedes.length > MAX_TIMELINE_REFERENCES_PER_EVENT) {
+      throw new ModelEvalError(
+        `${label}[${index}]: supersedes must contain at most ${MAX_TIMELINE_REFERENCES_PER_EVENT} entries`,
+        {
+          code: "event.reference-limit",
+          stage: "admission",
+        },
+      );
+    }
+
+    const fingerprint = modelEventFingerprint(event);
+    const duplicateIndex = fingerprints.get(fingerprint);
+    if (duplicateIndex !== undefined) {
+      throw new ModelEvalError(
+        `${label}[${index}]: duplicates the temporal claim in ${label}[${duplicateIndex}]`,
+        {
+          code: "event.duplicate-claim",
+          stage: "admission",
+        },
+      );
+    }
+    fingerprints.set(fingerprint, index);
+  }
+}
+
 export function eventEvidenceRefs(event) {
   if (event?.type === "assertion.retracted") {
     return event.evidenceRefs ?? [];
   }
   return event?.assertion?.evidenceRefs ?? [];
+}
+
+function modelEventFingerprint(event) {
+  if (event.type === "assertion.retracted") {
+    return canonicalJson({
+      type: event.type,
+      assertionId: event.assertionId,
+      evidenceRefs: normalizedReferences(event.evidenceRefs),
+    });
+  }
+
+  if (event.assertion === undefined) {
+    const { schema: _schema, id: _id, sequence: _sequence, ...claim } = event;
+    return canonicalJson(claim);
+  }
+
+  const { id: _id, evidenceRefs, supersedes, ...claim } = event.assertion;
+  return canonicalJson({
+    type: event.type,
+    assertion: {
+      ...claim,
+      evidenceRefs: normalizedReferences(evidenceRefs),
+      ...(supersedes === undefined
+        ? {}
+        : { supersedes: normalizedReferences(supersedes) }),
+    },
+  });
+}
+
+function normalizedReferences(references) {
+  return [...references].sort();
 }
 
 export function canonicalEqual(left, right) {
@@ -502,7 +695,7 @@ export function validateAdapterResponse(response, request, validators) {
       code: "response.memory",
     });
   }
-  if (request.arm === "timeline") {
+  if (request.arm === "structured-extraction" || request.arm === "timeline") {
     if (!Array.isArray(response.events)) {
       throw new ModelEvalError("adapter response.events: must be an array", {
         code: "response.events",

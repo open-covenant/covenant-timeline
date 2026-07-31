@@ -18,6 +18,7 @@ import {
 } from "./mcp-package-contents.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const coreDirectory = join(root, "packages/prototype");
 const mcpDirectory = join(root, "packages/mcp-server");
 const mcpManifest = JSON.parse(
   await readFile(join(mcpDirectory, "package.json"), "utf8"),
@@ -42,13 +43,20 @@ try {
     mkdir(dataDirectory),
   ]);
 
-  run(command("pnpm"), ["pack", "--pack-destination", archiveDirectory], {
-    cwd: mcpDirectory,
-  });
+  for (const directory of [coreDirectory, mcpDirectory]) {
+    run(command("pnpm"), ["pack", "--pack-destination", archiveDirectory], {
+      cwd: directory,
+    });
+  }
 
   const archives = (await readdir(archiveDirectory))
     .filter((file) => file.endsWith(".tgz"))
     .sort();
+  const coreArchive = onlyMatch(
+    archives,
+    /^covenant-org-timeline-\d.*\.tgz$/,
+    "Timeline package",
+  );
   const mcpArchive = onlyMatch(
     archives,
     /^covenant-org-timeline-mcp-\d.*\.tgz$/,
@@ -87,7 +95,7 @@ try {
       "--no-fund",
       "--registry=https://registry.npmjs.org/",
       `@modelcontextprotocol/client@${mcpProtocolVersion}`,
-      `@covenant-org/timeline@${coreVersion}`,
+      join(archiveDirectory, coreArchive),
       join(archiveDirectory, mcpArchive),
     ],
     {
@@ -130,6 +138,21 @@ try {
   ) {
     throw new Error("packed MCP package retained a workspace dependency");
   }
+  const installedCoreManifest = JSON.parse(
+    await readFile(
+      join(
+        installDirectory,
+        "node_modules",
+        "@covenant-org",
+        "timeline",
+        "package.json",
+      ),
+      "utf8",
+    ),
+  );
+  if (installedCoreManifest.version !== coreVersion) {
+    throw new Error("installed Timeline package does not match the MCP pin");
+  }
 
   const executable = join(
     installDirectory,
@@ -168,13 +191,19 @@ try {
     smoke.after !== 100 ||
     smoke.events !== fixture.events.length ||
     smoke.proofs !== true ||
+    smoke.proposal?.atomic !== true ||
+    smoke.proposal?.events !== 2 ||
+    smoke.proposal?.minimum !== 100 ||
+    smoke.proposal?.maximum !== 100 ||
+    smoke.proposal?.sourceTextAbsent !== true ||
+    smoke.proposal?.proof !== true ||
     smoke.stderr !== ""
   ) {
     throw new Error(`installed MCP package smoke changed: ${smoke}`);
   }
 
   console.log(
-    `MCP package check passed (${mcpArchive}, registry Timeline ${coreVersion}, installed stdio restart, correction replay, and proof verification)`,
+    `MCP package check passed (${mcpArchive}, workspace Timeline ${coreVersion}, installed stdio restart, correction replay, atomic model proposal, and proof verification)`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

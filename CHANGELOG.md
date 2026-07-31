@@ -8,10 +8,26 @@
   transition, and after knowledge cuts; content-bound evidence documents; exact
   conclusion fixtures; verifier-checked proofs; and a repository command that
   reproduces the complete artifact.
-- Add the model-interface v1 development benchmark: 12 kernel-derived temporal
-  cases, paired direct, narrative-memory, and Timeline arms, a one-shot JSONL adapter
-  protocol, strict admission and capacity limits, replayable request and
-  response artifacts, paired scoring, and adversarial harness tests.
+- Add the model-interface v1 benchmark: 12-case development and deterministic
+  paraphrase corpora; primary narrative-memory, structured-extraction, and
+  Timeline arms; a secondary direct-answer reference; a one-shot JSONL adapter
+  protocol; strict admission and capacity limits; replayable request and
+  response artifacts; paired scoring; and adversarial harness tests.
+- Add teacher-forced prior-state diagnostics and a preregistered frontier-model
+  gate with fixed configuration, absolute and comparative thresholds,
+  per-repeat floors, case-clustered exact tests, and a continue-or-kill decision.
+- Add deterministic model-proposal compilation with request-scoped handles,
+  exact UTF-8 quote provenance, content-addressed ledger candidates, closed JSON
+  Schemas, a bounded provider-schema projection from each host snapshot,
+  bounded hostile-input validation, complete candidate re-verification, and
+  lowering-equivalence coverage across all 36 public benchmark cuts.
+- Add the model-proposal boundary benchmark with opaque model inputs,
+  request-bound provider schemas, rolling failure continuity, one-shot Ollama
+  and OpenAI adapters, clean-source and runtime binding, atomic result
+  publication, independent scoring, and an exact 36-cut boundary oracle.
+- Add companion trajectory diagnostics that preserve the benchmark score while
+  exposing first errors, later rolling observations, degraded prior state, and
+  admitted-with-error counts.
 - Add a stateless OpenAI Responses benchmark adapter with model-revision
   verification, arm-specific Structured Outputs, mock-provider conformance
   tests, a separate adapter-error protocol, and source-bound configuration
@@ -25,9 +41,27 @@
   Sigstore verification to GitHub CLI, binds provenance and SBOM statements to
   the recorded release, and runs npm signature checks plus a clean
   installed-package temporal proof.
+- Add a local stdio MCP server with six bounded temporal-state tools, including
+  atomic prefix-bound model-proposal compilation and persistence; a portable
+  run resource template; explicit knowledge cuts; structural-only admission
+  labels; optimistic concurrency; canonical append-only persistence; restart
+  recovery; and a separate reproducible release workflow.
+- Add a source-first MCP pilot starter that crosses a server restart, hashes
+  retained evidence, chains append digests, exports the complete pilot artifact
+  and tool transcript, and verifies historical and corrected conclusions in a
+  separate offline process.
+- Add a credential-free local Ollama benchmark adapter with preflight
+  installed-model checks, post-inference loaded-model digest verification,
+  fixed generation settings, structured output, bounded provider handling,
+  token accounting, and source-bound configuration generation.
 
 ### Changed
 
+- Publish the preregistered GPT-5.6 Sol model-interface result and record its
+  `kill` decision after Timeline failed to beat stateless full-context
+  structured extraction on answer accuracy. Stop standalone model-memory
+  expansion while retaining the deterministic kernel, replay, and proof
+  verifier.
 - Lead the repository and npm package with the long-running-agent correction
   workflow, one installable temporal API, the actual proof receipt, and explicit
   distinctions from event sourcing, bitemporal databases, established STN
@@ -40,23 +74,35 @@
   continued standalone product expansion.
 - Refocus the public roadmap on model reliability, an external temporal pilot,
   and an independently maintained implementation, with a blinded scale
-  evaluation required before any model-performance claim.
+  evaluation required before any broad efficacy claim.
 - Record the alpha.2 token-fallback publication and operator-observed credential
   cleanup without presenting trusted publishing as an alpha release gate.
+- Record unsupported OpenAI temperature control as `null` and omit the provider
+  parameter instead of claiming a sampling setting the selected model rejects.
 - Move artifact upload to its Node.js 24 action and consolidate SBOM
   attestation on the supported GitHub attestation action.
+- Describe MCP input semantics in tool discovery, cap each catalog page at
+  eight runs, bind cursors to a catalog generation, cap reference-store
+  configuration at its advertised ceilings, and make the source checkout a
+  complete agent-integration path.
+- Bound every model-controlled response collection and free-form string, and
+  make exact coordinates, difference direction, current-evidence support,
+  independent corroboration, references, sequences, and duplicate checks
+  explicit in the Timeline extraction prompt.
+- Reject semantically duplicate Timeline claims and benchmark-scale excess in
+  the host admission path without renumbering, deduplicating, or repairing model
+  output.
 
-## @covenant-org/timeline-mcp 0.0.0-alpha.1 - 2026-07-27
+### Security
 
-### Added
-
-- Add a local stdio server with five bounded temporal-state tools, portable run
-  resources, explicit knowledge cuts, structural-only admission labels,
-  optimistic concurrency, canonical append-only persistence, restart recovery,
-  and installed-package correction-and-proof verification.
-- Add a separate reproducible MCP release workflow with checksum, SPDX SBOM,
-  GitHub build and SBOM attestations, npm provenance, OIDC publishing, and the
-  documented alpha token fallback.
+- Exit the stdio server with a failure status after malformed or oversized
+  protocol input while retaining one sanitized diagnostic.
+- Stop strict JSON diagnostics at the first parse issue to prevent adversarial
+  error amplification.
+- Refuse symlinked and non-regular MCP run files without blocking on special
+  filesystem entries.
+- Distinguish local-model output-token exhaustion from other provider failures
+  without retaining partial model output.
 
 ## 0.0.0-alpha.2 - 2026-07-27
 

@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/benchmarks/model-interface/v1/gate.schema.json",
+  "title": "Covenant Timeline preregistered frontier-model gate",
+  "$defs": {
+    "value": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number",
+          "minimum": -1.7976931348623157e308,
+          "maximum": 1.7976931348623157e308
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "passed", "actual", "requirement"],
+      "properties": {
+        "id": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "actual": {
+          "$ref": "#/$defs/value"
+        },
+        "requirement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "teacherDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attemptId",
+        "startedAt",
+        "resultsDigest",
+        "scoreDigest",
+        "observations",
+        "priorCutObservations",
+        "assertionF1",
+        "answerExactRate",
+        "endToEndExactRate"
+      ],
+      "properties": {
+        "attemptId": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "resultsDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "scoreDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
+        "observations": {
+          "const": 108
+        },
+        "priorCutObservations": {
+          "const": 72
+        },
+        "assertionF1": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "answerExactRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "endToEndExactRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "decision",
+    "operationalValid",
+    "operationalErrorCodes",
+    "run",
+    "resultsDigest",
+    "corpusDigest",
+    "scoreDigest",
+    "teacherDiagnostic",
+    "checks",
+    "failedChecks"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-eval.gate.v1"
+    },
+    "benchmark": {
+      "const": "model-interface-v1"
+    },
+    "decision": {
+      "enum": ["continue", "kill", "inconclusive"]
+    },
+    "operationalValid": {
+      "type": "boolean"
+    },
+    "operationalErrorCodes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 512,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "run": {
+      "$ref": "https://covenant-timeline.org/benchmarks/model-interface/v1/result.schema.json#/$defs/runMetadata"
+    },
+    "resultsDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "corpusDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "scoreDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "teacherDiagnostic": {
+      "$ref": "#/$defs/teacherDiagnostic"
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "failedChecks": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 128,
+      "items": {
+        "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+      }
+    }
+  }
+}

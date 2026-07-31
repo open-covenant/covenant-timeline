@@ -4,23 +4,32 @@ Timeline requires Node.js 22 or 24.
 
 Choose the integration surface that matches the host:
 
-- use `@covenant-org/timeline-mcp` when an MCP-capable agent needs local
-  temporal state across sessions; or
+- use the local MCP server when an MCP-capable agent needs temporal state
+  across sessions; or
 - use `@covenant-org/timeline` when an application owns persistence,
   admission, and the model loop directly.
 
 ## Connect an MCP agent
 
+Build the server from this repository:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+Configure the client with absolute paths:
+
 ```json
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "--yes",
-        "@covenant-org/timeline-mcp@0.0.0-alpha.1",
+        "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
-        "/path/to/private/timeline-data"
+        "/absolute/path/to/private/timeline-data"
       ]
     }
   }
@@ -30,8 +39,13 @@ Choose the integration surface that matches the host:
 The server uses local stdio, makes no network requests, and persists canonical
 append-only runs under the selected data directory. Direct writes are
 structurally valid but unauthenticated. See the
-[MCP package guide](../packages/mcp-server/README.md) for its five tools,
+[MCP server guide](../packages/mcp-server/README.md) for its six tools,
 portable run resource, restart semantics, and operating limits.
+
+To exercise the complete integration before connecting an agent, run the
+[source-first pilot starter](../examples/mcp-agent-pilot). It crosses a server
+restart, admits a correction, exports the full pilot artifact, and invokes an
+offline verifier in a separate process.
 
 ## Install the library
 

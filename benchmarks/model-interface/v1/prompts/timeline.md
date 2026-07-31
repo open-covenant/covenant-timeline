@@ -12,6 +12,22 @@ supported by evidence introduced at the current cut. Do not repeat earlier
 assertions, cite evidence from an earlier cut, invent evidence, estimate unknown
 bounds, or merge scenario contexts.
 
+Map evidence literally:
+
+- “at offset N” is exact: emit both `minimum: N` and `maximum: N`;
+- “no earlier than N” emits only `minimum: N`;
+- “no later than N” emits only `maximum: N`;
+- bounds for “X minus Y” use a `difference.bounds` query from Y to X; and
+- a stated duration or difference is a constraint between existing points,
+  never a new point or coordinate.
+
+Emit assertions only for atomic temporal claims stated in the current evidence.
+When current evidence independently confirms an earlier fact, emit a new
+assertion with the current evidence digest even if the bounds agree. Otherwise,
+do not restate earlier facts, derive an unstated coordinate, or duplicate an
+event. The eight-event schema limit is a ceiling, not a target; end the array
+immediately after the supported delta.
+
 Return exactly one JSON object with this envelope:
 
 ```json
@@ -27,12 +43,13 @@ Every event must have schema `covenant.timeline.event.v0alpha3`. Its sequence
 must start at `input.priorRun.events.length` and increment contiguously. Use
 valid, stable lowercase identifiers. Event, assertion, and query IDs may be
 chosen freely, but references to those IDs must be exact and internally
-consistent. Use the point, interval, context, and axis IDs supplied by the
-contract and entity dictionary exactly. The `sequence: 0` values in the shape
-examples below are placeholders; calculate every emitted sequence from the
-length of `priorRun.events`.
+consistent. Use only point, interval, context, and axis IDs already supplied by
+the contract, entity dictionary, and setup events. The `sequence: 0` values in
+the shape examples below are placeholders; calculate every emitted sequence
+from the length of `priorRun.events`.
 
-An exact or bounded point coordinate uses:
+Assuming the input declares a point named `milestone`, an exact or bounded
+coordinate uses:
 
 ```json
 {
@@ -43,7 +60,7 @@ An exact or bounded point coordinate uses:
   "assertion": {
     "id": "coordinate.example.v1",
     "contextId": "actual",
-    "pointId": "example",
+    "pointId": "milestone",
     "coordinate": {
       "minimum": 0,
       "maximum": 0
@@ -53,8 +70,7 @@ An exact or bounded point coordinate uses:
 }
 ```
 
-Use only `minimum` for “no earlier than” and only `maximum` for “no later
-than.” A duration or difference between two points uses:
+A duration or difference stated by the evidence uses:
 
 ```json
 {
@@ -114,6 +130,16 @@ appending `events`. For an explicitly historical question, use the final event
 sequence recorded for the requested earlier cut in `input.knowledgeCuts`, even
 though the run contains later events. Select the context and operation asked by
 the question.
+
+Before returning, verify that:
+
+- event and assertion IDs are unique and no event is repeated;
+- event at array index `i` has sequence
+  `input.priorRun.events.length + i`;
+- every referenced temporal object already exists;
+- every assertion is supported by the current evidence and cites its digest;
+  and
+- the query operation and point order match `input.question`.
 
 Do not return a semantic answer; the host derives it from the admitted run and
 query. Output strict JSON only, without prose, Markdown fences, or extra

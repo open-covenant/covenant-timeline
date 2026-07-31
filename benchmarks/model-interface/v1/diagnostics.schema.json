@@ -1,0 +1,413 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/benchmarks/model-interface/v1/diagnostics.schema.json",
+  "title": "Covenant Timeline model-interface benchmark trajectory diagnostics",
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "positiveCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "stage": {
+      "enum": [
+        "adapter",
+        "protocol",
+        "admission",
+        "query",
+        "reasoning",
+        "memory"
+      ]
+    },
+    "stageCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 6,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "protocol": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "admission": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "query": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "reasoning": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "memory": {
+          "$ref": "#/$defs/positiveCount"
+        }
+      }
+    },
+    "codeCounts": {
+      "type": "object",
+      "maxProperties": 2160,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/positiveCount"
+      }
+    },
+    "errorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "code"],
+      "properties": {
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "firstRecordedError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cut", "stage", "code"],
+      "properties": {
+        "cut": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "priorProjectedState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exact", "degraded", "total"],
+      "properties": {
+        "exact": {
+          "$ref": "#/$defs/count"
+        },
+        "degraded": {
+          "$ref": "#/$defs/count"
+        },
+        "total": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "admittedWithError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "stages", "codes"],
+      "properties": {
+        "total": {
+          "$ref": "#/$defs/count"
+        },
+        "stages": {
+          "$ref": "#/$defs/stageCounts"
+        },
+        "codes": {
+          "$ref": "#/$defs/codeCounts"
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cut",
+        "status",
+        "error",
+        "afterFirstRecordedError",
+        "priorProjectedState",
+        "admittedWithError"
+      ],
+      "properties": {
+        "cut": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "status": {
+          "enum": ["ok", "error"]
+        },
+        "error": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/errorRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "afterFirstRecordedError": {
+          "type": "boolean"
+        },
+        "priorProjectedState": {
+          "oneOf": [
+            {
+              "enum": ["exact", "degraded"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "admittedWithError": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ok"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "error": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/errorRef"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "trajectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arm",
+        "caseId",
+        "family",
+        "repeat",
+        "scope",
+        "cuts",
+        "expectedObservationCount",
+        "recordedObservationCount",
+        "firstRecordedError",
+        "observations",
+        "observationsAfterFirstRecordedError",
+        "priorProjectedState",
+        "admittedWithError"
+      ],
+      "properties": {
+        "arm": {
+          "enum": [
+            "direct",
+            "narrative-memory",
+            "structured-extraction",
+            "timeline"
+          ]
+        },
+        "caseId": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/identifier"
+        },
+        "family": {
+          "enum": [
+            "bounded-indeterminate",
+            "planned-actual-isolation",
+            "delayed-observation-historical-cuts",
+            "correction-supersession-retraction",
+            "contradictions",
+            "interval-relations"
+          ]
+        },
+        "repeat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 19
+        },
+        "scope": {
+          "enum": ["independent", "rolling", "teacher-forced"]
+        },
+        "cuts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          }
+        },
+        "expectedObservationCount": {
+          "$ref": "#/$defs/positiveCount"
+        },
+        "recordedObservationCount": {
+          "$ref": "#/$defs/count"
+        },
+        "firstRecordedError": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/firstRecordedError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observations": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/observation"
+          }
+        },
+        "observationsAfterFirstRecordedError": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          }
+        },
+        "priorProjectedState": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/priorProjectedState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "admittedWithError": {
+          "$ref": "#/$defs/admittedWithError"
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected", "observed", "missing", "complete", "repeats"],
+      "properties": {
+        "expected": {
+          "$ref": "#/$defs/count"
+        },
+        "observed": {
+          "$ref": "#/$defs/count"
+        },
+        "missing": {
+          "$ref": "#/$defs/count"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "repeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trajectoryCount",
+        "trajectoriesWithRecordedError",
+        "recordedObservationCount",
+        "errorObservationCount",
+        "observationsAfterFirstRecordedErrorCount",
+        "priorProjectedState",
+        "admittedWithError"
+      ],
+      "properties": {
+        "trajectoryCount": {
+          "$ref": "#/$defs/count"
+        },
+        "trajectoriesWithRecordedError": {
+          "$ref": "#/$defs/count"
+        },
+        "recordedObservationCount": {
+          "$ref": "#/$defs/count"
+        },
+        "errorObservationCount": {
+          "$ref": "#/$defs/count"
+        },
+        "observationsAfterFirstRecordedErrorCount": {
+          "$ref": "#/$defs/count"
+        },
+        "priorProjectedState": {
+          "$ref": "#/$defs/priorProjectedState"
+        },
+        "admittedWithError": {
+          "$ref": "#/$defs/admittedWithError"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "run",
+    "resultsDigest",
+    "corpusDigest",
+    "coverage",
+    "summary",
+    "trajectories"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-eval.diagnostics.v1"
+    },
+    "benchmark": {
+      "const": "model-interface-v1"
+    },
+    "run": {
+      "$ref": "https://covenant-timeline.org/benchmarks/model-interface/v1/result.schema.json#/$defs/runMetadata"
+    },
+    "resultsDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "corpusDigest": {
+      "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "trajectories": {
+      "type": "array",
+      "maxItems": 1200,
+      "items": {
+        "$ref": "#/$defs/trajectory"
+      }
+    }
+  }
+}

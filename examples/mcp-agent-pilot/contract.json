@@ -1,0 +1,22 @@
+{
+  "schema": "covenant.timeline.contract.v0alpha3",
+  "id": "pilot.release-correction",
+  "subject": {
+    "kind": "repository",
+    "id": "example/service"
+  },
+  "axes": [
+    {
+      "id": "elapsed-seconds",
+      "kind": "metric",
+      "unit": "second",
+      "origin": "release-start.v1"
+    }
+  ],
+  "contexts": [
+    {
+      "id": "actual",
+      "mode": "actual"
+    }
+  ]
+}

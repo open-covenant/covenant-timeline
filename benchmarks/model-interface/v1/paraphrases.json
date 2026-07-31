@@ -1,0 +1,150 @@
+{
+  "schema": "covenant.timeline.model-eval.paraphrases.v1",
+  "baseCorpusDigest": "sha256:f52126525077fa59b771b58465c1af076c479f222d8b37f21134679bd793bc3f",
+  "cases": {
+    "bounds.deploy-window": {
+      "evidence": [
+        "The release window began at offset 10. No approval time has been recorded.",
+        "Approval took place at offset 16 or later.",
+        "Approval took place by offset 19."
+      ],
+      "questions": [
+        "Which bounds follow for the approval offset relative to the release-window-open offset?",
+        "Which bounds follow for the approval offset relative to the release-window-open offset?",
+        "Which bounds follow for the approval offset relative to the release-window-open offset?"
+      ]
+    },
+    "bounds.incubation": {
+      "evidence": [
+        "The sample entered incubation at an offset from 4 through 6, inclusive. Incubation finished by offset 17.",
+        "Incubation did not finish before offset 12.",
+        "The incubation start was at offset 5 or earlier."
+      ],
+      "questions": [
+        "What lower and upper bounds follow for completion offset minus incubation-start offset?",
+        "What lower and upper bounds follow for completion offset minus incubation-start offset?",
+        "What lower and upper bounds follow for completion offset minus incubation-start offset?"
+      ]
+    },
+    "isolation.release-slip": {
+      "evidence": [
+        "The plan sets release-window opening to offset 0 and deployment to offset 20. In the actual record, the window opened at offset 0, but deployment has no recorded time.",
+        "In the actual record, deployment began at offset 24.",
+        "A planning update moved the scheduled deployment to offset 18."
+      ],
+      "questions": [
+        "Using the actual record only, what bounds follow for deployment offset minus window-open offset?",
+        "Using the actual record only, what bounds follow for deployment offset minus window-open offset?",
+        "Using the actual record only, what bounds follow for deployment offset minus window-open offset?"
+      ]
+    },
+    "isolation.treatment-forecast": {
+      "evidence": [
+        "The forecast assigns intake to offset 0 and dosing to offset 8. Actual intake happened at offset 0; actual dosing has no recorded time.",
+        "The updated forecast moved dosing to offset 6.",
+        "The dose was administered in actuality at offset 10."
+      ],
+      "questions": [
+        "Using actual observations only, what bounds follow for dose offset minus intake offset?",
+        "Using actual observations only, what bounds follow for dose offset minus intake offset?",
+        "Using actual observations only, what bounds follow for dose offset minus intake offset?"
+      ]
+    },
+    "history.delayed-outage": {
+      "evidence": [
+        "At the initial knowledge cut, monitoring recorded outage start at offset 30 and had no record of its end.",
+        "A log received later showed that the outage ended at offset 34.",
+        "The postmortem appeared at offset 40."
+      ],
+      "questions": [
+        "With the record currently available, what bounds follow for outage-end offset minus outage-start offset?",
+        "With the record currently available, what bounds follow for outage-end offset minus outage-start offset?",
+        "Restricting knowledge to the initial cut, what bounds follow for outage-end offset minus outage-start offset?"
+      ]
+    },
+    "history.delayed-build": {
+      "evidence": [
+        "At the initial knowledge cut, the runner recorded build marker A at offset 5 and had no coordinate for marker B.",
+        "A CI archive received later recorded build marker B at offset 9.",
+        "The audit report appeared at offset 20."
+      ],
+      "questions": [
+        "From the record currently available, which temporal relation is supported between build markers A and B?",
+        "From the record currently available, which temporal relation is supported between build markers A and B?",
+        "Restricting knowledge to the initial cut, which temporal relation is supported between build markers A and B?"
+      ]
+    },
+    "correction.shipment-arrival": {
+      "evidence": [
+        "Manifest one recorded departure at offset 0 and arrival at offset 10.",
+        "A separate second manifest also recorded departure at offset 0.",
+        "A correction superseded manifest one's arrival value: the shipment arrived at offset 12 rather than offset 10."
+      ],
+      "questions": [
+        "What bounds follow for shipment-arrival offset minus departure offset?",
+        "What bounds follow for shipment-arrival offset minus departure offset?",
+        "What bounds follow for shipment-arrival offset minus departure offset?"
+      ]
+    },
+    "retraction.analysis-end": {
+      "evidence": [
+        "The laboratory record put analysis start at offset 2 and analysis end at offset 6.",
+        "The laboratory withdrew the claim that analysis ended at offset 6 and supplied no replacement.",
+        "A replacement laboratory record put analysis end at offset 7."
+      ],
+      "questions": [
+        "What bounds follow for analysis-end offset minus analysis-start offset?",
+        "Once the end-time claim is withdrawn, what bounds follow for analysis-end offset minus analysis-start offset?",
+        "With the replacement end time, what bounds follow for analysis-end offset minus analysis-start offset?"
+      ]
+    },
+    "contradiction.calibration-time": {
+      "evidence": [
+        "The primary log recorded calibration at offset 10.",
+        "A separate log recorded that same calibration at offset 14 and did not correct the primary entry.",
+        "The separate log's offset-14 entry was later withdrawn."
+      ],
+      "questions": [
+        "Can all active calibration-time claims hold simultaneously?",
+        "Can both active calibration-time claims hold simultaneously?",
+        "After the second claim is withdrawn, can all active calibration-time claims hold simultaneously?"
+      ]
+    },
+    "contradiction.scan-duration": {
+      "evidence": [
+        "The scan duration was between 5 and 8 offset units, inclusive.",
+        "An independent sensor limited the scan duration to no more than 3 offset units.",
+        "The independent sensor's duration record was later withdrawn."
+      ],
+      "questions": [
+        "Can all active scan-duration claims hold simultaneously?",
+        "Can all active scan-duration claims hold simultaneously?",
+        "After the sensor record is withdrawn, can all active scan-duration claims hold simultaneously?"
+      ]
+    },
+    "interval.meets-to-overlaps": {
+      "evidence": [
+        "Interval alpha occupied offsets 0 through 4. Interval beta ended at offset 9, while its start remained unknown.",
+        "Interval beta began at offset 4.",
+        "A correction superseded beta's start value: it began at offset 3 rather than offset 4."
+      ],
+      "questions": [
+        "Which Allen relations remain possible from interval alpha to interval beta?",
+        "Which Allen relation holds from interval alpha to interval beta?",
+        "After the correction, which Allen relation holds from interval alpha to interval beta?"
+      ]
+    },
+    "interval.contains-to-finished-by": {
+      "evidence": [
+        "Maintenance occupied offsets 2 through 12. Reboot began at offset 5, and its end remained unknown.",
+        "Reboot finished at offset 8.",
+        "A correction superseded reboot's end value: it finished at offset 12 rather than offset 8."
+      ],
+      "questions": [
+        "Which Allen relations remain possible from maintenance to reboot?",
+        "Which Allen relation holds from maintenance to reboot?",
+        "After the correction, which Allen relation holds from maintenance to reboot?"
+      ]
+    }
+  }
+}

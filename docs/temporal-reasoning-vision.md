@@ -68,8 +68,8 @@ authority, and extraction correctness remain host responsibilities.
 
 ## The model boundary
 
-The critical adoption test is whether models can reliably turn real evidence
-into typed assertions and queries that deserve admission.
+Models must reliably turn evidence into typed assertions and queries before a
+host can admit their proposals.
 
 The model has two roles:
 
@@ -81,13 +81,18 @@ has to separate assertion extraction, query construction, admission, solver
 behavior, and final-answer accuracy.
 
 The public
-[model-interface v1 development benchmark](../benchmarks/model-interface/v1/README.md)
-compares Timeline-assisted reasoning with direct full-context answers and
-rolling narrative memory. Its smoke suite measures delayed observations,
-historical cuts, corrections, contradictions, bounded time, scenario isolation,
-and interval relations while keeping invalid output visible. No model evaluation
-with an external model has been run; the roadmap defines the blinded scale
-evaluation required for an efficacy claim.
+[model-interface v1 benchmark](../benchmarks/model-interface/v1/README.md)
+compares Timeline-assisted reasoning with rolling narrative memory and
+stateless full-context structured extraction. Direct answers remain a
+secondary reference. Its suites measure delayed observations, historical cuts,
+corrections, contradictions, bounded time, scenario isolation, and interval
+relations while keeping invalid output visible.
+
+The preregistered GPT-5.6 Sol run returned `kill`. Timeline reached 106/108
+exact answers and 0.9574 assertion F1 and beat bounded narrative memory, but
+stateless full-context structured extraction reached 107/108 exact answers.
+Version 1 therefore does not support the claim that rolling Timeline state
+improves frontier-model answer accuracy over simpler structured extraction.
 
 ## What success means
 
@@ -100,14 +105,15 @@ For the current product, useful temporal reasoning means that a system can:
 - keep planned, actual, forecast, and hypothetical scenarios isolated; and
 - carry checked temporal state across model sessions and process restarts.
 
-The model benchmark and external pilot measure these capabilities directly.
+The deterministic tests establish the kernel properties. An external pilot
+must establish whether they reduce operational reconciliation or improve audit.
 
 ## Evidence path
 
-The [roadmap](../ROADMAP.md) defines the current evidence sequence and its exit
-criteria: a blinded model evaluation, an external long-running-agent pilot, and
-an independently maintained implementation. These establish model reliability,
-operational value, and protocol portability respectively.
+The [roadmap](../ROADMAP.md) records the completed negative model result. An
+external long-running-agent pilot and an independently maintained
+implementation can still test operational kernel value and protocol
+portability. They cannot change the v1 model decision.
 
 ## Research boundary
 
@@ -130,11 +136,11 @@ neuro-symbolic reasoning are established fields. The substrate builds on
 [OWL-Time](https://www.w3.org/TR/owl-time/), and
 [W3C PROV](https://www.w3.org/TR/prov-o/).
 
-The integration hypothesis is that a portable, evidence-referenced,
-proof-carrying temporal state can survive models, runtimes, restarts, and
-organizations while preserving prior knowledge cuts. It becomes a meaningful
-contribution only if controlled evaluation, external operation, and an
-independent implementation support it.
+The v1 model-accuracy hypothesis did not survive controlled evaluation. The
+remaining integration hypothesis is narrower: portable, evidence-referenced,
+proof-carrying temporal state can preserve prior knowledge cuts across models,
+runtimes, restarts, and organizations. Its operational value and portability
+still require external use and an independent implementation.
 
 ## Adoption scope
 

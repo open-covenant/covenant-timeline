@@ -17,36 +17,101 @@ import { parseStrictJson } from "./strict-json.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const templatePath = join(
-  root,
-  "benchmarks/model-interface/v1/configs/openai-responses.example.json",
-);
-const sourceRevisionPattern = /^[0-9a-f]{40,64}$/u;
+const templatePaths = new Map([
+  [
+    "model-interface-v1",
+    join(
+      root,
+      "benchmarks/model-interface/v1/configs/openai-responses.example.json",
+    ),
+  ],
+  [
+    "model-proposal-boundary-v1",
+    join(
+      root,
+      "benchmarks/model-proposal-boundary/v1/configs/openai-responses.example.json",
+    ),
+  ],
+]);
+const sourceRevisionPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+const reasoningEfforts = new Set([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+const verbosities = new Set(["low", "medium", "high"]);
 
 function parseArguments(args) {
+  let benchmark = "model-interface-v1";
+  let maxOutputTokens;
   let output;
   let model;
+  let reasoningEffort;
+  let verbosity;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === "--output" || argument === "--model") {
+    if (
+      argument === "--benchmark" ||
+      argument === "--max-output-tokens" ||
+      argument === "--output" ||
+      argument === "--model" ||
+      argument === "--reasoning-effort" ||
+      argument === "--verbosity"
+    ) {
       const value = args[index + 1];
       if (value === undefined || value.startsWith("--")) {
         throw new Error(`${argument} requires a value`);
       }
-      if (argument === "--output") output = value;
-      else model = value;
+      if (argument === "--benchmark") benchmark = value;
+      else if (argument === "--max-output-tokens") {
+        maxOutputTokens = Number(value);
+      } else if (argument === "--output") output = value;
+      else if (argument === "--model") model = value;
+      else if (argument === "--reasoning-effort") reasoningEffort = value;
+      else verbosity = value;
       index += 1;
       continue;
     }
     throw new Error(`unknown argument: ${argument}`);
   }
 
+  if (!templatePaths.has(benchmark)) {
+    throw new Error(
+      "--benchmark must be model-interface-v1 or model-proposal-boundary-v1",
+    );
+  }
   if (output === undefined) throw new Error("--output is required");
   if (model !== undefined && (model.length === 0 || model.length > 200)) {
     throw new Error("--model must be between 1 and 200 characters");
   }
-  return { model, output };
+  if (
+    maxOutputTokens !== undefined &&
+    (!Number.isSafeInteger(maxOutputTokens) ||
+      maxOutputTokens < 16 ||
+      maxOutputTokens > 1_000_000)
+  ) {
+    throw new Error(
+      "--max-output-tokens must be an integer from 16 through 1000000",
+    );
+  }
+  if (reasoningEffort !== undefined && !reasoningEfforts.has(reasoningEffort)) {
+    throw new Error("--reasoning-effort is unsupported");
+  }
+  if (verbosity !== undefined && !verbosities.has(verbosity)) {
+    throw new Error("--verbosity must be low, medium, or high");
+  }
+  return {
+    benchmark,
+    maxOutputTokens,
+    model,
+    output,
+    reasoningEffort,
+    verbosity,
+  };
 }
 
 async function assertOutsideCheckout(outputPath) {
@@ -81,12 +146,38 @@ async function currentSourceRevision() {
 }
 
 export async function createOpenAIModelEvalConfig({
+  benchmark = "model-interface-v1",
+  maxOutputTokens,
   model,
   output,
+  reasoningEffort,
   sourceRevision,
+  verbosity,
 }) {
+  const templatePath = templatePaths.get(benchmark);
+  if (!templatePath) {
+    throw new Error(
+      "benchmark must be model-interface-v1 or model-proposal-boundary-v1",
+    );
+  }
   if (!sourceRevisionPattern.test(sourceRevision)) {
     throw new Error("sourceRevision must be a full Git object id");
+  }
+  if (
+    maxOutputTokens !== undefined &&
+    (!Number.isSafeInteger(maxOutputTokens) ||
+      maxOutputTokens < 16 ||
+      maxOutputTokens > 1_000_000)
+  ) {
+    throw new Error(
+      "maxOutputTokens must be an integer from 16 through 1000000",
+    );
+  }
+  if (reasoningEffort !== undefined && !reasoningEfforts.has(reasoningEffort)) {
+    throw new Error("reasoningEffort is unsupported");
+  }
+  if (verbosity !== undefined && !verbosities.has(verbosity)) {
+    throw new Error("verbosity must be low, medium, or high");
   }
 
   const outputPath = resolve(output);
@@ -100,6 +191,15 @@ export async function createOpenAIModelEvalConfig({
   if (model !== undefined) {
     config.model.id = model;
     config.model.revision = model;
+  }
+  if (maxOutputTokens !== undefined) {
+    config.generation.maxOutputTokens = maxOutputTokens;
+  }
+  if (reasoningEffort !== undefined) {
+    config.generation.parameters.reasoningEffort = reasoningEffort;
+  }
+  if (verbosity !== undefined) {
+    config.generation.parameters.verbosity = verbosity;
   }
 
   const file = await open(outputPath, "wx", 0o600);

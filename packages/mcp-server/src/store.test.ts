@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from "node:child_process";
 import {
   chmod,
   mkdtemp,
@@ -6,16 +7,24 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { TemporalEventV0Alpha3 } from "@covenant-org/timeline";
 import {
   FileMcpRunStore,
   parseMcpRunEnvelopeV0Alpha1,
   TimelineMcpError,
 } from "./index.js";
+import {
+  DEFAULT_MAX_RUN_BYTES,
+  DEFAULT_MAX_RUNS,
+  MAX_LIST_PAGE_SIZE,
+  MAX_MODEL_PROPOSAL_EVENTS,
+} from "./constants.js";
 import { correctionEvents, releaseContract } from "./__tests__/fixtures.js";
 
 describe("FileMcpRunStore", () => {
@@ -64,6 +73,98 @@ describe("FileMcpRunStore", () => {
     expect(reopened.envelope).toEqual(created.envelope);
   });
 
+  test("lists deterministic first, middle, and final pages", async () => {
+    const expectedIds = await createRuns(store, 5);
+
+    const first = await store.listPage({ limit: 2 });
+    expect(first.timelines).toHaveLength(2);
+    expect(first.nextCursor).toMatch(/^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/);
+    expect(await store.listPage({ limit: 2 })).toEqual(first);
+
+    const middle = await store.listPage({
+      cursor: first.nextCursor!,
+      limit: 2,
+    });
+    expect(middle.timelines).toHaveLength(2);
+    expect(middle.nextCursor).toMatch(/^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/);
+
+    const final = await store.listPage({
+      cursor: middle.nextCursor!,
+      limit: 2,
+    });
+    expect(final.timelines).toHaveLength(1);
+    expect(final.nextCursor).toBeNull();
+
+    const actualIds = [
+      ...first.timelines,
+      ...middle.timelines,
+      ...final.timelines,
+    ]
+      .map(({ runId }) => runId)
+      .sort();
+    expect(actualIds).toEqual(expectedIds.sort());
+  });
+
+  test("rejects invalid and stale page cursors", async () => {
+    await createRuns(store, 2);
+    await expect(
+      store.listPage({ cursor: "not-a-cursor" }),
+    ).rejects.toMatchObject({
+      code: "timeline.mcp.input.invalid",
+      message: "timeline page cursor is invalid or stale",
+    });
+
+    const first = await store.listPage({ limit: 1 });
+    const firstFile = (await storedFiles(directory))[0]!;
+    await rm(join(directory, firstFile));
+    await expect(
+      store.listPage({ cursor: first.nextCursor! }),
+    ).rejects.toMatchObject({
+      code: "timeline.mcp.input.invalid",
+      message: "timeline page cursor is invalid or stale",
+    });
+  });
+
+  test("invalidates a page cursor when the run catalog changes", async () => {
+    await createRuns(store, 2);
+    const first = await store.listPage({ limit: 1 });
+
+    await store.create(releaseContract("agent.page-new"));
+
+    await expect(
+      store.listPage({ cursor: first.nextCursor! }),
+    ).rejects.toMatchObject({
+      code: "timeline.mcp.input.invalid",
+      message: "timeline page cursor is invalid or stale",
+    });
+  });
+
+  test.each([0, MAX_LIST_PAGE_SIZE + 1, 1.5, "1", null])(
+    "rejects invalid page limit %j",
+    async (limit) => {
+      await expect(store.listPage({ limit } as never)).rejects.toMatchObject({
+        code: "timeline.mcp.input.invalid",
+        message: `timeline page limit must be an integer from 1 through ${MAX_LIST_PAGE_SIZE}`,
+      });
+    },
+  );
+
+  test("reads no more than the default page size", async () => {
+    await createRuns(store, MAX_LIST_PAGE_SIZE + 1);
+    const files = await storedFiles(directory);
+    await writeFile(join(directory, files[MAX_LIST_PAGE_SIZE]!), "corrupt\n");
+
+    const first = await store.listPage();
+    expect(first.timelines).toHaveLength(MAX_LIST_PAGE_SIZE);
+    expect(first.nextCursor).toMatch(/^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/);
+
+    await expect(
+      store.listPage({ cursor: first.nextCursor! }),
+    ).rejects.toMatchObject({
+      code: "timeline.mcp.store.corrupt",
+    });
+  });
+
   test("rejects invalid configuration, identifiers, drafts, and conflicts", async () => {
     expect(() => new FileMcpRunStore("")).toThrow(TypeError);
     expect(() => new FileMcpRunStore(directory, { maxBytes: 0 })).toThrow(
@@ -72,6 +173,22 @@ describe("FileMcpRunStore", () => {
     expect(() => new FileMcpRunStore(directory, { maxRuns: 1.5 })).toThrow(
       RangeError,
     );
+    expect(
+      () =>
+        new FileMcpRunStore(directory, {
+          maxBytes: DEFAULT_MAX_RUN_BYTES + 1,
+        }),
+    ).toThrow(RangeError);
+    expect(
+      () => new FileMcpRunStore(directory, { maxRuns: DEFAULT_MAX_RUNS + 1 }),
+    ).toThrow(RangeError);
+    expect(
+      () =>
+        new FileMcpRunStore(directory, {
+          maxBytes: DEFAULT_MAX_RUN_BYTES,
+          maxRuns: DEFAULT_MAX_RUNS,
+        }),
+    ).not.toThrow();
 
     await expect(store.load("../outside")).rejects.toMatchObject({
       code: "timeline.mcp.input.invalid",
@@ -183,6 +300,197 @@ describe("FileMcpRunStore", () => {
     ).rejects.toMatchObject({
       code: "timeline.mcp.store.conflict",
     });
+  });
+
+  test("appends a compiled batch atomically and retries it from its bound prefix", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const batch = materializeEvents(correctionEvents.slice(0, 2), 0);
+
+    const applied = await store.appendCompiled(contract.id, batch, {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    });
+    expect(applied).toMatchObject({
+      appended: true,
+      events: [{ sequence: 0 }, { sequence: 1 }],
+      envelope: { revision: 2 },
+    });
+
+    const later = await store.append(
+      contract.id,
+      correctionEvents[2],
+      applied.envelope.runDigest,
+    );
+    const retried = await store.appendCompiled(contract.id, batch, {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    });
+    expect(retried.appended).toBe(false);
+    expect(retried.events).toEqual(batch);
+    expect(retried.envelope).toEqual(later.envelope);
+  });
+
+  test("rejects incomplete, changed, reordered, colliding, and stale occupied prefixes", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const batch = materializeEvents(correctionEvents.slice(0, 2), 0);
+
+    await store.append(
+      contract.id,
+      correctionEvents[0],
+      created.envelope.runDigest,
+    );
+    await expect(
+      store.appendCompiled(contract.id, batch, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    const current = await store.require(contract.id);
+    const changed = structuredClone(batch);
+    if (changed[0]?.type !== "point.declared") {
+      throw new Error("compiled fixture must begin with a point declaration");
+    }
+    changed[0].point.id = "changed";
+    await expect(
+      store.appendCompiled(contract.id, changed, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    const reordered = [
+      { ...batch[1]!, sequence: 0 },
+      { ...batch[0]!, sequence: 1 },
+    ];
+    await expect(
+      store.appendCompiled(contract.id, reordered, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    const colliding = [
+      {
+        ...batch[0]!,
+        sequence: 1,
+      },
+    ];
+    await expect(
+      store.appendCompiled(contract.id, colliding, {
+        revision: 1,
+        runDigest: current.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
+    await expect(
+      store.appendCompiled(contract.id, [], {
+        revision: 0,
+        runDigest: `sha256:${"0".repeat(64)}`,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+    await expect(
+      store.appendCompiled(contract.id, [], {
+        revision: current.revision + 1,
+        runDigest: current.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+  });
+
+  test("validates a complete compiled batch before replacing stored bytes", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const path = await storedPath(directory);
+    const before = await readFile(path);
+    const events: TemporalEventV0Alpha3[] = [
+      ...materializeEvents(correctionEvents.slice(0, 1), 0),
+      {
+        schema: "covenant.timeline.event.v0alpha3",
+        id: "event.invalid-interval",
+        sequence: 1,
+        type: "interval.declared",
+        interval: {
+          id: "missing",
+          contextId: "actual",
+          startPointId: "not-declared",
+          endPointId: "also-missing",
+        },
+      },
+    ];
+
+    await expect(
+      store.appendCompiled(contract.id, events, {
+        revision: 0,
+        runDigest: created.envelope.runDigest,
+      }),
+    ).rejects.toMatchObject({ code: "timeline.mcp.input.invalid" });
+    expect(await readFile(path)).toEqual(before);
+    expect((await store.require(contract.id)).revision).toBe(0);
+  });
+
+  test("allows only one compiled batch to consume a run prefix", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const first = materializeEvents(correctionEvents.slice(0, 1), 0);
+    const second = materializeEvents(correctionEvents.slice(1, 2), 0);
+    const expected = {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    };
+
+    const writes = await Promise.allSettled([
+      store.appendCompiled(contract.id, first, expected),
+      store.appendCompiled(contract.id, second, expected),
+    ]);
+    expect(writes.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect((await store.require(contract.id)).revision).toBe(1);
+    expect(writes.find(({ status }) => status === "rejected")).toMatchObject({
+      reason: expect.objectContaining({
+        code: expect.stringMatching(/^timeline\.mcp\.store\.(busy|conflict)$/),
+      }),
+    });
+  });
+
+  test("bounds compiled batches and accepts a bound empty no-op", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const empty = await store.appendCompiled(contract.id, [], {
+      revision: 0,
+      runDigest: created.envelope.runDigest,
+    });
+    expect(empty).toMatchObject({
+      appended: false,
+      events: [],
+      envelope: { revision: 0 },
+    });
+
+    await expect(
+      store.appendCompiled(
+        contract.id,
+        Array.from(
+          { length: MAX_MODEL_PROPOSAL_EVENTS + 1 },
+          (_, sequence) => ({
+            schema: "covenant.timeline.event.v0alpha3",
+            id: `event.limit-${sequence}`,
+            sequence,
+            type: "point.declared",
+            point: {
+              id: `point.limit-${sequence}`,
+              contextId: "actual",
+              axisId: "utc-seconds",
+            },
+          }),
+        ),
+        {
+          revision: 0,
+          runDigest: created.envelope.runDigest,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.limit" });
   });
 
   test("validates complete candidate runs before replacing stored bytes", async () => {
@@ -387,6 +695,42 @@ describe("FileMcpRunStore", () => {
   });
 
   test.runIf(process.platform !== "win32")(
+    "rejects symlinked stored runs",
+    async () => {
+      const contract = releaseContract();
+      await store.create(contract);
+      const path = await storedPath(directory);
+      const target = join(directory, "outside-run.json");
+      await rename(path, target);
+      await symlink(target, path);
+
+      await expect(store.require(contract.id)).rejects.toMatchObject({
+        code: "timeline.mcp.store.corrupt",
+      });
+    },
+  );
+
+  test.runIf(process.platform !== "win32")(
+    "rejects FIFO stored runs without blocking",
+    async () => {
+      const contract = releaseContract();
+      await store.create(contract);
+      const path = await storedPath(directory);
+      await rm(path);
+      const created = spawnSync("mkfifo", [path], { encoding: "utf8" });
+      expect(created.status, created.stderr).toBe(0);
+
+      const result = await requireStoredRunInChild(directory, contract.id);
+      expect(result).toEqual({
+        code: 0,
+        signal: null,
+        stderr: "",
+        timedOut: false,
+      });
+    },
+  );
+
+  test.runIf(process.platform !== "win32")(
     "creates private destination and lock files",
     async () => {
       const contract = releaseContract();
@@ -417,11 +761,42 @@ describe("FileMcpRunStore", () => {
 });
 
 async function storedPath(directory: string): Promise<string> {
-  const files = (await readdir(directory)).filter((file) =>
-    /^[0-9a-f]{64}\.json$/.test(file),
-  );
+  const files = await storedFiles(directory);
   expect(files).toHaveLength(1);
   return join(directory, files[0]!);
+}
+
+async function storedFiles(directory: string): Promise<string[]> {
+  return (await readdir(directory))
+    .filter((file) => /^[0-9a-f]{64}\.json$/.test(file))
+    .sort();
+}
+
+async function createRuns(
+  store: FileMcpRunStore,
+  count: number,
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const id = `agent.page-${String(index).padStart(2, "0")}`;
+    await store.create(releaseContract(id));
+    ids.push(id);
+  }
+  return ids;
+}
+
+function materializeEvents(
+  drafts: readonly (typeof correctionEvents)[number][],
+  start: number,
+): TemporalEventV0Alpha3[] {
+  return drafts.map(
+    (draft, index) =>
+      ({
+        ...structuredClone(draft),
+        schema: "covenant.timeline.event.v0alpha3",
+        sequence: start + index,
+      }) as TemporalEventV0Alpha3,
+  );
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -429,4 +804,58 @@ function record(value: unknown): Record<string, unknown> {
     throw new TypeError("expected record");
   }
   return value as Record<string, unknown>;
+}
+
+async function requireStoredRunInChild(
+  directory: string,
+  runId: string,
+): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+  timedOut: boolean;
+}> {
+  const storeModule = new URL("../dist/store.js", import.meta.url).href;
+  const source = `
+    import { FileMcpRunStore } from ${JSON.stringify(storeModule)};
+    try {
+      await new FileMcpRunStore(${JSON.stringify(directory)}).require(${JSON.stringify(runId)});
+      process.exitCode = 2;
+    } catch (error) {
+      if (error?.code === "timeline.mcp.store.corrupt") {
+        process.exitCode = 0;
+      } else {
+        process.stderr.write(error instanceof Error ? error.message : "failed");
+        process.exitCode = 3;
+      }
+    }
+  `;
+  const child = spawn(
+    process.execPath,
+    ["--input-type=module", "--eval", source],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  const stderr: Buffer[] = [];
+  child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, 2_000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("exit", (code, signal) => {
+      clearTimeout(timeout);
+      resolve({
+        code,
+        signal,
+        stderr: Buffer.concat(stderr).toString("utf8"),
+        timedOut,
+      });
+    });
+  });
 }

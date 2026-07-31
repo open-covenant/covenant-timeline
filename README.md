@@ -14,8 +14,13 @@ that another process can check.
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
+The published `0.0.0-alpha.2` package contains the temporal kernel. The model
+proposal API and benchmark are currently available from a source checkout; see
+[Integrate a language model](./docs/model-interface.md#use-the-proposal-compiler).
+
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
+[Run a source-first agent pilot](./examples/mcp-agent-pilot) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
 [Evaluate the model boundary](./docs/model-evaluation.md)
@@ -133,39 +138,55 @@ decisions.
 
 ## Give an MCP agent temporal memory
 
-`@covenant-org/timeline-mcp` runs as a local stdio server and keeps typed
-temporal state durable across agent sessions. Add it to an MCP client:
+The local MCP server keeps typed temporal state durable across agent sessions.
+Build it once from a source checkout:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+Then add the built server to an MCP client using absolute paths:
 
 ```json
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "--yes",
-        "@covenant-org/timeline-mcp@0.0.0-alpha.1",
+        "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
-        "/path/to/private/timeline-data"
+        "/absolute/path/to/private/timeline-data"
       ]
     }
   }
 }
 ```
 
-The server lets an agent create and recover runs, append typed records, project
-state at an exact knowledge cut, and request verified temporal conclusions. It
-also exports the complete portable run required for independent receipt
-verification.
+The server lets an agent create and recover runs, compile and atomically apply
+evidence-backed model proposals, append exact typed records, project state at a
+knowledge cut, and request verified temporal conclusions. It also exports the
+complete portable run required for independent receipt verification.
 
 Direct MCP writes are structurally validated but unauthenticated. Evidence
-payloads remain outside the server, and every append requires the current
-whole-run digest for optimistic concurrency. The process exposes no network
-transport.
+payloads remain outside the durable store. The proposal tool accepts source
+text transiently, returns digest-and-span provenance without echoing the text,
+and commits the complete compiled batch or nothing. Prefix-bound optimistic
+concurrency makes an event-equivalent retry idempotent, including after later
+events have been appended. The process exposes no network transport.
 
 See the
-[`@covenant-org/timeline-mcp` guide](./packages/mcp-server/README.md)
+[Timeline MCP server guide](./packages/mcp-server/README.md)
 for the tool contract, persistence model, recovery procedure, limits, and
 production boundary.
+
+The
+[source-first pilot starter](./examples/mcp-agent-pilot)
+drives the create, recovery, append, projection, and reasoning workflow across a
+server restart. It exports the evidence, run, queries, conclusions, environment,
+and exact call transcript, then verifies the artifact in a separate offline
+process.
 
 ## Use the temporal API
 
@@ -210,7 +231,10 @@ paths.
 source evidence
       │
       ▼
-model or application proposes typed records
+model proposes claims, revisions, query intent, and exact quotes
+      │
+      ▼
+Timeline compiles deterministic records + source-span provenance
       │
       ▼
 host authenticates evidence and admits records
@@ -225,15 +249,30 @@ deterministic reasoner returns result + proof receipt
 another process verifies the conclusion
 ```
 
-The model-facing boundary is deliberate. A model can extract dates,
-dependencies, corrections, and queries, but its output remains a proposal.
-The host decides which evidence and assertions are admissible. Timeline reasons
-only over accepted records.
+Models work with host-issued request handles rather than mapped ledger
+identifiers, evidence digests, sequence numbers, or raw knowledge-cut indices.
+Hosts should make those handles opaque and disclose only the scope needed for
+one request. The proposal compiler
+resolves those handles, hashes exact evidence bytes, checks unique quote
+locations, derives the ledger mechanics, and rejects the whole proposal on any
+error. A generated provider schema pins the request ID and the handles available
+for that request without embedding source text or expected answers. A separate
+verifier recompiles against the same host inputs and compares the complete
+candidate artifact. Neither operation authenticates evidence or admits a claim.
 
-The [model interface](./docs/model-interface.md) defines this loop. The
+The [model interface](./docs/model-interface.md) and
+[complete proposal artifact](./docs/model-proposal.md) define this loop. The
+[model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v1/README.md)
+measures the production extraction boundary directly. The lower-level
 [model-interface benchmark](./benchmarks/model-interface/v1/README.md) measures
 extraction, admission, query selection, and final answers separately across
-direct text, narrative memory, and Timeline-backed state.
+bounded narrative memory, stateless structured extraction, and
+Timeline-backed state. Direct full-context answers remain available as a
+secondary reference.
+Its low-level Timeline arm keeps raw ledger authorship visible as a research
+diagnostic; production integrations should use the proposal compiler. Reference
+adapters support a digest-verified local Ollama model or the OpenAI Responses
+API, and neither repairs model output.
 
 ## Temporal model
 
@@ -303,21 +342,30 @@ Before production use, review the
 [threat model](./docs/threat-model.md), and
 [production audit](./docs/production-audit-timeline.md).
 
-## Proving the model boundary
+## Model evaluation
 
-The repository includes a public 12-case development suite and a stateless
-OpenAI Responses reference adapter. No model result has been published, and the
-visible corpus does not establish that Timeline outperforms narrative memory.
+The preregistered GPT-5.6 Sol evaluation completed 432 requests across three
+primary arms and a teacher-forced diagnostic. Timeline produced exact answers
+and end-to-end artifacts on 106 of 108 observations, reached 0.9574 assertion
+F1, and returned 108 independently verified proofs. It substantially
+outperformed bounded narrative memory on answer accuracy, 106/108 versus
+65/108, but did not outperform stateless full-context structured extraction,
+which scored 107/108.
 
-The next evidence gate is a preregistered blinded benchmark with longer rolling
-histories, controlled paraphrases, distractors, fixed budgets, strict failure
-accounting, and paired analysis. See
-[Model evaluation](./docs/model-evaluation.md) and the
-[roadmap](./ROADMAP.md).
+The fixed gate therefore returned `kill`. This result does not support the
+claim that rolling Timeline state improves frontier-model answer accuracy over
+a simpler structured-extraction pipeline on this suite. It does not change the
+kernel's deterministic replay, reasoning, or proof-verification properties.
+The [preregistration](./benchmarks/model-interface/v1/PREREGISTRATION.md),
+[methodology](./docs/model-evaluation.md), and
+[complete result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+are public.
 
-The second gate is one independent long-running-agent pilot that crosses a
-restart, admits delayed or corrected evidence, and publishes a redacted run
-another process can reproduce. The
+Development now focuses on reproducible temporal state, audit, and replay in
+real integrations rather than a model-accuracy claim. The remaining evidence
+gate is one independent long-running-agent pilot that crosses a restart,
+admits delayed or corrected evidence, and publishes a redacted run another
+process can reproduce. The
 [temporal pilot](./docs/temporal-pilot.md) defines the minimum evidence.
 
 Timeline is also seeking a second implementer for the bounded RFC 0009
@@ -350,7 +398,7 @@ binds source, protocol inputs, artifacts, registry metadata, and attestations.
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Start             | [Getting started](./docs/getting-started.md)                                                                                            |
 | Model integration | [Model interface](./docs/model-interface.md), [model evaluation](./docs/model-evaluation.md)                                            |
-| Agent integration | [`@covenant-org/timeline-mcp`](./packages/mcp-server/README.md)                                                                         |
+| Agent integration | [Local MCP server](./packages/mcp-server/README.md)                                                                                     |
 | Contract          | [Draft RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md), [`schemas/v0alpha3`](./schemas/v0alpha3)                                 |
 | Conformance       | [`conformance/v0alpha3`](./conformance/v0alpha3), [second implementation](https://github.com/open-covenant/covenant-timeline/issues/19) |
 | Operations        | [Operations guide](./docs/operations.md), [security](./SECURITY.md)                                                                     |

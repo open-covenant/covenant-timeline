@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  byteDigest,
   canonicalJson,
   parseRunDocumentV0Alpha3,
   verifyTemporalConclusionV0Alpha3,
@@ -13,6 +14,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { correctionEvents, releaseContract } from "./__tests__/fixtures.js";
 import {
+  applyModelProposalInputSchema,
+  applyModelProposalOutputSchema,
   appendEventOutputSchema,
   createRunOutputSchema,
   listRunsOutputSchema,
@@ -24,11 +27,13 @@ import {
   FileMcpRunStore,
   type McpRunStore,
 } from "./index.js";
+import { MAX_LIST_PAGE_SIZE } from "./constants.js";
 
 const toolNames = [
   "timeline_create_run",
   "timeline_list_runs",
   "timeline_append_event",
+  "timeline_apply_model_proposal",
   "timeline_project_state",
   "timeline_reason",
 ];
@@ -54,7 +59,145 @@ describe("Timeline MCP server", () => {
     expect(listed.tools.every(({ outputSchema }) => outputSchema)).toBe(true);
   });
 
-  test("exports encoded run resources and sanitizes resource failures", async () => {
+  test("describes the input semantics an agent must preserve", async () => {
+    const tools = await connection.client.listTools();
+    const create = tools.tools.find(
+      ({ name }) => name === "timeline_create_run",
+    );
+    const list = tools.tools.find(({ name }) => name === "timeline_list_runs");
+    const append = tools.tools.find(
+      ({ name }) => name === "timeline_append_event",
+    );
+    const apply = tools.tools.find(
+      ({ name }) => name === "timeline_apply_model_proposal",
+    );
+    const project = tools.tools.find(
+      ({ name }) => name === "timeline_project_state",
+    );
+    const reason = tools.tools.find(({ name }) => name === "timeline_reason");
+
+    expect(create?.inputSchema).toMatchObject({
+      properties: {
+        contract: {
+          description: expect.stringContaining("never replaces"),
+        },
+      },
+    });
+    expect(append?.inputSchema).toMatchObject({
+      properties: {
+        expectedRunDigest: {
+          description: expect.stringContaining("compare-and-swap"),
+        },
+        event: {
+          description: expect.stringContaining(
+            "Do not send schema or sequence",
+          ),
+        },
+      },
+    });
+    expect(apply?.inputSchema).toMatchObject({
+      properties: {
+        expectedRevision: {
+          description: expect.stringContaining("earlier append-only prefix"),
+        },
+        evidenceCatalog: {
+          description: expect.stringContaining("never stored or returned"),
+        },
+      },
+    });
+    expect(list?.inputSchema).toMatchObject({
+      properties: {
+        cursor: {
+          description: expect.stringContaining("preceding"),
+        },
+        limit: {
+          description: expect.stringContaining(
+            `never exceeds ${MAX_LIST_PAGE_SIZE}`,
+          ),
+        },
+      },
+    });
+    expect(project?.inputSchema).toMatchObject({
+      properties: {
+        recordedThrough: {
+          description: expect.stringContaining("null selects the empty prefix"),
+        },
+      },
+    });
+    const reasonSchema = JSON.stringify(reason?.inputSchema);
+    expect(reasonSchema).toContain("toPointId - fromPointId");
+    expect(reasonSchema).toContain("Always pin recordedThrough explicitly");
+  });
+
+  test("does not reflect rejected tool input", async () => {
+    const untrustedKey = "line\n\u001b[31msecret";
+    const result = await connection.client.callTool({
+      name: "timeline_list_runs",
+      arguments: { [untrustedKey]: true },
+    });
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Input validation error: Invalid arguments for tool timeline_list_runs: tool input is invalid",
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain("secret");
+  });
+
+  test("paginates run discovery without scanning the complete catalog", async () => {
+    const store = new FileMcpRunStore(directory);
+    const runIds = [];
+    for (let index = 0; index < MAX_LIST_PAGE_SIZE + 2; index += 1) {
+      const runId = `agent.catalog-${String(index).padStart(2, "0")}`;
+      await store.create(releaseContract(runId));
+      runIds.push(runId);
+    }
+
+    const first = listRunsOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_list_runs",
+          arguments: {},
+        })
+      ).structuredContent,
+    );
+    expect(first.timelines).toHaveLength(MAX_LIST_PAGE_SIZE);
+    expect(first.nextCursor).toMatch(/^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/);
+
+    const second = listRunsOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_list_runs",
+          arguments: {
+            cursor: first.nextCursor,
+          },
+        })
+      ).structuredContent,
+    );
+    expect(second.timelines).toHaveLength(2);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      [...first.timelines, ...second.timelines]
+        .map(({ runId }) => runId)
+        .sort(),
+    ).toEqual(runIds.sort());
+
+    const resources = await connection.client.listResources();
+    expect(resources.resources).toEqual([]);
+    const templates = await connection.client.listResourceTemplates();
+    expect(templates.resourceTemplates).toEqual([
+      expect.objectContaining({
+        name: "timeline-run",
+        uriTemplate: "timeline://run/{runId}",
+      }),
+    ]);
+  });
+
+  test("reads encoded run resources and sanitizes resource failures", async () => {
     const contract = releaseContract("agent/release:42");
     await connection.client.callTool({
       name: "timeline_create_run",
@@ -62,15 +205,9 @@ describe("Timeline MCP server", () => {
     });
 
     const listed = await connection.client.listResources();
-    expect(listed.resources).toEqual([
-      expect.objectContaining({
-        name: contract.id,
-        uri: "timeline://run/agent%2Frelease%3A42",
-        mimeType: "application/json",
-      }),
-    ]);
+    expect(listed.resources).toEqual([]);
     const resource = await connection.client.readResource({
-      uri: listed.resources[0]!.uri,
+      uri: "timeline://run/agent%2Frelease%3A42",
     });
     const content = resource.contents[0];
     if (!content || !("text" in content)) {
@@ -83,15 +220,6 @@ describe("Timeline MCP server", () => {
     await connection.close();
     const secret = "private-storage-detail";
     connection = await connect(failingStore(secret));
-    const listFailure = await connection.client
-      .listResources()
-      .then(() => undefined)
-      .catch((error: unknown) => error);
-    expect(String(listFailure)).toContain(
-      "timeline.mcp.internal: request failed",
-    );
-    expect(String(listFailure)).not.toContain(secret);
-
     await expect(
       connection.client.readResource({
         uri: "timeline://run/agent.release",
@@ -102,6 +230,588 @@ describe("Timeline MCP server", () => {
         uri: "timeline://run/agent.release",
       }),
     ).rejects.not.toThrow(secret);
+  });
+
+  test("atomically applies a private model proposal and returns a reusable query", async () => {
+    const timeline = await createModelBase(connection);
+    const requestId = "request.release-correction";
+    const deployQuote = "Deploy finished at 200.";
+    const reviewQuote = "Review finished at 300.";
+    const evidenceText = `Private header 🕰️ ${deployQuote} ${reviewQuote} Private footer.`;
+    const evidenceRef = byteDigest(new TextEncoder().encode(evidenceText));
+    const arguments_ = {
+      runId: "agent.release",
+      expectedRevision: timeline.revision,
+      expectedRunDigest: timeline.runDigest,
+      expectedRequestId: requestId,
+      proposal: {
+        schema: "covenant.timeline.model-proposal.v1",
+        requestId,
+        changes: [
+          {
+            type: "coordinate",
+            pointHandle: "deploy",
+            bounds: { type: "exact", value: 200 },
+            supports: [{ evidenceId: "record.release", quote: deployQuote }],
+            revision: { type: "keep" },
+          },
+          {
+            type: "coordinate",
+            pointHandle: "review",
+            bounds: { type: "exact", value: 300 },
+            supports: [{ evidenceId: "record.release", quote: reviewQuote }],
+            revision: { type: "keep" },
+          },
+        ],
+        query: {
+          type: "difference",
+          targetHandle: "review-minus-deploy",
+          knowledgeCut: { type: "current" },
+        },
+      },
+      evidenceCatalog: [
+        { id: "record.release", status: "current", text: evidenceText },
+      ],
+      referenceCatalog: modelReferences(),
+    } as const;
+
+    const response = await connection.client.callTool({
+      name: "timeline_apply_model_proposal",
+      arguments: arguments_,
+    });
+    const applied = applyModelProposalOutputSchema.parse(
+      response.structuredContent,
+    );
+
+    expect(applied).toMatchObject({
+      applied: true,
+      requestId,
+      baseRevision: 2,
+      baseRunDigest: timeline.runDigest,
+      timeline: {
+        revision: 4,
+        latestRecordedThrough: 3,
+      },
+      query: {
+        schema: "covenant.timeline.query.v0alpha3",
+        type: "difference.bounds",
+        contextId: "actual",
+        recordedThrough: 3,
+        fromPointId: "deployed",
+        toPointId: "review-finished",
+      },
+      admission: {
+        mode: "structural-only",
+        assertionAuthority: "unverified",
+        evidencePayloads: "external",
+      },
+    });
+    expect(applied.events).toHaveLength(2);
+    expect(
+      applied.events.every(
+        (event) =>
+          event.type === "coordinate.asserted" &&
+          event.assertion.evidenceRefs[0] === evidenceRef,
+      ),
+    ).toBe(true);
+    const reviewSupport = applied.provenance
+      .flatMap(({ supports }) => supports)
+      .find(
+        ({ quoteDigest }) =>
+          quoteDigest === byteDigest(new TextEncoder().encode(reviewQuote)),
+      );
+    const reviewStart = Buffer.byteLength(
+      evidenceText.slice(0, evidenceText.indexOf(reviewQuote)),
+      "utf8",
+    );
+    expect(reviewSupport).toEqual({
+      evidenceId: "record.release",
+      evidenceRef,
+      quoteDigest: byteDigest(new TextEncoder().encode(reviewQuote)),
+      utf8StartByte: reviewStart,
+      utf8EndByte: reviewStart + Buffer.byteLength(reviewQuote, "utf8"),
+    });
+    expect(JSON.stringify(response)).not.toContain(evidenceText);
+    expect(JSON.stringify(response)).not.toContain(reviewQuote);
+
+    const reasoned = reasonOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_reason",
+          arguments: {
+            runId: "agent.release",
+            query: applied.query,
+          },
+        })
+      ).structuredContent,
+    );
+    expect(reasoned).toMatchObject({
+      verified: true,
+      conclusion: {
+        result: {
+          type: "difference.bounds",
+          status: "bounded",
+          minimum: 100,
+          maximum: 100,
+        },
+      },
+    });
+
+    const resource = await connection.client.readResource({
+      uri: "timeline://run/agent.release",
+    });
+    const content = resource.contents[0];
+    if (!content || !("text" in content)) {
+      throw new Error("timeline resource did not contain JSON text");
+    }
+    expect(content.text).toContain(evidenceRef);
+    expect(content.text).not.toContain(evidenceText);
+    expect(content.text).not.toContain(reviewQuote);
+
+    const later = appendEventOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_append_event",
+          arguments: {
+            runId: "agent.release",
+            expectedRunDigest: applied.timeline.runDigest,
+            event: {
+              id: "event.follow-up-declared",
+              type: "point.declared",
+              point: {
+                id: "follow-up",
+                contextId: "actual",
+                axisId: "utc-seconds",
+              },
+            },
+          },
+        })
+      ).structuredContent,
+    );
+    const retried = applyModelProposalOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_apply_model_proposal",
+          arguments: arguments_,
+        })
+      ).structuredContent,
+    );
+    expect(retried.applied).toBe(false);
+    expect(retried.events).toEqual(applied.events);
+    expect(retried.query).toEqual(applied.query);
+    expect(retried.timeline).toEqual(later.timeline);
+  });
+
+  test("rejects invalid model proposal output event provenance", async () => {
+    const timeline = await createModelBase(connection);
+    const applied = await applyCoordinateProposal(connection, {
+      timeline,
+      requestId: "request.output-schema",
+      evidenceId: "record.output-schema",
+      evidenceText: "Review finished at 300.",
+      quote: "Review finished at 300.",
+      value: 300,
+    });
+    const [event] = applied.events;
+    const [provenance] = applied.provenance;
+    if (!event || !provenance) {
+      throw new Error("proposal did not return one event and provenance entry");
+    }
+
+    expect(
+      applyModelProposalOutputSchema.safeParse({
+        ...applied,
+        provenance: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      applyModelProposalOutputSchema.safeParse({
+        ...applied,
+        provenance: [
+          {
+            ...provenance,
+            candidateEventId: "event.wrong",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      applyModelProposalOutputSchema.safeParse({
+        ...applied,
+        provenance: [
+          {
+            ...provenance,
+            supports: [],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      applyModelProposalOutputSchema.safeParse({
+        ...applied,
+        provenance: [
+          {
+            ...provenance,
+            evidenceRefs: [`sha256:${"f".repeat(64)}`],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      applyModelProposalOutputSchema.safeParse({
+        ...applied,
+        provenance: [
+          {
+            ...provenance,
+            supports: provenance.supports.map((support) => ({
+              ...support,
+              evidenceRef: `sha256:${"f".repeat(64)}`,
+            })),
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      applyModelProposalOutputSchema.safeParse({
+        ...applied,
+        events: [
+          {
+            schema: "covenant.timeline.event.v0alpha3",
+            sequence: event.sequence,
+            id: "event.point-declared",
+            type: "point.declared",
+            point: {
+              id: "unrelated",
+              contextId: "actual",
+              axisId: "utc-seconds",
+            },
+          },
+        ],
+        provenance: [
+          {
+            ...provenance,
+            candidateEventId: "event.point-declared",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("lowers prior knowledge cuts without mutating the run", async () => {
+    const timeline = await createModelBase(connection);
+    const requestId = "request.prior-consistency";
+    const result = applyModelProposalOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_apply_model_proposal",
+          arguments: {
+            runId: "agent.release",
+            expectedRevision: timeline.revision,
+            expectedRunDigest: timeline.runDigest,
+            expectedRequestId: requestId,
+            proposal: {
+              schema: "covenant.timeline.model-proposal.v1",
+              requestId,
+              changes: [],
+              query: {
+                type: "consistency",
+                targetHandle: "actual-context",
+                knowledgeCut: {
+                  type: "prior",
+                  cutHandle: "first-declaration",
+                },
+              },
+            },
+            evidenceCatalog: [],
+            referenceCatalog: modelReferences(),
+            knowledgeCutCatalog: [
+              { handle: "first-declaration", recordedThrough: 0 },
+            ],
+          },
+        })
+      ).structuredContent,
+    );
+
+    expect(result).toMatchObject({
+      applied: false,
+      events: [],
+      timeline: { revision: 2 },
+      query: {
+        type: "context.consistency",
+        contextId: "actual",
+        recordedThrough: 0,
+      },
+    });
+    const reasoned = reasonOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_reason",
+          arguments: {
+            runId: "agent.release",
+            query: result.query,
+          },
+        })
+      ).structuredContent,
+    );
+    expect(reasoned.conclusion.result).toEqual({
+      type: "context.consistency",
+      status: "consistent",
+    });
+  });
+
+  test("applies model corrections and retractions without restoring superseded state", async () => {
+    let timeline = await createModelBase(connection);
+    const firstText = "Review finished at 100.";
+    const first = await applyCoordinateProposal(connection, {
+      timeline,
+      requestId: "request.review-v1",
+      evidenceId: "record.review-v1",
+      evidenceText: firstText,
+      quote: firstText,
+      value: 100,
+    });
+    const firstEvent = first.events[0];
+    if (firstEvent?.type !== "coordinate.asserted") {
+      throw new Error("coordinate proposal returned an unexpected event");
+    }
+    timeline = first.timeline;
+
+    const correctedText = "Correction: review finished at 300.";
+    const corrected = await applyCoordinateProposal(connection, {
+      timeline,
+      requestId: "request.review-v2",
+      evidenceId: "record.review-v2",
+      evidenceText: correctedText,
+      quote: correctedText,
+      value: 300,
+      assertionCatalog: [
+        {
+          handle: "review-current",
+          assertionId: firstEvent.assertion.id,
+        },
+      ],
+      revision: {
+        type: "supersede",
+        assertionHandle: "review-current",
+      },
+    });
+    const correctedEvent = corrected.events[0];
+    if (correctedEvent?.type !== "coordinate.asserted") {
+      throw new Error("correction proposal returned an unexpected event");
+    }
+    expect(correctedEvent.assertion.supersedes).toEqual([
+      firstEvent.assertion.id,
+    ]);
+
+    const withdrawnText = "The corrected review record was withdrawn.";
+    const retracted = applyModelProposalOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_apply_model_proposal",
+          arguments: {
+            runId: "agent.release",
+            expectedRevision: corrected.timeline.revision,
+            expectedRunDigest: corrected.timeline.runDigest,
+            expectedRequestId: "request.review-withdrawal",
+            proposal: {
+              schema: "covenant.timeline.model-proposal.v1",
+              requestId: "request.review-withdrawal",
+              changes: [
+                {
+                  type: "retraction",
+                  assertionHandle: "review-corrected",
+                  supports: [
+                    {
+                      evidenceId: "record.review-withdrawal",
+                      quote: withdrawnText,
+                    },
+                  ],
+                },
+              ],
+              query: {
+                type: "consistency",
+                targetHandle: "actual-context",
+                knowledgeCut: { type: "current" },
+              },
+            },
+            evidenceCatalog: [
+              {
+                id: "record.review-withdrawal",
+                status: "current",
+                text: withdrawnText,
+              },
+            ],
+            referenceCatalog: modelReferences(),
+            assertionCatalog: [
+              {
+                handle: "review-corrected",
+                assertionId: correctedEvent.assertion.id,
+              },
+            ],
+          },
+        })
+      ).structuredContent,
+    );
+    expect(retracted.events).toEqual([
+      expect.objectContaining({
+        type: "assertion.retracted",
+        assertionId: correctedEvent.assertion.id,
+      }),
+    ]);
+
+    const state = projectStateOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_project_state",
+          arguments: {
+            runId: "agent.release",
+            contextId: "actual",
+            recordedThrough: retracted.timeline.latestRecordedThrough,
+          },
+        })
+      ).structuredContent,
+    );
+    expect(state.state.coordinates).toEqual([]);
+  });
+
+  test("rejects mismatched requests and unsupported evidence without mutation or leakage", async () => {
+    const timeline = await createModelBase(connection);
+    const quote = "Review finished at 300.";
+    const baseArguments = {
+      runId: "agent.release",
+      expectedRevision: timeline.revision,
+      expectedRunDigest: timeline.runDigest,
+      expectedRequestId: "request.expected",
+      proposal: {
+        schema: "covenant.timeline.model-proposal.v1",
+        requestId: "request.expected",
+        changes: [
+          {
+            type: "coordinate",
+            pointHandle: "review",
+            bounds: { type: "exact", value: 300 },
+            supports: [{ evidenceId: "record.review", quote }],
+            revision: { type: "keep" },
+          },
+        ],
+        query: {
+          type: "consistency",
+          targetHandle: "actual-context",
+          knowledgeCut: { type: "current" },
+        },
+      },
+      evidenceCatalog: [
+        { id: "record.review", status: "current", text: quote },
+      ],
+      referenceCatalog: modelReferences(),
+    } as const;
+
+    const invalid = [
+      {
+        ...baseArguments,
+        expectedRequestId: "request.different",
+      },
+      {
+        ...baseArguments,
+        evidenceCatalog: [
+          { id: "record.review", status: "stale", text: quote },
+        ],
+      },
+      {
+        ...baseArguments,
+        evidenceCatalog: [
+          {
+            id: "record.review",
+            status: "current",
+            text: `${quote} ${quote}`,
+          },
+        ],
+      },
+    ];
+    for (const arguments_ of invalid) {
+      const result = await connection.client.callTool({
+        name: "timeline_apply_model_proposal",
+        arguments: arguments_,
+      });
+      expect(result).toEqual({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "timeline.mcp.input.invalid: model proposal is invalid",
+          },
+        ],
+      });
+      expect(JSON.stringify(result)).not.toContain(quote);
+    }
+
+    const listed = listRunsOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_list_runs",
+          arguments: {},
+        })
+      ).structuredContent,
+    );
+    expect(listed.timelines[0]?.revision).toBe(timeline.revision);
+  });
+
+  test("enforces model proposal schema and aggregate evidence ceilings", async () => {
+    const timeline = await createModelBase(connection);
+    const requestId = "request.limit";
+    const base = {
+      runId: "agent.release",
+      expectedRevision: timeline.revision,
+      expectedRunDigest: timeline.runDigest,
+      expectedRequestId: requestId,
+      proposal: {
+        schema: "covenant.timeline.model-proposal.v1",
+        requestId,
+        changes: [],
+        query: {
+          type: "consistency",
+          targetHandle: "actual-context",
+          knowledgeCut: { type: "current" },
+        },
+      },
+      evidenceCatalog: [],
+      referenceCatalog: modelReferences(),
+    } as const;
+    const excessiveChanges = {
+      ...base,
+      proposal: {
+        ...base.proposal,
+        changes: Array.from({ length: 9 }, () => ({
+          type: "retraction",
+          assertionHandle: "missing",
+          supports: [{ evidenceId: "missing", quote: "missing" }],
+        })),
+      },
+    };
+    expect(
+      applyModelProposalInputSchema.safeParse(excessiveChanges).success,
+    ).toBe(false);
+
+    const oversized = await connection.client.callTool({
+      name: "timeline_apply_model_proposal",
+      arguments: {
+        ...base,
+        evidenceCatalog: Array.from({ length: 5 }, (_, index) => ({
+          id: `record.limit-${index}`,
+          status: "current",
+          text: "x".repeat(60_000),
+        })),
+      },
+    });
+    expect(oversized).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "timeline.mcp.input.invalid: model proposal is invalid",
+        },
+      ],
+    });
   });
 
   test("replays a corrected release and exports independently verifiable receipts", async () => {
@@ -376,6 +1086,136 @@ async function connect(store: McpRunStore) {
   };
 }
 
+async function createModelBase(
+  connection: Awaited<ReturnType<typeof connect>>,
+): Promise<McpTimelineMetadata> {
+  const created = createRunOutputSchema.parse(
+    (
+      await connection.client.callTool({
+        name: "timeline_create_run",
+        arguments: { contract: releaseContract() },
+      })
+    ).structuredContent,
+  );
+  let timeline = created.timeline;
+  for (const event of correctionEvents.slice(0, 2)) {
+    const appended = appendEventOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_append_event",
+          arguments: {
+            runId: created.timeline.runId,
+            expectedRunDigest: timeline.runDigest,
+            event,
+          },
+        })
+      ).structuredContent,
+    );
+    timeline = appended.timeline;
+  }
+  return timeline;
+}
+
+function modelReferences() {
+  return [
+    {
+      type: "context" as const,
+      handle: "actual-context",
+      contextId: "actual",
+    },
+    {
+      type: "point" as const,
+      handle: "review",
+      pointId: "review-finished",
+    },
+    {
+      type: "point" as const,
+      handle: "deploy",
+      pointId: "deployed",
+    },
+    {
+      type: "difference" as const,
+      handle: "review-minus-deploy",
+      fromPointId: "deployed",
+      toPointId: "review-finished",
+    },
+  ];
+}
+
+type McpTimelineMetadata = ReturnType<
+  typeof createRunOutputSchema.parse
+>["timeline"];
+
+interface CoordinateProposalOptions {
+  timeline: McpTimelineMetadata;
+  requestId: string;
+  evidenceId: string;
+  evidenceText: string;
+  quote: string;
+  value: number;
+  assertionCatalog?: readonly {
+    handle: string;
+    assertionId: string;
+  }[];
+  revision?: {
+    type: "supersede";
+    assertionHandle: string;
+  };
+}
+
+async function applyCoordinateProposal(
+  connection: Awaited<ReturnType<typeof connect>>,
+  options: CoordinateProposalOptions,
+) {
+  return applyModelProposalOutputSchema.parse(
+    (
+      await connection.client.callTool({
+        name: "timeline_apply_model_proposal",
+        arguments: {
+          runId: options.timeline.runId,
+          expectedRevision: options.timeline.revision,
+          expectedRunDigest: options.timeline.runDigest,
+          expectedRequestId: options.requestId,
+          proposal: {
+            schema: "covenant.timeline.model-proposal.v1",
+            requestId: options.requestId,
+            changes: [
+              {
+                type: "coordinate",
+                pointHandle: "review",
+                bounds: { type: "exact", value: options.value },
+                supports: [
+                  {
+                    evidenceId: options.evidenceId,
+                    quote: options.quote,
+                  },
+                ],
+                revision: options.revision ?? { type: "keep" },
+              },
+            ],
+            query: {
+              type: "consistency",
+              targetHandle: "actual-context",
+              knowledgeCut: { type: "current" },
+            },
+          },
+          evidenceCatalog: [
+            {
+              id: options.evidenceId,
+              status: "current",
+              text: options.evidenceText,
+            },
+          ],
+          referenceCatalog: modelReferences(),
+          ...(options.assertionCatalog
+            ? { assertionCatalog: options.assertionCatalog }
+            : {}),
+        },
+      })
+    ).structuredContent,
+  );
+}
+
 function failingStore(secret: string): McpRunStore {
   const fail = async (): Promise<never> => {
     throw new Error(secret);
@@ -383,9 +1223,11 @@ function failingStore(secret: string): McpRunStore {
 
   return {
     list: fail,
+    listPage: fail,
     load: fail,
     require: fail,
     create: fail,
     append: fail,
+    appendCompiled: fail,
   };
 }

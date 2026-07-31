@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -149,7 +149,48 @@ describe("timeline-mcp stdio", () => {
     expect(restarted.stderr()).toBe("");
   });
 
-  test("closes on protocol input above the byte limit", async () => {
+  test.each([
+    {
+      name: "input above the byte limit",
+      closeInput: false,
+      input: `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { padding: "x".repeat(DEFAULT_MAX_MESSAGE_BYTES) },
+      })}\n`,
+    },
+    {
+      name: "a schema-invalid JSON-RPC frame",
+      closeInput: false,
+      input: "{}\n",
+    },
+    {
+      name: "syntax-invalid JSON",
+      closeInput: false,
+      input: "{\n",
+    },
+    {
+      name: "duplicate JSON keys",
+      closeInput: false,
+      input: '{"jsonrpc":"2.0","jsonrpc":"2.0"}\n',
+    },
+    {
+      name: "invalid UTF-8",
+      closeInput: false,
+      input: Buffer.from([0x7b, 0xff, 0x7d, 0x0a]),
+    },
+    {
+      name: "truncated JSON at end of input",
+      closeInput: true,
+      input: "{",
+    },
+    {
+      name: "a frame without its newline terminator",
+      closeInput: true,
+      input: "{}",
+    },
+  ])("exits nonzero on $name", async ({ closeInput, input }) => {
     const directory = await mkdtemp(join(tmpdir(), "timeline-mcp-stdio-"));
     directories.push(directory);
     const child = spawn(process.execPath, [cliPath, "--data-dir", directory], {
@@ -159,31 +200,53 @@ describe("timeline-mcp stdio", () => {
     const stderr: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-
-    child.stdin.end(
-      `${JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: { padding: "x".repeat(DEFAULT_MAX_MESSAGE_BYTES) },
-      })}\n`,
-    );
-
-    const exit = await new Promise<{
-      code: number | null;
-      signal: NodeJS.Signals | null;
-    }>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) => resolve({ code, signal }));
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE" && error.code !== "ERR_STREAM_DESTROYED") {
+        throw error;
+      }
     });
 
-    expect(exit).toEqual({ code: 0, signal: null });
+    const exitPromise = waitForExit(child);
+    if (closeInput) child.stdin.end(input);
+    else child.stdin.write(input);
+    const exit = await exitPromise;
+
+    expect(exit).toEqual({ code: 1, signal: null });
     expect(Buffer.concat(stdout).toString("utf8")).toBe("");
     expect(Buffer.concat(stderr).toString("utf8")).toBe(
       "timeline-mcp: invalid protocol input\n",
     );
   });
 });
+
+function waitForExit(
+  child: ChildProcess,
+  timeoutMs = 2_000,
+): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}> {
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeoutMs);
+
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("exit", (code, signal) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error(`timeline-mcp did not exit within ${timeoutMs}ms`));
+        return;
+      }
+      resolve({ code, signal });
+    });
+  });
+}
 
 async function connect(directory: string): Promise<{
   client: Client;

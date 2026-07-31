@@ -36,6 +36,7 @@ import {
 import {
   ARMS,
   BENCHMARK,
+  DEFAULT_ARMS,
   MAX_REPEATS,
   MAX_REQUEST_BYTES,
   MAX_RESULTS_BYTES,
@@ -44,6 +45,8 @@ import {
   PROMPT_PATHS,
   REQUEST_SCHEMA,
   RESULT_SCHEMA,
+  assertModelTimelineDelta,
+  assertStructuredEventOrder,
   assertValid,
   assertVisibleEvidenceRefs,
   createModelEvalValidators,
@@ -255,6 +258,10 @@ function decodeResponseLines(chunks, bytes) {
 }
 
 export async function runModelInterfaceEval(options) {
+  options = {
+    priorStateMode: "rolling",
+    ...options,
+  };
   validateRunOptions(options);
   const outputPath = resolve(options.output);
   await assertOutputOutsideCheckout(outputPath);
@@ -287,6 +294,7 @@ export async function runModelInterfaceEval(options) {
     "packages/prototype/package.json",
   );
   const run = {
+    attemptId: randomUUID(),
     config,
     configDigest: contentDigest(config),
     corpusDigest: await digestFile(options.cases ?? defaultCasesPath),
@@ -296,12 +304,16 @@ export async function runModelInterfaceEval(options) {
     selection: {
       arms: options.arms,
       cases: cases.map(({ id }) => id),
+      priorStateMode: options.priorStateMode,
       repeats: options.repeats,
       timeoutMs: options.timeoutMs,
     },
     timelineVersion: packageDocument.version,
+    startedAt: new Date().toISOString(),
     sourceRevision: source.revision,
     sourceDirty: source.dirty,
+    sourceStateDigest: source.stateDigest,
+    runtimeDigest,
     node: process.versions.node,
     platform: platform(),
     arch: arch(),
@@ -332,10 +344,22 @@ export async function runModelInterfaceEval(options) {
           const knowledgeCuts = [];
 
           for (const cut of testCase.cuts) {
+            const teacherPrior =
+              arm === "timeline" && options.priorStateMode === "teacher-forced"
+                ? goldPriorState(testCase, cut.index)
+                : null;
+            const priorEvents =
+              arm === "structured-extraction"
+                ? testCase.setupEvents
+                : (teacherPrior?.events ?? admittedEvents);
+            const priorKnowledgeCuts =
+              teacherPrior?.knowledgeCuts ?? knowledgeCuts;
             requestNumber += 1;
             const requestId = `request-${requestNumber}`;
             const budget =
-              arm === "narrative-memory" || arm === "timeline"
+              arm === "narrative-memory" ||
+              arm === "structured-extraction" ||
+              arm === "timeline"
                 ? memoryBudgetBytes(testCase, cut.index)
                 : null;
             const input = {
@@ -344,7 +368,7 @@ export async function runModelInterfaceEval(options) {
               setupEvents: testCase.setupEvents,
               question: cut.question,
               evidence:
-                arm === "direct"
+                arm === "direct" || arm === "structured-extraction"
                   ? visibleEvidence(testCase, cut.index)
                   : currentEvidence(testCase, cut.index),
               ...(arm === "narrative-memory"
@@ -355,11 +379,14 @@ export async function runModelInterfaceEval(options) {
                     priorRun: {
                       schema: "covenant.timeline.run.v0alpha3",
                       contract: testCase.contract,
-                      events: admittedEvents,
+                      events: priorEvents,
                     },
-                    knowledgeCuts: [...knowledgeCuts],
+                    knowledgeCuts: [...priorKnowledgeCuts],
                     stateBudgetBytes: budget,
                   }
+                : {}),
+              ...(arm === "structured-extraction"
+                ? { stateBudgetBytes: budget }
                 : {}),
             };
             const request = {
@@ -408,7 +435,10 @@ export async function runModelInterfaceEval(options) {
               memoryBytes: null,
               memoryBudgetBytes: arm === "narrative-memory" ? budget : null,
               stateBytes: null,
-              stateBudgetBytes: arm === "timeline" ? budget : null,
+              stateBudgetBytes:
+                arm === "structured-extraction" || arm === "timeline"
+                  ? budget
+                  : null,
               usage: null,
               latencyMs: 0,
               error: null,
@@ -461,6 +491,7 @@ export async function runModelInterfaceEval(options) {
               } else {
                 result.proposedEvents = response.events;
                 result.proposedQuery = response.query;
+                assertModelTimelineDelta(response.events);
                 for (const [index, event] of response.events.entries()) {
                   if (
                     event.type === "point.declared" ||
@@ -476,13 +507,21 @@ export async function runModelInterfaceEval(options) {
                   }
                   assertVisibleEvidenceRefs(
                     event,
-                    currentEvidence(testCase, cut.index),
+                    arm === "structured-extraction"
+                      ? visibleEvidence(testCase, cut.index)
+                      : currentEvidence(testCase, cut.index),
                     `adapter response.events[${index}]`,
+                  );
+                }
+                if (arm === "structured-extraction") {
+                  assertStructuredEventOrder(
+                    response.events,
+                    visibleEvidence(testCase, cut.index),
                   );
                 }
 
                 let parsedRun;
-                const candidateEvents = [...admittedEvents, ...response.events];
+                const candidateEvents = [...priorEvents, ...response.events];
                 try {
                   parsedRun = parseRunDocumentV0Alpha3({
                     schema: "covenant.timeline.run.v0alpha3",
@@ -492,16 +531,19 @@ export async function runModelInterfaceEval(options) {
                 } catch (error) {
                   throw stageError(error, "admission", "run.rejected");
                 }
-                const candidateKnowledgeCuts = [
-                  ...knowledgeCuts,
-                  {
-                    cut: cut.index,
-                    recordedThrough:
-                      candidateEvents.length === 0
-                        ? null
-                        : candidateEvents.length - 1,
-                  },
-                ];
+                const candidateKnowledgeCuts =
+                  arm === "timeline"
+                    ? [
+                        ...priorKnowledgeCuts,
+                        {
+                          cut: cut.index,
+                          recordedThrough:
+                            candidateEvents.length === 0
+                              ? null
+                              : candidateEvents.length - 1,
+                        },
+                      ]
+                    : [];
                 result.stateBytes = continuityStateBytes(
                   parsedRun,
                   candidateKnowledgeCuts,
@@ -517,7 +559,12 @@ export async function runModelInterfaceEval(options) {
                   );
                 }
                 result.admitted = true;
-                admittedEvents = candidateEvents;
+                if (
+                  arm === "timeline" &&
+                  options.priorStateMode === "rolling"
+                ) {
+                  admittedEvents = candidateEvents;
+                }
 
                 let query;
                 try {
@@ -563,7 +610,10 @@ export async function runModelInterfaceEval(options) {
                 code: failure.code,
                 message: failure.message,
               };
-              if (arm === "timeline" && result.admitted === null) {
+              if (
+                (arm === "structured-extraction" || arm === "timeline") &&
+                result.admitted === null
+              ) {
                 result.admitted = false;
               }
             } finally {
@@ -593,7 +643,7 @@ export async function runModelInterfaceEval(options) {
               );
             }
 
-            if (arm === "timeline") {
+            if (arm === "timeline" && options.priorStateMode === "rolling") {
               knowledgeCuts.push({
                 cut: cut.index,
                 recordedThrough:
@@ -691,7 +741,7 @@ async function assertOutputAvailable(path) {
   throw new Error(`output already exists: ${path}`);
 }
 
-async function runtimeStateDigest(adapter) {
+export async function runtimeStateDigest(adapter) {
   const distRoot = resolve("packages/prototype/dist");
   const distFiles = await runtimeJavaScriptFiles(distRoot);
   const scriptFiles = await runtimeJavaScriptFiles(join(root, "scripts"));
@@ -790,6 +840,31 @@ function validateRunOptions(options) {
   if (typeof options.overwrite !== "boolean") {
     throw new Error("overwrite must be a boolean");
   }
+  if (
+    options.priorStateMode !== "rolling" &&
+    options.priorStateMode !== "teacher-forced"
+  ) {
+    throw new Error("priorStateMode must be rolling or teacher-forced");
+  }
+  if (
+    options.priorStateMode === "teacher-forced" &&
+    (options.arms.length !== 1 || options.arms[0] !== "timeline")
+  ) {
+    throw new Error("teacher-forced mode may run only the Timeline arm");
+  }
+}
+
+function goldPriorState(testCase, cutIndex) {
+  const events = [...testCase.setupEvents];
+  const knowledgeCuts = [];
+  for (const cut of testCase.cuts.slice(0, cutIndex)) {
+    events.push(...cut.goldEvents);
+    knowledgeCuts.push({
+      cut: cut.index,
+      recordedThrough: events.length === 0 ? null : events.length - 1,
+    });
+  }
+  return { events, knowledgeCuts };
 }
 
 function assertBoundedOption(value, label, maximum) {
@@ -798,7 +873,7 @@ function assertBoundedOption(value, label, maximum) {
   }
 }
 
-async function readSourceState() {
+export async function readSourceState() {
   try {
     const [{ stdout: revision }, { stdout: status }, { stdout: files }] =
       await Promise.all([
@@ -926,12 +1001,13 @@ function parseArguments(argv) {
   const flags = argv.slice(0, separator);
   const options = {
     adapter: argv.slice(separator + 1),
-    arms: [...ARMS],
+    arms: [...DEFAULT_ARMS],
     caseIds: [],
     cases: defaultCasesPath,
     config: null,
     output: null,
     overwrite: false,
+    priorStateMode: "rolling",
     repeats: 3,
     timeoutMs: 120_000,
   };
@@ -960,6 +1036,9 @@ function parseArguments(argv) {
         break;
       case "--output":
         options.output = value;
+        break;
+      case "--prior-state":
+        options.priorStateMode = value;
         break;
       case "--repeats":
         options.repeats = parseBoundedPositiveInteger(value, flag, MAX_REPEATS);

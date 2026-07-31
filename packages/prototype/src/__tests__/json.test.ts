@@ -22,6 +22,36 @@ describe("strict JSON parsing", () => {
     );
   });
 
+  it("stops after the first duplicate key", () => {
+    let input = "0";
+    for (let depth = 0; depth < 2_000; depth += 1) {
+      input = `{"value":0,"value":${input}}`;
+    }
+
+    expect(() => parseJson(input)).toThrowError(
+      expect.objectContaining({
+        issues: [
+          expect.objectContaining({
+            code: "duplicate_key",
+            path: "$.value",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("stops after the first syntax error", () => {
+    expect(() => parseJson("}".repeat(10_000))).toThrowError(
+      expect.objectContaining({
+        issues: [
+          expect.objectContaining({
+            code: "syntax",
+          }),
+        ],
+      }),
+    );
+  });
+
   it.each(['{"value":1,}', '{"value":/* comment */1}', ""])(
     "rejects non-strict input",
     (input) => {

@@ -1,12 +1,13 @@
 # Roadmap
 
-Timeline succeeds when independent teams use it to give long-running agents
-verifiable temporal state. Work is ranked by the adoption risks that could
-invalidate the product: model extraction, integration cost, operational value,
-and protocol portability.
+Timeline provides deterministic temporal projection, replay, and proof
+verification for long-running systems. Its preregistered model evaluation did
+not support a standalone model-memory product. This roadmap now prioritizes
+kernel adoption inside Covenant or independent systems, operational value, and
+protocol portability.
 
 Release history belongs in the [changelog](./CHANGELOG.md). This document
-defines the evidence required to keep expanding the standalone project.
+records the evidence required before the project can make broader claims.
 
 ## Available foundation
 
@@ -22,64 +23,82 @@ The `0.0.0-alpha.2` npm package includes:
 - the v0alpha1 and v0alpha2 checkpoint formats as compatibility APIs.
 
 The schemas, conformance corpus, CLI, reference kernel, correction-and-replay
-example, model interface, and development benchmark are public. They establish
-a working substrate, not adoption or model-quality evidence.
+example, model interface, and benchmark artifacts are public. They establish a
+working substrate and include a formal negative model result; they do not
+establish adoption.
+
+The repository also provides deterministic model-proposal compilation with
+exact source-span provenance, a request-scoped Structured Outputs schema, and
+an atomic local MCP write path. The compiler reproduces the admitted state and
+checked result for all 36 cuts in the public corpus. That establishes lowering
+equivalence, not model extraction quality.
+
+The
+[model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v1/README.md)
+runs that production interface as a rolling evaluation, preserves every
+failure, and independently scores extraction, state, query, answer, and proof
+outcomes. Its checked oracle proves benchmark representability; it is not a
+model result.
 
 ## Evidence gates
 
-### 1. Model reliability
+### 1. Model result: standalone accuracy claim rejected
 
-The checked-in
-[model-interface benchmark v1](./benchmarks/model-interface/v1/README.md) is a
-12-case development and smoke suite. It exercises direct text, narrative
-memory, and Timeline-backed state with a strict JSONL adapter protocol. The
-repository also includes a stateless OpenAI Responses adapter.
+The checked-in proposal-boundary benchmark is the primary engineering suite for
+model extraction. The lower-level
+[model-interface benchmark v1](./benchmarks/model-interface/v1/README.md)
+compares bounded narrative memory, stateless full-context structured
+extraction, and rolling Timeline state. Direct full-context answering remains a
+secondary diagnostic. Both suites use stateless adapters and strict replayable
+artifacts.
 
-No external model result has been published. The visible corpus is too small
-and too exposed to support a performance claim.
+The
+[frontier-model preregistration](./benchmarks/model-interface/v1/PREREGISTRATION.md)
+fixed one model and configuration, three repeats, a public paraphrase corpus
+held out from prompt and schema development, three primary arms, failure
+accounting, paired analysis, and a binary continue-or-kill rule before any
+held-out inference.
 
-The model gate requires a preregistered blinded suite that:
+The 2026-07-31 GPT-5.6 Sol run completed 324 primary observations and 108
+teacher-forced observations without an operational error. Timeline met every
+absolute threshold: 106/108 answers and end-to-end artifacts were exact,
+assertion F1 was 0.9574, and all 108 proofs verified. It beat bounded narrative
+memory, 106/108 versus 65/108 answers, but not stateless full-context structured
+extraction, which scored 107/108. The paired Timeline difference against
+structured extraction was -0.0093 with case-cluster `p = 0.875`.
 
-- uses opaque case and entity identifiers;
-- includes distractors and no-op cuts;
-- evaluates controlled paraphrase families;
-- spans rolling histories from 20 to 200 cuts;
-- fixes context and memory budgets before corpus generation;
-- reserves generation seeds and variants unavailable during adapter
-  development;
-- keeps model, decoding, retry, and structured-output settings identical
-  across paired arms;
-- counts malformed output, admission failures, and unsupported definite
-  answers as failures; and
-- reports case-clustered uncertainty rather than treating every cut as an
-  independent observation.
-
-The preregistration must fix the primary outcome, exclusions, stopping rule,
-sample size, model configuration, and analysis before results are observed.
-Published results must separate extraction, query, admission, kernel, proof,
-and final-answer errors.
+The gate returned `kill`. The
+[complete result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+is bound to the evaluated source commit. Teacher forcing reached 108/108 answer
+and end-to-end exactness, with 0.9787 assertion F1 across all cuts. Current-cut
+extraction was strong, but rolling Timeline state produced no answer-accuracy
+advantage over full-context structured extraction.
 
 ### 2. Low-friction agent integration
 
-The separate local stdio package `@covenant-org/timeline-mcp` keeps the
-portable kernel dependency-light while giving MCP-capable agents durable
-temporal state through five explicit tools:
+The separate local stdio MCP server keeps the portable kernel dependency-light
+while giving MCP-capable agents durable temporal state through six explicit
+tools:
 
 1. create a run from an exact v0alpha3 contract;
 2. list bounded run metadata after a new session;
 3. append one structurally validated event under optimistic concurrency;
-4. project active state at an explicit knowledge cut; and
-5. reason over an exact query and return a verified conclusion.
+4. compile and atomically apply an evidence-backed model proposal against an
+   exact run prefix;
+5. project active state at an explicit knowledge cut; and
+6. reason over an exact query and return a verified conclusion.
 
-The first alpha requires a data directory, retains only evidence digests, makes
-no network calls, and classifies direct model writes as structurally valid but
-unauthenticated. It does not provide semantic memory search, civil-time
-normalization, remote hosting, or evidence authority.
+The server requires a data directory, retains only evidence digests, makes no
+network calls, and classifies direct and compiled writes as structurally valid
+but unauthenticated. Proposal evidence text is processed transiently and is not
+written or returned. The server does not provide semantic memory search,
+civil-time normalization, remote hosting, or evidence authority.
 
-The installed-package check creates a run, appends a correction, stops the
-server, restarts it, projects both historical and current state, and verifies
-both receipts over stdio. This gate closes after the tagged artifact passes
-that check on Node.js 22 and 24 and is published to npm.
+The source-first pilot creates a run, appends a correction, stops and restarts
+the server, projects both historical and current state, exports the complete
+artifact, and verifies both receipts in another process. Registry publication
+is a distribution milestone; it does not block source pilots, model
+evaluation, or independent implementation work.
 
 ### 3. Independent temporal pilot
 
@@ -91,7 +110,8 @@ reduces reconciliation work.
 The [pilot contract](./docs/temporal-pilot.md) requires a redacted export that
 another process can replay and verify. A negative result is useful if it
 identifies the wrong abstraction or shows that Timeline adds no operational
-value.
+value. The checked-in MCP starter supplies the export and verification
+mechanics so the operator can focus on its own evidence and workflow.
 
 ### 4. Protocol portability
 
@@ -105,41 +125,34 @@ the reference implementation on semantic results for the shared corpus and
 verifies its supported receipts. This is evidence that Timeline is a portable
 contract rather than a TypeScript-specific format.
 
-## Adoption review
+## Standalone expansion decision
 
-The 90-day adoption window begins after a public release includes all of the
-following:
+The preregistered gate required a model result that beat both simpler
+baselines. That requirement was not met, so the planned 90-day standalone
+adoption window will not begin and no standalone beta is scheduled.
 
-- the installable temporal API;
-- the correction-and-replay demo;
-- the local MCP integration; and
-- one published blinded model evaluation.
+The package remains available under Apache-2.0 as a deterministic temporal
+kernel and verifier. Work may continue where an integration needs its
+auditability, replay, or portable proof contract. An external pilot or second
+implementation can still establish operational value or portability, but it
+cannot retroactively change the v1 model result.
 
-Standalone product expansion continues only if that window produces:
-
-- one independent operator who completes the pilot or publishes an equivalent
-  replayable integration; and
-- qualified adoption signals from at least three independent teams, such as
-  an integration, reproducible implementation feedback, or a conformance
-  attempt.
-
-Repository stars alone do not satisfy either criterion. If the threshold is
-not met, the maintainers will publish the evidence and reassess standalone
-expansion. The portable contract and verifier remain available under
-Apache-2.0 regardless of that decision.
+Reconsidering a standalone model product requires a new, separately
+preregistered hypothesis and benchmark. The v1 corpus, thresholds, and decision
+will not be retuned or reinterpreted.
 
 ## Work justified by evidence
 
-Follow-on work is driven by observed failures:
+Follow-on work is driven by observed needs:
 
-- extraction and query errors determine model-interface and repair work;
+- Covenant and adopter integrations determine kernel ergonomics;
 - integration friction determines MCP ergonomics and storage limits;
 - pilot evidence determines calendar, civil-time, and operational features;
 - interoperability failures determine specification and conformance changes;
   and
 - real upgrade experience determines migration tooling.
 
-No new protocol surface or governance layer is added until one of these gates
-requires it. Beta requires a successful model evaluation, an external pilot, a
-second conforming implementation, and security and privacy review of the
-supported model, parsing, provenance, projection, and proof boundaries.
+No new protocol surface or governance layer is added until one of these needs
+requires it. Any future beta proposal must define its product claim, evidence
+gate, external pilot, interoperability requirement, and security and privacy
+review before implementation begins.

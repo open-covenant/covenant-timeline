@@ -443,6 +443,18 @@ test("the complete frozen selection rehearses continue, kill, and inconclusive d
       ),
     /model configuration/u,
   );
+  const changedTemperature = structuredClone(primaryScore);
+  changedTemperature.run.config.generation.temperature = 0;
+  assert.throws(
+    () =>
+      assertFrozenPrimary(
+        changedTemperature,
+        primaryArtifact.cases,
+        source,
+        runtimeDigest,
+      ),
+    /model configuration/u,
+  );
   assert.throws(
     () =>
       assertFrozenPrimary(
@@ -504,7 +516,7 @@ async function createFixture(t) {
         revision: "gpt-5.6-sol",
       },
       generation: {
-        temperature: 0,
+        temperature: null,
         seed: null,
         maxOutputTokens: 16384,
         parameters: {

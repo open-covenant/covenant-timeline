@@ -115,9 +115,16 @@
           "required": ["temperature", "seed", "maxOutputTokens", "parameters"],
           "properties": {
             "temperature": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 10
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "seed": {
               "oneOf": [

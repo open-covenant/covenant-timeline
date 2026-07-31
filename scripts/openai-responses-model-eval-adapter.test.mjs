@@ -58,7 +58,9 @@ function createConfig(overrides = {}) {
       revision: overrides.revision ?? model,
     },
     generation: {
-      temperature: overrides.temperature ?? 0,
+      temperature: Object.hasOwn(overrides, "temperature")
+        ? overrides.temperature
+        : null,
       seed: overrides.seed ?? null,
       maxOutputTokens: overrides.maxOutputTokens ?? 4096,
       parameters: overrides.parameters ?? {
@@ -229,7 +231,7 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
       },
     ]);
     assert.equal(body.max_output_tokens, 4096);
-    assert.equal(body.temperature, 0);
+    assert.equal(Object.hasOwn(body, "temperature"), false);
     assert.equal(body.top_p, 0.9);
     assert.deepEqual(body.reasoning, { effort: "low" });
     assert.equal(body.text.verbosity, "low");
@@ -283,6 +285,13 @@ test("OpenAI request mapping is exact and stateless for every arm", () => {
     assert.equal(body.input[0].content.includes(config.id), false);
     assert.equal(body.input[0].content.includes(request.caseId), false);
   }
+});
+
+test("OpenAI request mapping preserves an explicit supported temperature", () => {
+  const request = createRequest("direct", {
+    config: createConfig({ temperature: 0 }),
+  });
+  assert.equal(createOpenAIRequestBody(request).temperature, 0);
 });
 
 test("proposal requests use a strict wrapper around the request-bound schema", () => {
@@ -452,6 +461,9 @@ test("configuration mismatches fail before an inference request", async () => {
     }),
     createRequest("direct", {
       config: createConfig({ seed: 42 }),
+    }),
+    createRequest("direct", {
+      config: createConfig({ temperature: -0.1 }),
     }),
     createRequest("direct", {
       config: createConfig({

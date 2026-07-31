@@ -198,14 +198,15 @@ function validateRequest(request) {
   const generation = config.generation;
   requireRecord(generation, "run configuration.generation");
   if (
-    typeof generation.temperature !== "number" ||
-    !Number.isFinite(generation.temperature) ||
-    generation.temperature < 0 ||
-    generation.temperature > 2
+    generation.temperature !== null &&
+    (typeof generation.temperature !== "number" ||
+      !Number.isFinite(generation.temperature) ||
+      generation.temperature < 0 ||
+      generation.temperature > 2)
   ) {
     fail(
       "adapter.config",
-      "run configuration temperature must be between 0 and 2",
+      "run configuration temperature must be null or between 0 and 2",
     );
   }
   if (generation.seed !== null) {
@@ -302,7 +303,9 @@ export function createOpenAIRequestBody(request) {
       },
     ],
     max_output_tokens: generation.maxOutputTokens,
-    temperature: generation.temperature,
+    ...(generation.temperature === null
+      ? {}
+      : { temperature: generation.temperature }),
     ...(parameters.topP === undefined ? {} : { top_p: parameters.topP }),
     ...(parameters.reasoningEffort === undefined
       ? {}

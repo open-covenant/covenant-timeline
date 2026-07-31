@@ -36,6 +36,7 @@ test("config creation injects the source revision and exact model snapshot", asy
     assert.equal(config.model.revision, config.model.id);
     assert.equal(config.adapter.id, "openai-responses");
     assert.equal(config.adapter.version, "1");
+    assert.equal(config.generation.temperature, null);
     assert.equal(config.generation.seed, null);
     assert.equal(config.generation.maxOutputTokens, 16_384);
     assert.equal(config.generation.parameters.structuredOutput, true);

@@ -72,6 +72,8 @@
   evaluation required before any broad efficacy claim.
 - Record the alpha.2 token-fallback publication and operator-observed credential
   cleanup without presenting trusted publishing as an alpha release gate.
+- Record unsupported OpenAI temperature control as `null` and omit the provider
+  parameter instead of claiming a sampling setting the selected model rejects.
 - Move artifact upload to its Node.js 24 action and consolidate SBOM
   attestation on the supported GitHub attestation action.
 - Describe MCP input semantics in tool discovery, cap each catalog page at

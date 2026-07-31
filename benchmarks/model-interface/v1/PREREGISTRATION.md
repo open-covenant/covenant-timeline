@@ -9,7 +9,7 @@ frontier-model evaluation before any held-out result is inspected.
 - Model identity record: exact provider model ID plus the UTC run date; OpenAI
   does not publish a dated snapshot ID for this model
 - Reasoning effort: `high`
-- Temperature: `0`
+- Temperature: omitted (`null` in the run configuration)
 - Maximum output tokens: `16384`
 - Structured output: enabled
 - Output verbosity: `low`
@@ -26,6 +26,16 @@ Three repeats produce 108 observations per arm. Its Timeline extraction target
 contains 47 gold assertion deltas per repeat, or 141 in aggregate.
 The primary run makes 324 provider requests. The separate teacher-forced
 diagnostic makes 108, for 432 requests across an operationally valid attempt.
+
+### Preflight amendment
+
+On 2026-07-31, the first smoke request from commit `7dfd152` was rejected by
+the provider before inference because `gpt-5.6-sol` does not accept the
+`temperature` parameter. It produced no model response and no scored artifact.
+This amendment records `temperature` as `null`, which requires the reference
+adapter to omit the parameter. Every other model setting, prompt, case,
+threshold, and decision rule remains unchanged. The formal run is bound to the
+clean commit containing this amendment.
 
 Model identifier, reasoning effort, prompts, schemas, budgets, timeout, retry
 policy, case order, corpus digest, and scoring code must be committed and fixed

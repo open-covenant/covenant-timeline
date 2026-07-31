@@ -327,7 +327,7 @@ Each request has this envelope:
       "revision": "exact-provider-revision"
     },
     "generation": {
-      "temperature": 0,
+      "temperature": null,
       "seed": 42,
       "maxOutputTokens": 4096,
       "parameters": {
@@ -358,6 +358,10 @@ Each request has this envelope:
   }
 }
 ```
+
+`temperature: null` means that the adapter omits the provider parameter. Use a
+number only when the selected provider and model accept an explicit
+temperature.
 
 `config` is the exact non-secret run configuration and `configDigest` binds its
 canonical bytes. The adapter must use these fields to select the declared model

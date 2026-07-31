@@ -374,7 +374,7 @@ export function assertFrozenPrimary(
     config.model.provider !== "openai" ||
     config.model.id !== "gpt-5.6-sol" ||
     config.model.revision !== "gpt-5.6-sol" ||
-    config.generation.temperature !== 0 ||
+    config.generation.temperature !== null ||
     config.generation.seed !== null ||
     config.generation.maxOutputTokens !== 16_384 ||
     !canonicalEqual(config.generation.parameters, {

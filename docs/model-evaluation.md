@@ -201,7 +201,7 @@ Create a strict JSON configuration:
     "revision": "exact-provider-revision"
   },
   "generation": {
-    "temperature": 0,
+    "temperature": null,
     "seed": 42,
     "maxOutputTokens": 4096,
     "parameters": {
@@ -211,6 +211,10 @@ Create a strict JSON configuration:
   }
 }
 ```
+
+`null` records that the adapter omits `temperature`. The target frontier model
+rejects that sampling parameter; recording `0` would falsely imply that the
+provider applied it. Ollama configurations continue to use temperature zero.
 
 Record every effective inference setting. Use `null` when the provider does not
 support a seed and an explicit revision string when it does not disclose a

@@ -209,7 +209,9 @@ export async function readBoundedExactFile(
 
   const flags =
     process.platform === "win32"
-      ? "r"
+      ? sync
+        ? "r+"
+        : "r"
       : fsConstants.O_RDONLY |
         (fsConstants.O_NOFOLLOW ?? 0) |
         (fsConstants.O_NONBLOCK ?? 0) |

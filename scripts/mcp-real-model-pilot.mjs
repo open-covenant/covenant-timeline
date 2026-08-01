@@ -103,6 +103,7 @@ export async function runStart(options) {
     requestedState,
     binding,
     input.timeline,
+    { allowFailureInjection: options.allowDirty },
   );
   const state = await assertStateLayout(requestedState);
   await syncDirectory(state);
@@ -269,7 +270,9 @@ export async function runResume(options) {
     basename(requestedOutput),
   );
   await assertOutsideCheckout(output);
-  const ledger = await loadAttemptLedger(state, input.timeline);
+  const ledger = await loadAttemptLedger(state, input.timeline, {
+    allowFailureInjection: options.allowDirty,
+  });
   const initialBundle = await readPhaseResultBundle(
     state,
     "initial",
@@ -1461,7 +1464,7 @@ async function syncTree(root) {
 }
 
 async function syncFile(path) {
-  const file = await open(path, "r");
+  const file = await open(path, process.platform === "win32" ? "r+" : "r");
   try {
     await file.sync();
   } finally {

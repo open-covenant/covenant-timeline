@@ -12,8 +12,14 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SOURCE_REVISION = /^[0-9a-f]{40}$/u;
 const PHASES = new Set(["initial", "correction"]);
 
-export async function createAttemptLedger(state, binding, timeline) {
+export async function createAttemptLedger(
+  state,
+  binding,
+  timeline,
+  { allowFailureInjection = false } = {},
+) {
   validateBinding(binding);
+  validateFailureInjection(allowFailureInjection);
   const directory = join(state, LEDGER_DIRECTORY);
   const stagingDirectory = join(state, LEDGER_STAGING_DIRECTORY);
   await mkdir(directory, { mode: 0o700 });
@@ -23,6 +29,7 @@ export async function createAttemptLedger(state, binding, timeline) {
     directory,
     stagingDirectory,
     timeline,
+    allowFailureInjection,
     document: {
       schema: LEDGER_SCHEMA,
       attemptId: randomUUID(),
@@ -36,7 +43,12 @@ export async function createAttemptLedger(state, binding, timeline) {
   return ledger;
 }
 
-export async function loadAttemptLedger(state, timeline) {
+export async function loadAttemptLedger(
+  state,
+  timeline,
+  { allowFailureInjection = false } = {},
+) {
+  validateFailureInjection(allowFailureInjection);
   const directory = join(state, LEDGER_DIRECTORY);
   const stagingDirectory = join(state, LEDGER_STAGING_DIRECTORY);
   await validateStagingDirectory(stagingDirectory);
@@ -85,6 +97,7 @@ export async function loadAttemptLedger(state, timeline) {
     directory,
     stagingDirectory,
     timeline,
+    allowFailureInjection,
     document: {
       schema: LEDGER_SCHEMA,
       attemptId: entries[0].attemptId,
@@ -301,7 +314,7 @@ async function appendEntry(ledger, fields) {
 function injectLedgerFailure(ledger, entry) {
   const point = `after-${entry.phase ?? "attempt"}-${entry.kind}-ledger-install`;
   if (
-    ledger.document.entries[0]?.binding?.source?.dirty === true &&
+    ledger.allowFailureInjection &&
     process.env.TIMELINE_PILOT_TEST_FAILURE === point
   ) {
     const error = new Error(`injected attempt ledger failure: ${point}`);
@@ -554,6 +567,12 @@ async function validateStagingDirectory(directory) {
 function validateDigest(value, label) {
   if (typeof value !== "string" || !DIGEST.test(value)) {
     throw new Error(`${label} is invalid`);
+  }
+}
+
+function validateFailureInjection(value) {
+  if (typeof value !== "boolean") {
+    throw new TypeError("allowFailureInjection must be a boolean");
   }
 }
 

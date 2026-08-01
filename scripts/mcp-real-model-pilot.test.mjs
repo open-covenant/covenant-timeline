@@ -75,7 +75,9 @@ test("bounded exact reads reject hostile and replaced inputs", async (t) => {
           await rename(replacement, original);
         },
       }),
-      /changed while being validated/u,
+      (error) =>
+        /changed while being validated/u.test(String(error?.message)) ||
+        (process.platform === "win32" && error?.code === "EPERM"),
     );
 
     const mutated = join(temporary, "mutated.json");

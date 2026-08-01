@@ -26,8 +26,10 @@ const sourceRevision = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], {
   encoding: "utf8",
 }).stdout.trim();
 
-test("exports and verifies a fenced pre-ready failure", async () => {
-  const temporary = await mkdtemp(join(tmpdir(), "timeline-pre-ready-fence-"));
+test("exports and verifies a reconstructed proposal failure", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-reconstructed-fence-"),
+  );
   const state = join(temporary, "state");
   const output = join(temporary, "failed-attempt");
   const config = join(temporary, "config.json");
@@ -51,7 +53,7 @@ test("exports and verifies a fenced pre-ready failure", async () => {
         process.execPath,
         adapter,
       ],
-      { failurePoint: "after-initial-adapter-execution-install" },
+      { failurePoint: "after-initial-proposal-preview" },
     );
     assert.notEqual(started.status, 0);
 
@@ -78,8 +80,8 @@ test("exports and verifies a fenced pre-ready failure", async () => {
 
     const exported = await exportFailedAttempt({ state, output });
     assert.deepEqual(exported.failure, {
-      stage: "capture-recovery",
-      code: "adapter.interrupted-before-proposal-ready",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
     });
     assert.deepEqual(await verifyFailedAttempt(output), {
       verified: true,
@@ -92,10 +94,12 @@ test("exports and verifies a fenced pre-ready failure", async () => {
     const artifact = await readJson(join(output, "failed-attempt.json"));
     const failure = await readJson(join(output, "phase-failure.json"));
     const recovery = await readJson(join(output, "recovery-observation.json"));
-    assert.equal(artifact.proposalReady, null);
-    assert.equal(artifact.phaseDecision, null);
-    assert.equal(failure.proposalReadyDigest, null);
-    assert.equal(failure.phaseDecisionDigest, null);
+    const decision = await readJson(join(output, "phase-decision.json"));
+    assert.equal(artifact.proposalReady.path, "proposal-ready.json");
+    assert.equal(artifact.phaseDecision.path, "phase-decision.json");
+    assert.match(failure.proposalReadyDigest, /^sha256:[0-9a-f]{64}$/u);
+    assert.match(failure.phaseDecisionDigest, /^sha256:[0-9a-f]{64}$/u);
+    assert.equal(decision.decision, "recovery-terminal");
     assert.equal(recovery.disposition, "exact-recovery-fence");
     assert.equal(
       recovery.mcpRun.events.at(-1).id,
@@ -106,11 +110,19 @@ test("exports and verifies a fenced pre-ready failure", async () => {
       "attempt-ledger.json",
       "content-manifest.json",
       "failed-attempt.json",
+      "phase-decision.json",
       "phase-failure.json",
+      "proposal-ready.json",
       "recovery-observation.json",
     ]);
-    await assert.rejects(lstat(join(output, "proposal-ready.json")), /ENOENT/u);
-    await assert.rejects(lstat(join(output, "phase-decision.json")), /ENOENT/u);
+    assert.equal(
+      (await lstat(join(output, "proposal-ready.json"))).isFile(),
+      true,
+    );
+    assert.equal(
+      (await lstat(join(output, "phase-decision.json"))).isFile(),
+      true,
+    );
 
     const runtimeTamper = join(temporary, "failed-attempt-runtime-tamper");
     await cp(output, runtimeTamper, { recursive: true });
@@ -118,6 +130,25 @@ test("exports and verifies a fenced pre-ready failure", async () => {
     await assert.rejects(
       verifyFailedAttempt(runtimeTamper),
       /MCP invocation runtime binding changed/u,
+    );
+
+    const runtimeShapeTamper = join(
+      temporary,
+      "failed-attempt-runtime-shape-tamper",
+    );
+    await cp(output, runtimeShapeTamper, { recursive: true });
+    await rehashArtifactTamper(
+      runtimeShapeTamper,
+      ({ artifact, capture, ledger, timeline }) => {
+        capture.runtime.node.executableByteLength = 0;
+        capture.binding.runtimeDigest = timeline.contentDigest(capture.runtime);
+        artifact.binding.runtimeDigest = capture.binding.runtimeDigest;
+        ledger.entries[0].binding.runtimeDigest = capture.binding.runtimeDigest;
+      },
+    );
+    await assert.rejects(
+      verifyFailedAttempt(runtimeShapeTamper),
+      /redacted adapter runtime is invalid/u,
     );
 
     const utf8Tamper = join(temporary, "failed-attempt-utf8-tamper");
@@ -149,6 +180,15 @@ function run(args, { failurePoint } = {}) {
 }
 
 async function rehashMcpInvocationTamper(directory) {
+  await rehashArtifactTamper(directory, ({ capture, ledger }) => {
+    const replacement = `sha256:${"0".repeat(64)}`;
+    assert.notEqual(capture.mcpInvocation.executableDigest, replacement);
+    capture.mcpInvocation.executableDigest = replacement;
+    ledger.entries.at(-2).mcpInvocation.executableDigest = replacement;
+  });
+}
+
+async function rehashArtifactTamper(directory, mutate) {
   const timeline = await loadTimeline();
   const capturePath = join(directory, "adapter-execution.json");
   const ledgerPath = join(directory, "attempt-ledger.json");
@@ -157,10 +197,7 @@ async function rehashMcpInvocationTamper(directory) {
   const capture = await readJson(capturePath);
   const ledger = await readJson(ledgerPath);
   const artifact = await readJson(artifactPath);
-  const replacement = `sha256:${"0".repeat(64)}`;
-  assert.notEqual(capture.mcpInvocation.executableDigest, replacement);
-  capture.mcpInvocation.executableDigest = replacement;
-  ledger.entries.at(-2).mcpInvocation.executableDigest = replacement;
+  mutate({ artifact, capture, ledger, timeline });
   let previousEntryDigest = null;
   for (const entry of ledger.entries) {
     entry.previousEntryDigest = previousEntryDigest;

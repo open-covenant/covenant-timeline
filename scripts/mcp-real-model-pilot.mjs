@@ -235,6 +235,8 @@ export async function runStart(options) {
       runDigest,
       proposal,
     });
+    await pauseForTest(options, "after-initial-proposal-preview");
+    injectFailure(options, "after-initial-proposal-preview");
     proposalReadyBundle = await writeProposalReadyBundle(
       state,
       createProposalReadyDocumentV2({
@@ -647,6 +649,8 @@ export async function runResume(options) {
       runDigest: recovered.runDigest,
       proposal,
     });
+    await pauseForTest(options, "after-correction-proposal-preview");
+    injectFailure(options, "after-correction-proposal-preview");
     proposalReadyBundle = await writeProposalReadyBundle(
       state,
       createProposalReadyDocumentV2({
@@ -948,6 +952,77 @@ async function recoverFailedPhase({
           input,
           outputSchema: captureBinding.outputSchema,
         });
+    if (!proposalReadyBundle && replayedFailure === null) {
+      const beforePreview = await readRecoveryState({
+        state,
+        phase,
+        runtime,
+        input,
+        adapterBundle,
+        proposalReadyBundle: null,
+        options,
+      });
+      if (beforePreview.document.disposition === "exact-base") {
+        await pauseForTest(options, `before-${phase}-proposal-reconstruction`);
+        if (await pathExists(readyPath)) {
+          proposalReadyBundle = await readProposalReadyBundle(
+            state,
+            phase,
+            input.timeline,
+            { sync: true },
+          );
+        } else {
+          let document;
+          try {
+            document = await reconstructProposalReadyDocument({
+              state,
+              phase,
+              runtime,
+              input,
+              policy,
+              adapterBundle,
+              captureBinding,
+              options,
+            });
+          } catch (error) {
+            if (isInjectedCrash(error)) throw error;
+            throw recoverableDurabilityError(error);
+          }
+          await pauseForTest(options, `after-${phase}-proposal-reconstruction`);
+          proposalReadyBundle = await writeProposalReadyBundle(
+            state,
+            document,
+            input.timeline,
+            options,
+          );
+        }
+        validateProposalReadyBinding({
+          proposalReadyBundle,
+          adapterBundle,
+          captureBinding,
+          input,
+          policy,
+        });
+        phaseDecision = await claimPhaseDecision({
+          state,
+          phase,
+          decision: "recovery-terminal",
+          adapterBundle,
+          proposalReadyBundle,
+          invocation: started.invocation,
+          requestDigest: started.requestDigest,
+          input,
+          options,
+        });
+        validatePhaseDecisionBinding({
+          phaseDecision,
+          adapterBundle,
+          proposalReadyBundle,
+          started,
+          timeline: input.timeline,
+        });
+      }
+    }
     let observed = await readRecoveryState({
       state,
       phase,
@@ -1191,6 +1266,56 @@ async function recoverFailedPhase({
     throw new Error(`${phase} failed phase ledger binding changed`);
   }
   throw terminalPhaseFailureV2(failureBundle.document.failure);
+}
+
+async function reconstructProposalReadyDocument({
+  state,
+  phase,
+  runtime,
+  input,
+  policy,
+  adapterBundle,
+  captureBinding,
+  options,
+}) {
+  const adapter = adapterBundle.document;
+  const parsed = parseAdapterExecution(adapter.execution, input.timeline);
+  const { proposal, usage } = validateProviderProposal(
+    parsed.response,
+    captureBinding.outputSchema,
+  );
+  validateProposalSemantics(phase, proposal, input.pilot.expected);
+  injectProposalReconstructionError(options, phase);
+  const session = await connectServer(
+    join(state, "mcp"),
+    phase,
+    runtime,
+    "model",
+  );
+  try {
+    const previewed = await previewProposal({
+      session,
+      input,
+      scope: captureBinding.scope,
+      run: adapter.baseRun,
+      runDigest: adapter.baseAudit.runDigest,
+      proposal,
+    });
+    return createProposalReadyDocumentV2({
+      phase,
+      adapterExecutionDigest: adapterBundle.digest,
+      requestDigest: adapter.requestDigest,
+      baseRun: adapter.baseRun,
+      proposal,
+      usage,
+      proposalInput: previewed.proposalInput,
+      preview: previewed.preview,
+      admissionPolicyDigest: policy.digest,
+      timeline: input.timeline,
+    });
+  } finally {
+    await session.client.close();
+  }
 }
 
 async function readRecoveryState({
@@ -1957,14 +2082,31 @@ async function readAdapterExecutionBundle(state, phase, timeline, options) {
 }
 
 async function writeProposalReadyBundle(state, document, timeline, options) {
-  return writeProposalReadyBundleV2({
-    state,
-    document,
-    timeline,
-    staging: join(state, PHASE_RESULT_STAGING),
-    injectFailure: (point) => injectFailure(options, point),
-    syncDirectory,
-  });
+  try {
+    return await writeProposalReadyBundleV2({
+      state,
+      document,
+      timeline,
+      staging: join(state, PHASE_RESULT_STAGING),
+      injectFailure: (point) => injectFailure(options, point),
+      syncDirectory,
+    });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await readProposalReadyBundle(
+      state,
+      document.phase,
+      timeline,
+      { sync: true },
+    );
+    if (
+      timeline.canonicalJson(existing.document) !==
+      timeline.canonicalJson(document)
+    ) {
+      throw new Error("proposal-ready receipt changed under concurrency");
+    }
+    return existing;
+  }
 }
 
 async function readProposalReadyBundle(state, phase, timeline, options) {
@@ -2733,6 +2875,13 @@ function injectPostAdmissionVerificationFailure(options, point) {
     const error = new Error(`injected post-admission failure: ${point}`);
     error.name = "TimelinePilotPostAdmissionVerificationFailure";
     throw error;
+  }
+}
+
+function injectProposalReconstructionError(options, phase) {
+  const point = `during-${phase}-proposal-reconstruction`;
+  if (options.allowDirty && process.env.TIMELINE_PILOT_TEST_FAILURE === point) {
+    throw new Error(`injected proposal reconstruction failure: ${point}`);
   }
 }
 

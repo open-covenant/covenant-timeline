@@ -74,7 +74,7 @@ export async function capturePilotRuntime({
     platform: process.platform,
     arch: process.arch,
   },
-  dependencies = applicationDependencies,
+  dependencies = [],
 } = {}) {
   if (!profiles.has(profile)) {
     throw new Error("real-model pilot runtime profile is invalid");
@@ -96,7 +96,7 @@ export async function capturePilotRuntime({
   ) {
     throw new Error("real-model pilot runtime file set is invalid");
   }
-  await assertRelativeImportClosure(root, paths);
+  const importedDependencies = await assertRelativeImportClosure(root, paths);
   const files = await Promise.all(
     paths.map(async (path) => ({
       path,
@@ -107,7 +107,13 @@ export async function capturePilotRuntime({
       )),
     })),
   );
-  const closure = await resolvedPackageClosure(resolutionRoot, dependencies);
+  const closure = await resolvedPackageClosure(resolutionRoot, [
+    ...new Set([
+      ...applicationDependencies,
+      ...importedDependencies,
+      ...dependencies,
+    ]),
+  ]);
   const identity = {
     schema: "covenant.timeline.real-model-pilot.runtime.v1",
     profile,
@@ -139,27 +145,47 @@ async function assertRelativeImportClosure(root, paths) {
     );
     sources.set(path, decodeUtf8(bytes, `runtime source ${path}`));
   }
+  const dependencies = new Set();
   for (const [path, specifiers] of runtimeModuleSpecifiers(sources)) {
     for (const specifier of specifiers) {
-      if (!isRelativeSpecifier(specifier)) continue;
-      const target = relative(
-        root,
-        resolve(dirname(join(root, path)), specifier),
-      )
-        .split(sep)
-        .join("/");
-      if (
-        target === "" ||
-        target === ".." ||
-        target.startsWith("../") ||
-        !included.has(target)
-      ) {
-        throw new Error(
-          `runtime file ${path} imports unbound local module ${specifier}`,
-        );
+      if (isRelativeSpecifier(specifier)) {
+        const target = relative(
+          root,
+          resolve(dirname(join(root, path)), specifier),
+        )
+          .split(sep)
+          .join("/");
+        if (
+          target === "" ||
+          target === ".." ||
+          target.startsWith("../") ||
+          !included.has(target)
+        ) {
+          throw new Error(
+            `runtime file ${path} imports unbound local module ${specifier}`,
+          );
+        }
+        continue;
       }
+      const dependency = packageRootForSpecifier(specifier);
+      if (dependency) dependencies.add(dependency);
     }
   }
+  return dependencies;
+}
+
+function packageRootForSpecifier(specifier) {
+  if (specifier.startsWith("node:")) return undefined;
+  const parts = specifier.split("/");
+  const root = specifier.startsWith("@")
+    ? parts.length >= 2
+      ? `${parts[0]}/${parts[1]}`
+      : undefined
+    : parts[0];
+  if (!root || !packageName(root)) {
+    throw new Error(`runtime source imports unsupported module ${specifier}`);
+  }
+  return root;
 }
 
 function runtimeModuleSpecifiers(sources) {
@@ -218,6 +244,8 @@ function runtimeModuleSpecifiers(sources) {
 
 function moduleSpecifiersForSource(sourceFile, checker) {
   const specifiers = new Set();
+  assertLoaderImportForms(sourceFile);
+  assertNoDynamicCodeConstruction(sourceFile);
   const createRequireBindings = importedBindings(
     sourceFile,
     checker,
@@ -233,6 +261,10 @@ function moduleSpecifiersForSource(sourceFile, checker) {
   const loaderBindings = new Set();
   const loaderDeclarations = new Set();
   const createRequireInitializers = new Set();
+
+  assertImportedBindingUses(sourceFile, createRequireBindings, checker);
+  assertImportedBindingUses(sourceFile, pathToFileUrlBindings, checker);
+  assertNoBuiltinLoaderConstruction(sourceFile);
 
   visit(sourceFile, (node) => {
     if (
@@ -257,6 +289,11 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     loaderBindings.add(symbol);
     loaderDeclarations.add(node.name);
     createRequireInitializers.add(node.initializer);
+    if (hasExportModifier(node.parent.parent)) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} exports a CommonJS loader`,
+      );
+    }
   });
 
   const resolvedPackages = new Map();
@@ -274,7 +311,10 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     const specifier = soleLiteralArgument(node.initializer);
     if (!specifier || isRelativeSpecifier(specifier)) return;
     const symbol = checker.getSymbolAtLocation(node.name);
-    if (symbol) resolvedPackages.set(symbol, specifier);
+    if (symbol) {
+      resolvedPackages.set(symbol, specifier);
+      specifiers.add(specifier);
+    }
   });
 
   visit(sourceFile, (node) => {
@@ -297,6 +337,11 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     ) {
       const specifier = soleLiteralArgument(node);
       if (specifier !== undefined) {
+        if (isLoaderModuleSpecifier(specifier)) {
+          throw new Error(
+            `runtime source ${sourceFile.fileName} contains an unsupported dynamic node:module import`,
+          );
+        }
         specifiers.add(specifier);
         return;
       }
@@ -369,32 +414,180 @@ function moduleSpecifiersForSource(sourceFile, checker) {
   return specifiers;
 }
 
+function assertLoaderImportForms(sourceFile) {
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier &&
+      isLoaderModuleSpecifier(literalText(statement.moduleSpecifier))
+    ) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} contains an unsupported node:module re-export`,
+      );
+    }
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !isLoaderModuleSpecifier(literalText(statement.moduleSpecifier))
+    ) {
+      continue;
+    }
+    const clause = statement.importClause;
+    const defaultOnly = clause?.name && !clause.namedBindings;
+    const namespaceOnly =
+      !clause?.name &&
+      clause?.namedBindings &&
+      ts.isNamespaceImport(clause.namedBindings);
+    const namedCreateRequire =
+      !clause?.name &&
+      clause?.namedBindings &&
+      ts.isNamedImports(clause.namedBindings) &&
+      clause.namedBindings.elements.length === 1 &&
+      (
+        clause.namedBindings.elements[0].propertyName ??
+        clause.namedBindings.elements[0].name
+      ).text === "createRequire";
+    if (!defaultOnly && !namespaceOnly && !namedCreateRequire) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} contains an unsupported node:module import`,
+      );
+    }
+  }
+}
+
+function isLoaderModuleSpecifier(specifier) {
+  return specifier === "node:module" || specifier === "module";
+}
+
+function assertNoDynamicCodeConstruction(sourceFile) {
+  const constructors = new Set([
+    "AsyncFunction",
+    "AsyncGeneratorFunction",
+    "Function",
+    "GeneratorFunction",
+    "eval",
+  ]);
+  visit(sourceFile, (node) => {
+    const named = ts.isIdentifier(node) && constructors.has(node.text);
+    const computed =
+      ts.isElementAccessExpression(node) &&
+      constructors.has(literalText(node.argumentExpression));
+    const constructorAccess =
+      (ts.isPropertyAccessExpression(node) &&
+        node.name.text === "constructor") ||
+      (ts.isElementAccessExpression(node) &&
+        literalText(node.argumentExpression) === "constructor");
+    if (named || computed || constructorAccess) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} uses unsupported dynamic code construction`,
+      );
+    }
+  });
+}
+
 function importedBindings(sourceFile, checker, moduleName, importedName) {
-  const bindings = new Set();
+  const direct = new Set();
+  const objects = new Set();
   for (const statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement) ||
       literalText(statement.moduleSpecifier) !== moduleName ||
-      !statement.importClause?.namedBindings ||
-      !ts.isNamedImports(statement.importClause.namedBindings)
+      !statement.importClause
     ) {
       continue;
     }
-    for (const element of statement.importClause.namedBindings.elements) {
-      if ((element.propertyName ?? element.name).text !== importedName)
-        continue;
-      const symbol = checker.getSymbolAtLocation(element.name);
-      if (symbol) bindings.add(symbol);
+    if (statement.importClause.name) {
+      const symbol = checker.getSymbolAtLocation(statement.importClause.name);
+      if (symbol) objects.add(symbol);
+    }
+    const { namedBindings } = statement.importClause;
+    if (namedBindings && ts.isNamespaceImport(namedBindings)) {
+      const symbol = checker.getSymbolAtLocation(namedBindings.name);
+      if (symbol) objects.add(symbol);
+      continue;
+    }
+    if (namedBindings && ts.isNamedImports(namedBindings)) {
+      for (const element of namedBindings.elements) {
+        const imported = (element.propertyName ?? element.name).text;
+        const symbol = checker.getSymbolAtLocation(element.name);
+        if (!symbol) continue;
+        if (imported === importedName) direct.add(symbol);
+        if (imported === "default") objects.add(symbol);
+      }
     }
   }
-  return bindings;
+  return { direct, importedName, objects };
 }
 
 function isImportedCall(call, bindings, checker) {
+  if (ts.isIdentifier(call.expression)) {
+    return bindings.direct.has(checker.getSymbolAtLocation(call.expression));
+  }
+  if (
+    ts.isPropertyAccessExpression(call.expression) &&
+    call.expression.name.text === bindings.importedName
+  ) {
+    return bindings.objects.has(
+      checker.getSymbolAtLocation(call.expression.expression),
+    );
+  }
+  return false;
+}
+
+function assertImportedBindingUses(sourceFile, bindings, checker) {
+  visit(sourceFile, (node) => {
+    if (!ts.isIdentifier(node)) return;
+    const symbol = checker.getSymbolAtLocation(node);
+    if (!bindings.direct.has(symbol) && !bindings.objects.has(symbol)) return;
+    if (isImportBinding(node)) return;
+
+    const parent = node.parent;
+    if (
+      bindings.direct.has(symbol) &&
+      ts.isCallExpression(parent) &&
+      parent.expression === node
+    ) {
+      return;
+    }
+    if (bindings.objects.has(symbol)) {
+      const access =
+        ts.isPropertyAccessExpression(parent) &&
+        parent.expression === node &&
+        parent.name.text === bindings.importedName;
+      if (
+        access &&
+        ts.isCallExpression(parent.parent) &&
+        parent.parent.expression === parent
+      ) {
+        return;
+      }
+    }
+    throw new Error(
+      `runtime source ${sourceFile.fileName} uses an unsupported ${bindings.importedName} binding`,
+    );
+  });
+}
+
+function isImportBinding(node) {
+  const parent = node.parent;
   return (
-    ts.isIdentifier(call.expression) &&
-    bindings.has(checker.getSymbolAtLocation(call.expression))
+    (ts.isImportClause(parent) && parent.name === node) ||
+    (ts.isNamespaceImport(parent) && parent.name === node) ||
+    (ts.isImportSpecifier(parent) && parent.name === node)
   );
+}
+
+function assertNoBuiltinLoaderConstruction(sourceFile) {
+  visit(sourceFile, (node) => {
+    const named = ts.isIdentifier(node) && node.text === "getBuiltinModule";
+    const computed =
+      ts.isElementAccessExpression(node) &&
+      literalText(node.argumentExpression) === "getBuiltinModule";
+    if (named || computed) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} uses unsupported built-in module loading`,
+      );
+    }
+  });
 }
 
 function isLoaderResolveCall(call, bindings, checker) {
@@ -446,6 +639,12 @@ function isConstDeclaration(declaration) {
   );
 }
 
+function hasExportModifier(node) {
+  return node.modifiers?.some(
+    (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+  );
+}
+
 function isRelativeSpecifier(specifier) {
   return specifier.startsWith("./") || specifier.startsWith("../");
 }
@@ -476,11 +675,164 @@ export function validatePilotRuntime(expected) {
   if (
     !record(expected) ||
     Object.keys(expected).sort().join(",") !== "digest,identity" ||
-    contentDigest(expected.identity) !== expected.digest
+    !validRuntimeIdentity(expected.identity)
   ) {
+    throw new Error("real-model pilot runtime binding is invalid");
+  }
+  if (contentDigest(expected.identity) !== expected.digest) {
     throw new Error("real-model pilot runtime digest did not reproduce");
   }
   return expected;
+}
+
+function validRuntimeIdentity(identity) {
+  if (
+    !record(identity) ||
+    keys(identity) !== "files,node,packages,profile,resolutions,schema" ||
+    identity.schema !== "covenant.timeline.real-model-pilot.runtime.v1" ||
+    !profiles.has(identity.profile) ||
+    !validNodeIdentity(identity.node) ||
+    !Array.isArray(identity.files) ||
+    identity.files.length === 0 ||
+    identity.files.length > limits.fixedFiles ||
+    !Array.isArray(identity.packages) ||
+    identity.packages.length === 0 ||
+    identity.packages.length > limits.packages ||
+    !Array.isArray(identity.resolutions) ||
+    identity.resolutions.length === 0 ||
+    identity.resolutions.length > 1024
+  ) {
+    return false;
+  }
+  const filePaths = new Set();
+  for (const file of identity.files) {
+    if (
+      !record(file) ||
+      keys(file) !== "byteLength,digest,path" ||
+      !runtimePath(file.path) ||
+      !digest(file.digest) ||
+      !positiveBoundedInteger(file.byteLength, limits.fileBytes) ||
+      filePaths.has(file.path)
+    ) {
+      return false;
+    }
+    filePaths.add(file.path);
+  }
+  const packages = new Map();
+  let packageFiles = 0;
+  let packageBytes = 0;
+  for (const item of identity.packages) {
+    if (
+      !record(item) ||
+      keys(item) !== "byteLength,digest,fileCount,id,name,version" ||
+      !packageName(item.name) ||
+      !boundedText(item.version, 256) ||
+      !digest(item.digest) ||
+      item.id !== `npm:${item.name}@${item.version}#${item.digest.slice(7)}` ||
+      !positiveBoundedInteger(item.fileCount, limits.packageFiles) ||
+      !positiveBoundedInteger(item.byteLength, limits.packageBytes) ||
+      packages.has(item.id)
+    ) {
+      return false;
+    }
+    packages.set(item.id, item);
+    packageFiles += item.fileCount;
+    packageBytes += item.byteLength;
+  }
+  if (
+    packageFiles > limits.packageFiles ||
+    packageBytes > limits.packageBytes
+  ) {
+    return false;
+  }
+
+  const edges = new Set();
+  const applicationRoots = new Set();
+  const reachable = new Set();
+  const pending = [];
+  for (const edge of identity.resolutions) {
+    if (
+      !record(edge) ||
+      keys(edge) !== "from,specifier,to" ||
+      (edge.from !== "application" && !packages.has(edge.from)) ||
+      !packageName(edge.specifier) ||
+      !packages.has(edge.to) ||
+      packages.get(edge.to).name !== edge.specifier
+    ) {
+      return false;
+    }
+    const key = `${edge.from}\0${edge.specifier}\0${edge.to}`;
+    if (edges.has(key)) return false;
+    edges.add(key);
+    if (edge.from === "application") {
+      if (applicationRoots.has(edge.specifier)) return false;
+      applicationRoots.add(edge.specifier);
+      pending.push(edge.to);
+    }
+  }
+  while (pending.length > 0) {
+    const id = pending.shift();
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    for (const edge of identity.resolutions) {
+      if (edge.from === id) pending.push(edge.to);
+    }
+  }
+  return reachable.size === packages.size;
+}
+
+function validNodeIdentity(node) {
+  return (
+    record(node) &&
+    keys(node) ===
+      "arch,executableByteLength,executableDigest,modules,platform,v8,version" &&
+    boundedText(node.version, 128) &&
+    boundedText(node.modules, 32) &&
+    boundedText(node.v8, 128) &&
+    boundedText(node.platform, 64) &&
+    boundedText(node.arch, 64) &&
+    digest(node.executableDigest) &&
+    positiveBoundedInteger(node.executableByteLength, limits.executableBytes)
+  );
+}
+
+function runtimePath(value) {
+  return (
+    boundedText(value, 512) &&
+    !value.startsWith("/") &&
+    !value.includes("\\") &&
+    value
+      .split("/")
+      .every((part) => part !== "" && part !== "." && part !== "..")
+  );
+}
+
+function packageName(value) {
+  return (
+    boundedText(value, 214) &&
+    /^(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/u.test(value)
+  );
+}
+
+function boundedText(value, maximum) {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maximum &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
+function positiveBoundedInteger(value, maximum) {
+  return Number.isSafeInteger(value) && value > 0 && value <= maximum;
+}
+
+function digest(value) {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
+}
+
+function keys(value) {
+  return Object.keys(value).sort().join(",");
 }
 
 async function comparePilotRuntime(expected, options) {
@@ -637,14 +989,14 @@ async function resolvedPackageClosure(root, dependencies) {
 }
 
 async function resolveApplicationPackage(specifier, root) {
-  if (specifier === "typescript") {
-    return resolvePackage(specifier, import.meta.url);
-  }
-  const importers = [
+  const importers = new Set([
     join(root, "package.json"),
     join(root, "packages/mcp-server/package.json"),
     join(root, "packages/prototype/package.json"),
-  ];
+    join(pilotRepositoryRoot, "package.json"),
+    join(pilotRepositoryRoot, "packages/mcp-server/package.json"),
+    join(pilotRepositoryRoot, "packages/prototype/package.json"),
+  ]);
   let failure;
   for (const importer of importers) {
     try {
@@ -653,7 +1005,11 @@ async function resolveApplicationPackage(specifier, root) {
       failure = error;
     }
   }
-  throw failure;
+  try {
+    return await resolvePackage(specifier, import.meta.url);
+  } catch {
+    throw failure;
+  }
 }
 
 async function resolvePackageFrom(specifier, importer) {

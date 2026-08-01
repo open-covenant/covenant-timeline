@@ -31,6 +31,7 @@ import { loadBoundPilot } from "./mcp-real-model-pilot-bootstrap.mjs";
 import {
   assertPilotRuntime,
   capturePilotRuntime,
+  validatePilotRuntime,
 } from "./mcp-real-model-pilot-runtime.mjs";
 import { validateAdapterSelection } from "./mcp-real-model-pilot.mjs";
 import {
@@ -2175,7 +2176,7 @@ test("recovery CAS-fences a live admission owner before terminalizing", async ()
   }
 });
 
-test("recovery CAS-fences a live preview before terminalizing", async () => {
+test("recovery persists a live preview before fencing its admission", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-live-preview-"));
   const state = join(temporary, "state");
   const config = join(temporary, "config.json");
@@ -2202,7 +2203,7 @@ test("recovery CAS-fences a live preview before terminalizing", async () => {
     ];
     originalRun = runAsync(startArguments, {
       environment: {
-        TIMELINE_PILOT_TEST_PAUSE: "after-initial-adapter-capture",
+        TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-preview",
         TIMELINE_PILOT_TEST_BARRIER: barrier,
       },
     });
@@ -2227,17 +2228,45 @@ test("recovery CAS-fences a live preview before terminalizing", async () => {
     assert.notEqual(concurrent.status, 0);
     assert.match(
       concurrent.stderr,
-      /capture-recovery \(adapter\.interrupted-before-proposal-ready\)/u,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
     );
     const retained = await assertFailedPhaseEvidence({
       state,
       phase: "initial",
-      stage: "capture-recovery",
-      code: "adapter.interrupted-before-proposal-ready",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
     });
-    assert.equal(retained.failure.proposalReadyDigest, null);
-    assert.equal(retained.failure.phaseDecisionDigest, null);
+    assert.match(
+      retained.failure.proposalReadyDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.match(
+      retained.failure.phaseDecisionDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
     assert.equal(retained.failure.mcpAudit.admissions.length, 3);
+    assert.equal(
+      retained.failure.mcpAudit.admissions.every(
+        ({ kind }) => kind === "direct-event",
+      ),
+      true,
+    );
+    const timeline = await loadTimeline();
+    const ready = JSON.parse(
+      await readFile(join(state, "initial-proposal-ready.json"), "utf8"),
+    );
+    const decision = JSON.parse(
+      await readFile(join(state, "initial-decision.json"), "utf8"),
+    );
+    assert.equal(
+      retained.failure.proposalReadyDigest,
+      timeline.contentDigest(ready),
+    );
+    assert.equal(
+      retained.failure.phaseDecisionDigest,
+      timeline.contentDigest(decision),
+    );
+    assert.equal(decision.decision, "recovery-terminal");
     const observation = JSON.parse(
       await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
     );
@@ -2255,7 +2284,7 @@ test("recovery CAS-fences a live preview before terminalizing", async () => {
     assert.notEqual(repeated.status, 0);
     assert.match(
       repeated.stderr,
-      /capture-recovery \(adapter\.interrupted-before-proposal-ready\)/u,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
     );
     assert.equal(await providerInvocationCount(counter), 1);
     assert.deepEqual(
@@ -2275,8 +2304,211 @@ test("recovery CAS-fences a live preview before terminalizing", async () => {
   }
 });
 
-test("an original admission can win a live pre-ready recovery race", async () => {
-  const temporary = await mkdtemp(join(tmpdir(), "timeline-live-preview-win-"));
+test("concurrent recoveries converge on one reconstructed proposal", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-concurrent-reconstruction-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const barriers = [
+    join(temporary, "recovery-one"),
+    join(temporary, "recovery-two"),
+  ];
+  let recoveryRuns = [];
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "after-initial-proposal-preview" },
+    );
+    assert.notEqual(interrupted.status, 0);
+
+    const resumeArguments = (suffix) => [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      join(temporary, `artifact-${suffix}`),
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    recoveryRuns = barriers.map((barrier, index) =>
+      runAsync(resumeArguments(index + 1), {
+        environment: {
+          TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-reconstruction",
+          TIMELINE_PILOT_TEST_BARRIER: barrier,
+        },
+      }),
+    );
+    await Promise.all(
+      barriers.map((barrier) => waitForFile(`${barrier}.ready`)),
+    );
+    await Promise.all(
+      barriers.map((barrier) =>
+        writeFile(`${barrier}.release`, "release\n", {
+          flag: "wx",
+          mode: 0o600,
+        }),
+      ),
+    );
+
+    const results = await Promise.all(recoveryRuns);
+    for (const result of results) {
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+      );
+    }
+    assert.equal(await providerInvocationCount(counter), 1);
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    const timeline = await loadTimeline();
+    const ready = JSON.parse(
+      await readFile(join(state, "initial-proposal-ready.json"), "utf8"),
+    );
+    assert.equal(
+      retained.failure.proposalReadyDigest,
+      timeline.contentDigest(ready),
+    );
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved", "phase-failed"],
+    );
+  } finally {
+    await Promise.all(
+      barriers.map((barrier) =>
+        writeFile(`${barrier}.release`, "release\n", {
+          flag: "wx",
+          mode: 0o600,
+        }).catch((error) => {
+          if (error?.code !== "EEXIST") throw error;
+        }),
+      ),
+    );
+    await Promise.allSettled(recoveryRuns);
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a recovery preview failure stays nonterminal while the original is live", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-live-reconstruction-failure-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  const barrier = join(temporary, "preview-barrier");
+  let originalRun;
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    originalRun = runAsync(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      {
+        environment: {
+          TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-preview",
+          TIMELINE_PILOT_TEST_BARRIER: barrier,
+        },
+      },
+    );
+    await waitForFile(`${barrier}.ready`);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const recovery = run(resumeArguments, {
+      failurePoint: "during-initial-proposal-reconstruction",
+    });
+    assert.notEqual(recovery.status, 0);
+    assert.match(recovery.stderr, /injected proposal reconstruction failure/u);
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved"],
+    );
+    await assert.rejects(lstat(join(state, "initial-failure.json")), /ENOENT/u);
+    await assert.rejects(
+      lstat(join(state, "initial-decision.json")),
+      /ENOENT/u,
+    );
+
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    const original = await originalRun;
+    assert.equal(original.status, 0, original.stderr);
+    const completed = run(resumeArguments);
+    assert.equal(completed.status, 0, completed.stderr);
+    assert.equal(JSON.parse(completed.stdout).verified, true);
+    assert.equal(await providerInvocationCount(counter), 2);
+  } finally {
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    }).catch((error) => {
+      if (error?.code !== "EEXIST") throw error;
+    });
+    await originalRun?.catch(() => {});
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("an original admission can win a live reconstruction race", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-live-reconstruction-win-"),
+  );
   const state = join(temporary, "state");
   const config = join(temporary, "config.json");
   const adapter = join(temporary, "adapter.mjs");
@@ -2304,7 +2536,7 @@ test("an original admission can win a live pre-ready recovery race", async () =>
     ];
     originalRun = runAsync(startArguments, {
       environment: {
-        TIMELINE_PILOT_TEST_PAUSE: "after-initial-adapter-capture",
+        TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-preview",
         TIMELINE_PILOT_TEST_BARRIER: previewBarrier,
       },
     });
@@ -2327,7 +2559,7 @@ test("an original admission can win a live pre-ready recovery race", async () =>
     ];
     recoveryRun = runAsync(resumeArguments, {
       environment: {
-        TIMELINE_PILOT_TEST_PAUSE: "before-initial-recovery-fence",
+        TIMELINE_PILOT_TEST_PAUSE: "before-initial-proposal-reconstruction",
         TIMELINE_PILOT_TEST_BARRIER: recoveryBarrier,
       },
     });
@@ -2938,6 +3170,99 @@ test("a failed correction attempt cannot invoke the provider again", async () =>
       (await readFile(counter, "utf8")).trim().split("\n").length,
       2,
     );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("recovery reconstructs and fences a captured correction", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-correction-recovery-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const started = run([
+      "start",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.equal(started.status, 0, started.stderr);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const interrupted = run(resumeArguments, {
+      failurePoint: "after-correction-adapter-execution-install",
+    });
+    assert.notEqual(interrupted.status, 0);
+    assert.equal(await providerInvocationCount(counter), 2);
+
+    const recovered = run(resumeArguments);
+    assert.notEqual(recovered.status, 0);
+    assert.match(
+      recovered.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+    );
+    assert.equal(await providerInvocationCount(counter), 2);
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "correction",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    assert.match(
+      retained.failure.proposalReadyDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.match(
+      retained.failure.phaseDecisionDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.deepEqual(
+      retained.failure.mcpAudit.admissions.map(({ kind }) => kind),
+      ["direct-event", "direct-event", "model-proposal", "direct-event"],
+    );
+    const decision = JSON.parse(
+      await readFile(join(state, "correction-decision.json"), "utf8"),
+    );
+    assert.equal(decision.decision, "recovery-terminal");
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      [
+        "attempt-opened",
+        "provider-invocation-reserved",
+        "phase-completed",
+        "provider-invocation-reserved",
+        "phase-failed",
+      ],
+    );
+    await assert.rejects(lstat(output), /ENOENT/u);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -3612,6 +3937,88 @@ test("runtime binding detects changed compiled bytes", async () => {
   }
 });
 
+test("runtime binding rejects malformed rehashed identities", async () => {
+  const timeline = await loadTimeline();
+  const binding = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  assert.equal(validatePilotRuntime(binding), binding);
+  const cases = [
+    (identity) => {
+      identity.node.executableByteLength = 0;
+    },
+    (identity) => {
+      identity.files.push(structuredClone(identity.files[0]));
+    },
+    (identity) => {
+      identity.files[0].path = "../runtime-escape.mjs";
+    },
+    (identity) => {
+      identity.packages[0].id = "npm:forged@1.0.0#deadbeef";
+    },
+    (identity) => {
+      const digest = `sha256:${"f".repeat(64)}`;
+      identity.packages.push({
+        id: `npm:unreachable-runtime@1.0.0#${digest.slice(7)}`,
+        name: "unreachable-runtime",
+        version: "1.0.0",
+        digest,
+        fileCount: 1,
+        byteLength: 1,
+      });
+    },
+    (identity) => {
+      identity.resolutions[0].to = "npm:missing@1.0.0#deadbeef";
+    },
+  ];
+  for (const mutate of cases) {
+    const invalid = structuredClone(binding);
+    mutate(invalid.identity);
+    invalid.digest = timeline.contentDigest(invalid.identity);
+    assert.throws(
+      () => validatePilotRuntime(invalid),
+      /runtime binding is invalid/u,
+    );
+  }
+});
+
+test("runtime binding rejects a missing required application dependency", async () => {
+  const timeline = await loadTimeline();
+  const binding = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  const invalid = structuredClone(binding);
+  invalid.identity.resolutions = invalid.identity.resolutions.filter(
+    ({ from, specifier }) =>
+      from !== "application" || specifier !== "@covenant-org/timeline",
+  );
+  const reachable = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of invalid.identity.resolutions) {
+      if (edge.from !== "application" && !reachable.has(edge.from)) continue;
+      if (reachable.has(edge.to)) continue;
+      reachable.add(edge.to);
+      changed = true;
+    }
+  }
+  invalid.identity.packages = invalid.identity.packages.filter(({ id }) =>
+    reachable.has(id),
+  );
+  invalid.identity.resolutions = invalid.identity.resolutions.filter(
+    ({ from, to }) =>
+      reachable.has(to) && (from === "application" || reachable.has(from)),
+  );
+  invalid.digest = timeline.contentDigest(invalid.identity);
+
+  assert.equal(validatePilotRuntime(invalid), invalid);
+  await assert.rejects(
+    assertPilotRuntime(invalid),
+    /runtime identity changed/u,
+  );
+});
+
 test("runtime binding rejects unbound module-loading syntax", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-closure-"));
   try {
@@ -3633,6 +4040,110 @@ test("runtime binding rejects unbound module-loading syntax", async () => {
           'localLoader("./runtime-closure-bypass.mjs");',
         ].join("\n"),
         error: /imports unbound local module/u,
+      },
+      {
+        name: "namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /imports unbound local module/u,
+      },
+      {
+        name: "computed namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          'const localLoader = Module["createRequire"](import.meta.url);',
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "destructured namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          "const { createRequire: makeRequire } = Module;",
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "aliased namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          "const makeRequire = Module.createRequire;",
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "aliased named createRequire loader",
+        source: [
+          'import { createRequire } from "node:module";',
+          "const makeRequire = createRequire;",
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "process built-in module loader",
+        source: [
+          'const Module = process.getBuiltinModule("node:module");',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported built-in module loading/u,
+      },
+      {
+        name: "destructured process built-in module loader",
+        source: [
+          "const { getBuiltinModule } = process;",
+          'const Module = getBuiltinModule("node:module");',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported built-in module loading/u,
+      },
+      {
+        name: "dynamic node module loader",
+        source: [
+          'const { createRequire } = await import("node:module");',
+          "const localLoader = createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported dynamic node:module import/u,
+      },
+      {
+        name: "named Module export loader",
+        source: [
+          'import { Module } from "node:module";',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported node:module import/u,
+      },
+      {
+        name: "dynamic eval loader",
+        source: "await eval('import(\"./runtime-closure-bypass.mjs\")');",
+        error: /unsupported dynamic code construction/u,
+      },
+      {
+        name: "Function constructor loader",
+        source:
+          "await Function('return import(\"./runtime-closure-bypass.mjs\")')();",
+        error: /unsupported dynamic code construction/u,
+      },
+      {
+        name: "exported CommonJS loader",
+        source: [
+          'import { createRequire } from "node:module";',
+          "export const localLoader = createRequire(import.meta.url);",
+        ].join("\n"),
+        error: /exports a CommonJS loader/u,
       },
       {
         name: "computed CommonJS require",
@@ -3717,7 +4228,7 @@ test("runtime binding follows the resolved workspace package target", async (t) 
   }
 });
 
-test("runtime binding detects changed transitive dependency bytes", async () => {
+test("runtime binding detects changed source-derived dependency bytes", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-dependency-"));
   try {
     const runtimeRoot = join(temporary, "runtime");
@@ -3730,12 +4241,22 @@ test("runtime binding detects changed transitive dependency bytes", async () => 
       "export const value = 1;\n",
     );
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    const sourcePath = join(runtimeRoot, "scripts/strict-json.mjs");
+    await writeFile(
+      sourcePath,
+      `${await readFile(sourcePath, "utf8")}\nimport "example-runtime";\n`,
+    );
     const binding = await capturePilotRuntime({
       profile: "development-unbound-adapter",
       root: runtimeRoot,
       resolutionRoot,
-      dependencies: ["example-runtime"],
     });
+    assert.ok(
+      binding.identity.resolutions.some(
+        ({ from, specifier }) =>
+          from === "application" && specifier === "example-runtime",
+      ),
+    );
     await writeFile(join(dependency, "index.js"), "export const value = 2;\n");
 
     await assert.rejects(

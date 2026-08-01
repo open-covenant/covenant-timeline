@@ -19,6 +19,8 @@ Record these values with every run and operational event:
 
 - Timeline package and source revision;
 - MCP server package and store-envelope version when used;
+- writer identity from each MCP admission record and the envelope's
+  `lastWriter`;
 - contract and event-stream digests;
 - schema and conformance revision;
 - adopter profile and independently pinned policy bytes or digest;
@@ -81,14 +83,14 @@ threads.
 The MCP server applies lower defaults:
 
 - 256 locally stored runs;
-- 2,000 events and 4 MiB per stored run;
+- 2,000 events and 4 MiB per stored envelope;
 - eight run-discovery entries per list call;
 - 1 MiB per incoming MCP message;
 - 32 axes and contexts;
 - 512 points, 256 intervals, and 1,024 assertions;
 - 4,096 solver edges and 2,000,000 operations per request.
 
-The model-proposal tool lowers these limits again:
+The proposal preview and admission path uses lower limits:
 
 - eight changes and eight supports per change;
 - 32 evidence entries, 64 KiB per entry, and 256 KiB in total;
@@ -122,11 +124,12 @@ generation.
 The MCP limits are enforced independently from the broader core defaults.
 Continue catalog discovery with the returned opaque cursor and restart from the
 first page if a catalog mutation makes that cursor stale. Standard MCP
-discovery advertises the `timeline://run/{runId}` resource template but does not
-return a partial dynamic resource list. Discover every run ID through
-`timeline_list_runs`, then read the resource directly. Protocol frames that are
-malformed or exceed the message limit terminate the stdio server with a nonzero
-status so a supervisor can distinguish failure from a clean stop.
+discovery advertises the portable `timeline://run/{runId}` and complete
+`timeline://audit/{runId}` resource templates but does not return a partial
+dynamic resource list. Discover every run ID through `timeline_list_runs`, then
+read either resource directly. Protocol frames that are malformed or exceed
+the message limit terminate the stdio server with a nonzero status so a
+supervisor can distinguish failure from a clean stop.
 
 ## Dispatch and Recovery
 
@@ -167,22 +170,59 @@ modes; an existing parent or data directory must already have suitable access
 controls. On Windows, configure a user-private ACL. Do not place the reference
 store on NFS, SMB, or another shared filesystem.
 
-Each direct event requires the current whole-run digest. A model-proposal batch
-requires the exact base revision and whole-run digest. The server reconstructs
-and verifies that prefix, compiles against it, validates the complete candidate
-run, writes canonical bytes to a private temporary file, syncs it, and
-atomically replaces the stored envelope under an exclusive lock.
+The default `model` role exposes only listing, proposal preview, state
+projection, and reasoning. It cannot create, append, or admit. Start
+`--role operator` in a separately controlled process when a host needs write
+authority. The role flag is a capability boundary in tool discovery; it is not
+operating-system authentication. Isolate the operator process and do not make
+its stdio transport available to the model.
+
+Each direct event requires the current whole-run digest and an explicit
+authority ID, policy reference, and policy digest. A model proposal is first
+compiled and reasoned over without mutation. Admission requires the exact
+candidate digest returned by that preview, inputs that recompile to the same
+candidate, the exact base revision and whole-run digest, and the same explicit
+policy identity. The operator server reconstructs and verifies the prefix,
+recompiles the candidate, checks the digest, validates the complete run, and
+atomically writes the events and admission record under an exclusive lock. It
+does not retain preview sessions; the host retains the preview and candidate
+digest. Preview responses carry `persistence: "not-admitted"`. Admission
+responses distinguish a new write, an exact retry, and an empty candidate with
+the closed `admitted`, `already-admitted`, and `empty-candidate` statuses.
+
+The file store does not expose raw compiled-batch admission. The operator
+server supplies an immutable artifact binding the candidate, computed candidate
+and proposal digests, event batch, and exact run prefix under an internal
+runtime-checked permit. Missing or forged permits fail before filesystem
+access. This is an in-package integrity boundary, not operating-system
+authentication; process isolation remains the host's responsibility.
+
+The record stores the Timeline package, reasoner, and MCP package
+versions used for the write. Its `recordDigest` binds that software profile
+with the admission decision and event prefix; it does not authenticate an
+operator or identify a server instance.
 
 An exact same-ID event retry is idempotent even if its supplied digest is stale.
 A proposal retry is idempotent when the same candidate event bytes already
-occupy the bound prefix, including after later events have been appended. An
-incomplete prefix match, changed order or content, or competing identifier
-fails with a conflict rather than being merged or repaired.
+occupy the bound prefix, including after later events have been appended. Both
+retry forms also require the original admission decision. An incomplete prefix
+match, changed order or content, changed authority or policy, or competing
+identifier fails with a conflict rather than being merged or repaired. An exact
+retry returns the original admission record and writer identity. It performs no
+persistence and does not update envelope `lastWriter`.
 
-The MCP store does not retain proposal, query, or quote-span metadata. When
-`applied` is `false`, the returned proposal digest, query, and provenance
-describe the current compilation. They are not evidence of which proposal or
-source span originally produced the event-equivalent stored batch.
+The MCP store requires contiguous admission coverage for every event. A direct
+append creates one record for one event; a proposal admission creates one
+record for its complete ordered event batch and binds its candidate and
+proposal digests. The store does not retain the proposal bytes, query, evidence
+text, or quote-span provenance. Retain those artifacts externally when an audit
+must reproduce the compiler input. The portable `runDigest` covers only the
+v0alpha3 run. `auditDigest` covers the complete stored envelope, including
+admission records and `lastWriter`. Each admission keeps the writer software
+profile from its original persistence. `lastWriter` records only the software
+profile used for the envelope's most recent successful persistence; it does not
+identify an operator or server instance. On a non-empty envelope it must match
+the final admission's writer.
 
 Proposal evidence text and quotes are processed transiently. They are not
 written to the Timeline data directory or returned by the tool. Retain the
@@ -198,9 +238,13 @@ be removed.
 
 Back up the canonical `.json` files only while the server is stopped or through
 a filesystem snapshot that preserves point-in-time consistency. A restored
-file is accepted only if its canonical envelope, run identity, revision, and
-whole-run digest all verify. Store reads reject symbolic links, FIFOs, devices,
-and other non-regular entries rather than following or blocking on them.
+file is accepted only if its canonical envelope, run identity, revision,
+whole-run digest, admission coverage, per-admission writer identities,
+admission-record digests, and envelope `lastWriter` all verify.
+Compare the returned audit digest with an independently retained value when
+restoring a pinned audit object. Store reads reject symbolic links, FIFOs,
+devices, and other non-regular entries rather than following or blocking on
+them.
 
 ## Incident Response
 

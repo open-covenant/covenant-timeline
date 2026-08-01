@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, type Hash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import {
   lstat,
@@ -25,29 +25,34 @@ import {
 import {
   DEFAULT_MAX_RUN_BYTES,
   DEFAULT_MAX_RUNS,
-  MCP_ADMISSION,
   MCP_DOCUMENT_LIMITS,
-  MCP_IMPLEMENTATION,
+  MCP_WRITER_IDENTITY,
   MCP_KERNEL_LIMITS,
   MAX_LIST_PAGE_SIZE,
   MAX_MODEL_PROPOSAL_EVENTS,
 } from "./constants.js";
 import { TimelineMcpError } from "./errors.js";
+import { requireVerifiedModelProposalAdmission } from "./model-admission.js";
 import type {
-  AppendCompiledEventsResultV0Alpha1,
-  AppendEventResultV0Alpha1,
-  CreateRunResultV0Alpha1,
-  ExpectedRunPrefixV0Alpha1,
-  McpRunEnvelopeV0Alpha1,
-  McpRunImplementationV0Alpha1,
-  McpRunListPageOptionsV0Alpha1,
-  McpRunListPageV0Alpha1,
-  McpRunMetadataV0Alpha1,
+  AdmitCompiledEventsResultV0Alpha2,
+  AppendEventResultV0Alpha2,
+  CreateRunResultV0Alpha2,
+  ExpectedRunPrefixV0Alpha2,
+  McpAdmissionDecisionV0Alpha1,
+  McpAdmissionRecordV0Alpha1,
+  McpDirectAdmissionRecordV0Alpha1,
+  McpModelProposalAdmissionRecordV0Alpha1,
+  McpRunEnvelopeV0Alpha2,
+  McpWriterIdentityV0Alpha1,
+  McpRunListPageOptionsV0Alpha2,
+  McpRunListPageV0Alpha2,
+  McpRunMetadataV0Alpha2,
   TemporalEventDraftV0Alpha3,
 } from "./types.js";
 
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const POLICY_REFERENCE = /^[\x21-\x7e]{1,512}$/;
 const SERVER_VERSION = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/;
 const STORED_FILE = /^[0-9a-f]{64}\.json$/;
 const PAGE_CURSOR = /^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/;
@@ -58,23 +63,23 @@ export interface FileMcpRunStoreOptions {
 }
 
 export interface McpRunStore {
-  list(): Promise<readonly McpRunMetadataV0Alpha1[]>;
+  list(): Promise<readonly McpRunMetadataV0Alpha2[]>;
   listPage(
-    options?: McpRunListPageOptionsV0Alpha1,
-  ): Promise<McpRunListPageV0Alpha1>;
-  load(runId: string): Promise<McpRunEnvelopeV0Alpha1 | undefined>;
-  require(runId: string): Promise<McpRunEnvelopeV0Alpha1>;
-  create(contract: unknown): Promise<CreateRunResultV0Alpha1>;
+    options?: McpRunListPageOptionsV0Alpha2,
+  ): Promise<McpRunListPageV0Alpha2>;
+  load(runId: string): Promise<McpRunEnvelopeV0Alpha2 | undefined>;
+  require(runId: string): Promise<McpRunEnvelopeV0Alpha2>;
+  create(contract: unknown): Promise<CreateRunResultV0Alpha2>;
   append(
     runId: string,
     draft: unknown,
     expectedRunDigest: string,
-  ): Promise<AppendEventResultV0Alpha1>;
-  appendCompiled(
-    runId: string,
-    events: unknown,
-    expected: ExpectedRunPrefixV0Alpha1,
-  ): Promise<AppendCompiledEventsResultV0Alpha1>;
+    admission: unknown,
+  ): Promise<AppendEventResultV0Alpha2>;
+  admitVerifiedModelProposal(
+    permit: unknown,
+    admission: unknown,
+  ): Promise<AdmitCompiledEventsResultV0Alpha2>;
 }
 
 export class FileMcpRunStore implements McpRunStore {
@@ -95,7 +100,7 @@ export class FileMcpRunStore implements McpRunStore {
     assertAtMost(this.maxRuns, DEFAULT_MAX_RUNS, "maxRuns");
   }
 
-  async list(): Promise<readonly McpRunMetadataV0Alpha1[]> {
+  async list(): Promise<readonly McpRunMetadataV0Alpha2[]> {
     await this.ensureDirectory();
     const files = await this.storedFiles();
     if (files.length > this.maxRuns) {
@@ -105,7 +110,7 @@ export class FileMcpRunStore implements McpRunStore {
       );
     }
 
-    const timelines: McpRunMetadataV0Alpha1[] = [];
+    const timelines: McpRunMetadataV0Alpha2[] = [];
     for (const file of files) {
       const envelope = await this.loadPath(join(this.directory, file));
       if (file !== this.fileName(envelope.runId)) {
@@ -122,8 +127,8 @@ export class FileMcpRunStore implements McpRunStore {
   }
 
   async listPage(
-    options: McpRunListPageOptionsV0Alpha1 = {},
-  ): Promise<McpRunListPageV0Alpha1> {
+    options: McpRunListPageOptionsV0Alpha2 = {},
+  ): Promise<McpRunListPageV0Alpha2> {
     const { cursor, limit } = parseListPageOptions(options);
     await this.ensureDirectory();
     const files = await this.storedFiles();
@@ -157,7 +162,7 @@ export class FileMcpRunStore implements McpRunStore {
     }
 
     const pageFiles = files.slice(start, start + limit);
-    const timelines: McpRunMetadataV0Alpha1[] = [];
+    const timelines: McpRunMetadataV0Alpha2[] = [];
     for (const file of pageFiles) {
       const envelope = await this.loadPath(join(this.directory, file));
       if (file !== this.fileName(envelope.runId)) {
@@ -179,12 +184,12 @@ export class FileMcpRunStore implements McpRunStore {
     };
   }
 
-  async load(runId: string): Promise<McpRunEnvelopeV0Alpha1 | undefined> {
+  async load(runId: string): Promise<McpRunEnvelopeV0Alpha2 | undefined> {
     assertRunId(runId);
     return this.loadUnlocked(runId);
   }
 
-  async require(runId: string): Promise<McpRunEnvelopeV0Alpha1> {
+  async require(runId: string): Promise<McpRunEnvelopeV0Alpha2> {
     const envelope = await this.load(runId);
     if (!envelope) {
       throw new TimelineMcpError(
@@ -195,8 +200,8 @@ export class FileMcpRunStore implements McpRunStore {
     return envelope;
   }
 
-  async create(contractValue: unknown): Promise<CreateRunResultV0Alpha1> {
-    const contract = parseContractInput(contractValue);
+  async create(contractValue: unknown): Promise<CreateRunResultV0Alpha2> {
+    const contract = structuredClone(parseContractInput(contractValue));
     const runId = contract.id;
     await this.ensureDirectory();
 
@@ -237,7 +242,8 @@ export class FileMcpRunStore implements McpRunStore {
     runId: string,
     draftValue: unknown,
     expectedRunDigest: string,
-  ): Promise<AppendEventResultV0Alpha1> {
+    admissionValue: unknown,
+  ): Promise<AppendEventResultV0Alpha2> {
     assertRunId(runId);
     if (!DIGEST.test(expectedRunDigest)) {
       throw new TimelineMcpError(
@@ -245,7 +251,8 @@ export class FileMcpRunStore implements McpRunStore {
         "expectedRunDigest must be a SHA-256 digest",
       );
     }
-    const draft = parseDraft(draftValue);
+    const draft = structuredClone(parseDraft(draftValue));
+    const admission = { ...parseAdmissionDecision(admissionValue) };
     await this.ensureDirectory();
 
     return this.withLock(this.lockPath(runId), async () => {
@@ -268,9 +275,24 @@ export class FileMcpRunStore implements McpRunStore {
             "event ID already exists with different content",
           );
         }
+        const admissionRecord = directAdmissionForEvent(current, existing.id);
+        const expectedAdmission = createDirectAdmissionRecord(
+          current.run,
+          existing.sequence,
+          existing.id,
+          admission,
+          admissionRecord.writer,
+        );
+        if (!sameJson(admissionRecord, expectedAdmission)) {
+          throw new TimelineMcpError(
+            "timeline.mcp.store.conflict",
+            "event ID already has a different admission decision",
+          );
+        }
         return {
           envelope: current,
           event: existing,
+          admissionRecord,
           appended: false,
         };
       }
@@ -287,20 +309,36 @@ export class FileMcpRunStore implements McpRunStore {
         ...current.run,
         events: [...current.run.events, event],
       });
-      const envelope = createEnvelope(run);
+      const admissionRecord = createDirectAdmissionRecord(
+        current.run,
+        current.revision,
+        event.id,
+        admission,
+      );
+      const envelope = createEnvelope(run, [
+        ...current.admissions,
+        admissionRecord,
+      ]);
       await this.persist(runId, envelope);
-      return { envelope, event, appended: true };
+      return { envelope, event, admissionRecord, appended: true };
     });
   }
 
-  async appendCompiled(
-    runId: string,
-    eventValues: unknown,
-    expected: ExpectedRunPrefixV0Alpha1,
-  ): Promise<AppendCompiledEventsResultV0Alpha1> {
+  async admitVerifiedModelProposal(
+    permitValue: unknown,
+    admissionValue: unknown,
+  ): Promise<AdmitCompiledEventsResultV0Alpha2> {
+    const { artifact } = requireVerifiedModelProposalAdmission(permitValue);
+    const { runId, events: eventValues, exactPrefix: expected } = artifact;
     assertRunId(runId);
     const prefix = parseExpectedPrefix(expected);
     const events = parseCompiledEvents(eventValues, prefix.revision);
+    const decision = parseAdmissionDecision(admissionValue);
+    const admission = {
+      ...decision,
+      candidateDigest: artifact.candidateDigest,
+      proposalDigest: artifact.proposalDigest,
+    };
     await this.ensureDirectory();
 
     return this.withLock(this.lockPath(runId), async () => {
@@ -319,10 +357,33 @@ export class FileMcpRunStore implements McpRunStore {
       );
       if (existing.length === events.length) {
         if (existing.every((event, index) => sameJson(event, events[index]))) {
+          if (events.length === 0) {
+            return {
+              envelope: current,
+              events: existing,
+              admissionRecord: null,
+              admissionStatus: "empty-candidate",
+            };
+          }
+          const admissionRecord = modelAdmissionForEvent(
+            current,
+            events[0]!.id,
+          );
+          const expectedAdmission = createModelProposalAdmissionRecord(
+            current.run,
+            prefix.revision,
+            events.map(({ id }) => id),
+            admission,
+            admissionRecord.writer,
+          );
+          if (!sameJson(admissionRecord, expectedAdmission)) {
+            throw batchConflict();
+          }
           return {
             envelope: current,
             events: existing,
-            appended: false,
+            admissionRecord,
+            admissionStatus: "already-admitted",
           };
         }
         throw batchConflict();
@@ -341,21 +402,33 @@ export class FileMcpRunStore implements McpRunStore {
         ...current.run,
         events: [...current.run.events, ...events],
       });
-      const envelope = createEnvelope(run);
-      if (events.length > 0) {
+      const admissionRecord =
+        events.length === 0
+          ? null
+          : createModelProposalAdmissionRecord(
+              current.run,
+              prefix.revision,
+              events.map(({ id }) => id),
+              admission,
+            );
+      const envelope = admissionRecord
+        ? createEnvelope(run, [...current.admissions, admissionRecord])
+        : current;
+      if (admissionRecord) {
         await this.persist(runId, envelope);
       }
       return {
         envelope,
         events,
-        appended: events.length > 0,
+        admissionRecord,
+        admissionStatus: events.length > 0 ? "admitted" : "empty-candidate",
       };
     });
   }
 
   private async loadUnlocked(
     runId: string,
-  ): Promise<McpRunEnvelopeV0Alpha1 | undefined> {
+  ): Promise<McpRunEnvelopeV0Alpha2 | undefined> {
     try {
       const envelope = await this.loadPath(this.path(runId));
       if (envelope.runId !== runId) {
@@ -371,7 +444,7 @@ export class FileMcpRunStore implements McpRunStore {
     }
   }
 
-  private async loadPath(path: string): Promise<McpRunEnvelopeV0Alpha1> {
+  private async loadPath(path: string): Promise<McpRunEnvelopeV0Alpha2> {
     let text: string;
     try {
       text = await readBoundedUtf8(path, this.maxBytes);
@@ -386,7 +459,7 @@ export class FileMcpRunStore implements McpRunStore {
     }
 
     try {
-      const envelope = parseMcpRunEnvelopeV0Alpha1(parseJson(text));
+      const envelope = parseMcpRunEnvelopeV0Alpha2(parseJson(text));
       const canonical = `${canonicalJson(envelope as unknown as JsonValue)}\n`;
       if (text !== canonical) {
         throw new TimelineMcpError(
@@ -411,7 +484,7 @@ export class FileMcpRunStore implements McpRunStore {
 
   private async persist(
     runId: string,
-    envelope: McpRunEnvelopeV0Alpha1,
+    envelope: McpRunEnvelopeV0Alpha2,
   ): Promise<void> {
     const contents = `${canonicalJson(envelope as unknown as JsonValue)}\n`;
     const bytes = new TextEncoder().encode(contents);
@@ -528,9 +601,9 @@ export class FileMcpRunStore implements McpRunStore {
   }
 }
 
-export function parseMcpRunEnvelopeV0Alpha1(
+export function parseMcpRunEnvelopeV0Alpha2(
   value: unknown,
-): McpRunEnvelopeV0Alpha1 {
+): McpRunEnvelopeV0Alpha2 {
   const envelope = exactRecord(
     value,
     [
@@ -538,13 +611,13 @@ export function parseMcpRunEnvelopeV0Alpha1(
       "runId",
       "revision",
       "runDigest",
-      "admission",
-      "implementation",
+      "admissions",
+      "lastWriter",
       "run",
     ],
     "stored timeline",
   );
-  if (envelope.schema !== "covenant.timeline.mcp-run.v0alpha1") {
+  if (envelope.schema !== "covenant.timeline.mcp-run.v0alpha2") {
     corrupt("stored timeline schema is invalid");
   }
   if (typeof envelope.runId !== "string" || !IDENTIFIER.test(envelope.runId)) {
@@ -563,10 +636,14 @@ export function parseMcpRunEnvelopeV0Alpha1(
   ) {
     corrupt("stored timeline digest is invalid");
   }
-  assertConstantObject(envelope.admission, MCP_ADMISSION, "admission");
-  const implementation = parseImplementation(envelope.implementation);
+  const lastWriter = parseWriterIdentity(envelope.lastWriter);
 
   const run = parseStoredRun(envelope.run);
+  const admissions = parseStoredAdmissions(envelope.admissions, run);
+  const finalAdmission = admissions.at(-1);
+  if (finalAdmission && !sameJson(lastWriter, finalAdmission.writer)) {
+    corrupt("stored timeline last writer does not match its final admission");
+  }
   if (envelope.runId !== run.contract.id) {
     corrupt("stored timeline contract ID is invalid");
   }
@@ -579,40 +656,44 @@ export function parseMcpRunEnvelopeV0Alpha1(
   }
 
   return {
-    schema: "covenant.timeline.mcp-run.v0alpha1",
+    schema: "covenant.timeline.mcp-run.v0alpha2",
     runId: envelope.runId,
     revision: envelope.revision,
     runDigest,
-    admission: MCP_ADMISSION,
-    implementation,
+    admissions,
+    lastWriter,
     run,
   };
 }
 
 function createEnvelope(
   run: TimelineRunDocumentV0Alpha3,
-): McpRunEnvelopeV0Alpha1 {
+  admissions: readonly McpAdmissionRecordV0Alpha1[] = [],
+): McpRunEnvelopeV0Alpha2 {
   enforceRunLimits(run);
+  validateAdmissionCoverage(admissions, run);
   return {
-    schema: "covenant.timeline.mcp-run.v0alpha1",
+    schema: "covenant.timeline.mcp-run.v0alpha2",
     runId: run.contract.id,
     revision: run.events.length,
     runDigest: contentDigest(run as unknown as JsonValue),
-    admission: MCP_ADMISSION,
-    implementation: MCP_IMPLEMENTATION,
+    admissions,
+    lastWriter: MCP_WRITER_IDENTITY,
     run,
   };
 }
 
 export function metadataForEnvelope(
-  envelope: McpRunEnvelopeV0Alpha1,
-): McpRunMetadataV0Alpha1 {
+  envelope: McpRunEnvelopeV0Alpha2,
+): McpRunMetadataV0Alpha2 {
   return {
     runId: envelope.runId,
     revision: envelope.revision,
+    auditDigest: contentDigest(envelope as unknown as JsonValue),
     subject: envelope.run.contract.subject,
     contexts: envelope.run.contract.contexts,
     eventCount: envelope.run.events.length,
+    admissionCount: envelope.admissions.length,
     latestRecordedThrough:
       envelope.run.events.length === 0 ? null : envelope.run.events.length - 1,
     runDigest: envelope.runDigest,
@@ -620,8 +701,8 @@ export function metadataForEnvelope(
 }
 
 export function bindRunPrefix(
-  envelope: McpRunEnvelopeV0Alpha1,
-  expectedValue: ExpectedRunPrefixV0Alpha1,
+  envelope: McpRunEnvelopeV0Alpha2,
+  expectedValue: ExpectedRunPrefixV0Alpha2,
 ): TimelineRunDocumentV0Alpha3 {
   const expected = parseExpectedPrefix(expectedValue);
   if (expected.revision > envelope.revision) throw batchConflict();
@@ -634,6 +715,276 @@ export function bindRunPrefix(
     throw batchConflict();
   }
   return run;
+}
+
+function parseAdmissionDecision(value: unknown): McpAdmissionDecisionV0Alpha1 {
+  const decision = exactInputRecord(
+    value,
+    ["authorityId", "policyRef", "policyDigest"],
+    "admission decision",
+  );
+  if (
+    typeof decision.authorityId !== "string" ||
+    !IDENTIFIER.test(decision.authorityId)
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "admission authority ID is invalid",
+    );
+  }
+  if (
+    typeof decision.policyRef !== "string" ||
+    !POLICY_REFERENCE.test(decision.policyRef)
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "admission policy reference is invalid",
+    );
+  }
+  if (
+    typeof decision.policyDigest !== "string" ||
+    !DIGEST.test(decision.policyDigest)
+  ) {
+    throw new TimelineMcpError(
+      "timeline.mcp.input.invalid",
+      "admission policy digest is invalid",
+    );
+  }
+  return decision as unknown as McpAdmissionDecisionV0Alpha1;
+}
+
+function createDirectAdmissionRecord(
+  run: TimelineRunDocumentV0Alpha3,
+  baseRevision: number,
+  eventId: string,
+  decision: McpAdmissionDecisionV0Alpha1,
+  writer: McpWriterIdentityV0Alpha1 = MCP_WRITER_IDENTITY,
+): McpDirectAdmissionRecordV0Alpha1 {
+  return withRecordDigest({
+    schema: "covenant.timeline.mcp-admission.v0alpha1",
+    kind: "direct-event",
+    decision: "admitted",
+    ...decision,
+    writer,
+    baseRevision,
+    baseRunDigest: digestRunPrefix(run, baseRevision),
+    eventIds: [eventId],
+  });
+}
+
+function createModelProposalAdmissionRecord(
+  run: TimelineRunDocumentV0Alpha3,
+  baseRevision: number,
+  eventIds: readonly string[],
+  admission: McpAdmissionDecisionV0Alpha1 & {
+    candidateDigest: `sha256:${string}`;
+    proposalDigest: `sha256:${string}`;
+  },
+  writer: McpWriterIdentityV0Alpha1 = MCP_WRITER_IDENTITY,
+): McpModelProposalAdmissionRecordV0Alpha1 {
+  return withRecordDigest({
+    schema: "covenant.timeline.mcp-admission.v0alpha1",
+    kind: "model-proposal",
+    decision: "admitted",
+    authorityId: admission.authorityId,
+    policyRef: admission.policyRef,
+    policyDigest: admission.policyDigest,
+    writer,
+    baseRevision,
+    baseRunDigest: digestRunPrefix(run, baseRevision),
+    eventIds,
+    candidateDigest: admission.candidateDigest as `sha256:${string}`,
+    proposalDigest: admission.proposalDigest as `sha256:${string}`,
+  });
+}
+
+function withRecordDigest<
+  T extends Omit<McpAdmissionRecordV0Alpha1, "recordDigest">,
+>(record: T): T & { recordDigest: `sha256:${string}` } {
+  return {
+    ...record,
+    recordDigest: contentDigest(record as unknown as JsonValue),
+  };
+}
+
+function digestRunPrefix(
+  run: TimelineRunDocumentV0Alpha3,
+  revision: number,
+): `sha256:${string}` {
+  return contentDigest({
+    schema: "covenant.timeline.run.v0alpha3",
+    contract: run.contract,
+    events: run.events.slice(0, revision),
+  } as unknown as JsonValue);
+}
+
+function admissionForEvent(
+  envelope: McpRunEnvelopeV0Alpha2,
+  eventId: string,
+): McpAdmissionRecordV0Alpha1 {
+  const record = envelope.admissions.find(({ eventIds }) =>
+    eventIds.includes(eventId),
+  );
+  if (!record) {
+    throw new TimelineMcpError(
+      "timeline.mcp.store.corrupt",
+      "stored event has no admission record",
+    );
+  }
+  return record;
+}
+
+function directAdmissionForEvent(
+  envelope: McpRunEnvelopeV0Alpha2,
+  eventId: string,
+): McpDirectAdmissionRecordV0Alpha1 {
+  const record = admissionForEvent(envelope, eventId);
+  if (record.kind !== "direct-event") throw batchConflict();
+  return record;
+}
+
+function modelAdmissionForEvent(
+  envelope: McpRunEnvelopeV0Alpha2,
+  eventId: string,
+): McpModelProposalAdmissionRecordV0Alpha1 {
+  const record = admissionForEvent(envelope, eventId);
+  if (record.kind !== "model-proposal") throw batchConflict();
+  return record;
+}
+
+function parseStoredAdmissions(
+  value: unknown,
+  run: TimelineRunDocumentV0Alpha3,
+): readonly McpAdmissionRecordV0Alpha1[] {
+  if (!Array.isArray(value) || value.length > run.events.length) {
+    corrupt("stored timeline admissions are invalid");
+  }
+  const admissions = value.map(parseStoredAdmission);
+  validateAdmissionCoverage(admissions, run);
+  return admissions;
+}
+
+function parseStoredAdmission(value: unknown): McpAdmissionRecordV0Alpha1 {
+  const base = exactRecord(value, undefined, "admission record");
+  const modelProposal = base.kind === "model-proposal";
+  const keys = [
+    "schema",
+    "kind",
+    "decision",
+    "authorityId",
+    "policyRef",
+    "policyDigest",
+    "writer",
+    "baseRevision",
+    "baseRunDigest",
+    "eventIds",
+    ...(modelProposal ? ["candidateDigest", "proposalDigest"] : []),
+    "recordDigest",
+  ];
+  exactRecord(value, keys, "admission record");
+  if (
+    base.schema !== "covenant.timeline.mcp-admission.v0alpha1" ||
+    (base.kind !== "direct-event" && base.kind !== "model-proposal") ||
+    base.decision !== "admitted"
+  ) {
+    corrupt("stored admission identity is invalid");
+  }
+  let decision: McpAdmissionDecisionV0Alpha1;
+  let writer: McpWriterIdentityV0Alpha1;
+  try {
+    decision = parseAdmissionDecision({
+      authorityId: base.authorityId,
+      policyRef: base.policyRef,
+      policyDigest: base.policyDigest,
+    });
+    writer = parseWriterIdentity(base.writer);
+  } catch {
+    corrupt("stored admission decision or writer is invalid");
+  }
+  if (
+    typeof base.baseRevision !== "number" ||
+    !Number.isSafeInteger(base.baseRevision) ||
+    base.baseRevision < 0 ||
+    typeof base.baseRunDigest !== "string" ||
+    !DIGEST.test(base.baseRunDigest) ||
+    !Array.isArray(base.eventIds) ||
+    base.eventIds.length === 0 ||
+    base.eventIds.length > MAX_MODEL_PROPOSAL_EVENTS ||
+    base.eventIds.some(
+      (id) => typeof id !== "string" || !IDENTIFIER.test(id),
+    ) ||
+    new Set(base.eventIds).size !== base.eventIds.length ||
+    typeof base.recordDigest !== "string" ||
+    !DIGEST.test(base.recordDigest)
+  ) {
+    corrupt("stored admission fields are invalid");
+  }
+  if (base.kind === "direct-event" && base.eventIds.length !== 1) {
+    corrupt("stored direct admission event count is invalid");
+  }
+  if (
+    modelProposal &&
+    (typeof base.candidateDigest !== "string" ||
+      !DIGEST.test(base.candidateDigest) ||
+      typeof base.proposalDigest !== "string" ||
+      !DIGEST.test(base.proposalDigest))
+  ) {
+    corrupt("stored model proposal admission digest is invalid");
+  }
+  const { recordDigest, ...unsigned } = base;
+  if (contentDigest(unsigned as JsonValue) !== recordDigest) {
+    corrupt("stored admission digest does not match its record");
+  }
+  return {
+    ...unsigned,
+    ...decision,
+    writer,
+    recordDigest,
+  } as unknown as McpAdmissionRecordV0Alpha1;
+}
+
+function validateAdmissionCoverage(
+  admissions: readonly McpAdmissionRecordV0Alpha1[],
+  run: TimelineRunDocumentV0Alpha3,
+): void {
+  const prefixHash = createRunPrefixHash(run);
+  let revision = 0;
+  for (const admission of admissions) {
+    if (
+      admission.baseRevision !== revision ||
+      admission.baseRunDigest !== finishRunPrefixHash(prefixHash)
+    ) {
+      corrupt("stored admission prefix is invalid");
+    }
+
+    for (const eventId of admission.eventIds) {
+      const event = run.events[revision];
+      if (!event || event.id !== eventId) {
+        corrupt("stored admission events do not match the run");
+      }
+      if (revision > 0) prefixHash.update(",");
+      prefixHash.update(canonicalJson(event as unknown as JsonValue));
+      revision += 1;
+    }
+  }
+  if (revision !== run.events.length) {
+    corrupt("stored timeline events are not fully admitted");
+  }
+}
+
+function createRunPrefixHash(run: TimelineRunDocumentV0Alpha3): Hash {
+  return createHash("sha256")
+    .update('{"contract":')
+    .update(canonicalJson(run.contract as unknown as JsonValue))
+    .update(',"events":[');
+}
+
+function finishRunPrefixHash(hash: Hash): `sha256:${string}` {
+  const digest = hash
+    .copy()
+    .update('],"schema":"covenant.timeline.run.v0alpha3"}')
+    .digest("hex");
+  return `sha256:${digest}`;
 }
 
 function parseContractInput(value: unknown): TimelineContractV0Alpha3 {
@@ -678,7 +1029,7 @@ function parseDraft(value: unknown): TemporalEventDraftV0Alpha3 {
 
 function parseExpectedPrefix(
   value: unknown,
-): ExpectedRunPrefixV0Alpha1 & { runDigest: `sha256:${string}` } {
+): ExpectedRunPrefixV0Alpha2 & { runDigest: `sha256:${string}` } {
   const prefix = exactInputRecord(value, ["revision", "runDigest"], "prefix");
   if (
     typeof prefix.revision !== "number" ||
@@ -696,7 +1047,7 @@ function parseExpectedPrefix(
       "expected run digest must be a SHA-256 digest",
     );
   }
-  return prefix as unknown as ExpectedRunPrefixV0Alpha1 & {
+  return prefix as unknown as ExpectedRunPrefixV0Alpha2 & {
     runDigest: `sha256:${string}`;
   };
 }
@@ -907,43 +1258,28 @@ function exactInputRecord(
   return record;
 }
 
-function assertConstantObject(
-  value: unknown,
-  expected: Readonly<Record<string, string>>,
-  label: string,
-): void {
-  const record = exactRecord(value, Object.keys(expected), label);
-  if (
-    Object.entries(expected).some(([key, expectedValue]) => {
-      return record[key] !== expectedValue;
-    })
-  ) {
-    corrupt(`stored timeline ${label} is unsupported`);
-  }
-}
-
-function parseImplementation(value: unknown): McpRunImplementationV0Alpha1 {
+function parseWriterIdentity(value: unknown): McpWriterIdentityV0Alpha1 {
   const record = exactRecord(
     value,
-    Object.keys(MCP_IMPLEMENTATION),
-    "implementation",
+    Object.keys(MCP_WRITER_IDENTITY),
+    "writer identity",
   );
   if (
-    record.timelinePackage !== MCP_IMPLEMENTATION.timelinePackage ||
-    record.timelineVersion !== MCP_IMPLEMENTATION.timelineVersion ||
-    record.reasoner !== MCP_IMPLEMENTATION.reasoner ||
-    record.serverPackage !== MCP_IMPLEMENTATION.serverPackage ||
+    record.timelinePackage !== MCP_WRITER_IDENTITY.timelinePackage ||
+    record.timelineVersion !== MCP_WRITER_IDENTITY.timelineVersion ||
+    record.reasoner !== MCP_WRITER_IDENTITY.reasoner ||
+    record.serverPackage !== MCP_WRITER_IDENTITY.serverPackage ||
     typeof record.serverVersion !== "string" ||
     record.serverVersion.length > 64 ||
     !SERVER_VERSION.test(record.serverVersion)
   ) {
-    corrupt("stored timeline implementation is unsupported");
+    corrupt("stored timeline writer identity is unsupported");
   }
   return {
-    timelinePackage: MCP_IMPLEMENTATION.timelinePackage,
-    timelineVersion: MCP_IMPLEMENTATION.timelineVersion,
-    reasoner: MCP_IMPLEMENTATION.reasoner,
-    serverPackage: MCP_IMPLEMENTATION.serverPackage,
+    timelinePackage: MCP_WRITER_IDENTITY.timelinePackage,
+    timelineVersion: MCP_WRITER_IDENTITY.timelineVersion,
+    reasoner: MCP_WRITER_IDENTITY.reasoner,
+    serverPackage: MCP_WRITER_IDENTITY.serverPackage,
     serverVersion: record.serverVersion,
   };
 }

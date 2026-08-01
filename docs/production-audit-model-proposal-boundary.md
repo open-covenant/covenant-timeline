@@ -1,15 +1,13 @@
 # Production audit: model proposal boundary
 
-Date: 2026-07-31
+Date: 2026-08-01
 
 ## Decision
 
-The model proposal boundary is suitable for an engineering alpha. It is not yet
-evidence of model quality, independent adoption, or production effectiveness.
-The lower-level preregistered model-interface gate returned `kill` after
-Timeline failed to beat structured extraction on answer accuracy. No
-proposal-boundary performance claim should be published without a new,
-separately preregistered operational hypothesis.
+The model proposal compiler is suitable for producing untrusted preview
+artifacts. The free-form proposal boundary is not suitable for automatic
+admission or durable agent memory. Its preregistered v2 frontier-model gate
+returned `kill`, following the earlier comparative model-interface `kill`.
 
 This audit covers:
 
@@ -22,19 +20,19 @@ This audit covers:
 
 ## Release gates
 
-| Gate                       | Status  | Evidence                                                                                                                        |
-| -------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Host-bound provider schema | Pass    | Request ID, current evidence, compatible references, active assertions, and knowledge cuts are projected from the compiler host |
-| Provider grammar bounds    | Pass    | Change, support, catalog, enum, schema-byte, host-byte, depth, and node limits fail closed                                      |
-| Compiler authority         | Pass    | Provider-schema acceptance cannot bypass quote, range, catalog, revision, candidate, or run validation                          |
-| Candidate integrity        | Pass    | The verifier recompiles against the same proposal and host and compares the complete candidate                                  |
-| Gold isolation             | Pass    | The complete adapter request has hidden-value canaries; the 36-cut oracle checks opaque inputs and handles                      |
-| Rolling failure continuity | Pass    | Failed cuts advance the knowledge cut without admitting failed candidate events                                                 |
-| Artifact integrity         | Pass    | Requests, responses, output schemas, source state, runtime state, corpus, and results are content-bound                         |
-| Scoring integrity          | Pass    | The scorer reconstructs trusted schemas and replay state before evaluating stored outcomes                                      |
-| Provider compatibility     | Partial | A generated schema completed one local Ollama 0.31.2 preflight; OpenAI remains contract-tested but not live-tested              |
-| Model-quality evidence     | Not met | Lower-level gate returned `kill`; no proposal-boundary model result is published                                                |
-| Independent adoption       | Open    | No external operator or second implementation has completed the defined pilot                                                   |
+| Gate                       | Status | Evidence                                                                                                                        |
+| -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Host-bound provider schema | Pass   | Request ID, current evidence, compatible references, active assertions, and knowledge cuts are projected from the compiler host |
+| Provider grammar bounds    | Pass   | Change, support, catalog, enum, schema-byte, host-byte, depth, and node limits fail closed                                      |
+| Compiler authority         | Pass   | Provider-schema acceptance cannot bypass quote, range, catalog, revision, candidate, or run validation                          |
+| Candidate integrity        | Pass   | The verifier recompiles against the same proposal and host and compares the complete candidate                                  |
+| Gold isolation             | Pass   | The complete adapter request has hidden-value canaries; the 36-cut oracle checks opaque inputs and handles                      |
+| Rolling failure continuity | Pass   | Failed cuts advance the knowledge cut without admitting failed candidate events                                                 |
+| Artifact integrity         | Pass   | Requests, responses, output schemas, source state, runtime state, corpus, and results are content-bound                         |
+| Scoring integrity          | Pass   | The scorer reconstructs trusted schemas and replay state before evaluating stored outcomes                                      |
+| Provider compatibility     | Pass   | The frozen schema completed 108 GPT-5.6 Sol observations through the OpenAI Responses adapter                                   |
+| Model-quality evidence     | Failed | Assertion F1 was 0.7692 and end-to-end exactness was 76/108; the fixed v2 gate returned `kill`                                  |
+| Independent adoption       | Open   | No external operator or second implementation has completed the defined pilot                                                   |
 
 ## Resolved findings
 
@@ -65,18 +63,39 @@ This audit covers:
 
 ## Remaining risks
 
-### Evidence, not implementation
+### The failed semantic boundary
 
-The public corpus is visible and small. It proves representability, replay, and
-failure accounting; it cannot establish generalization or a model benefit. The
-lower-level model-interface benchmark completed its fixed frontier-model run on
-a public paraphrase corpus. Timeline beat narrative memory but did not beat
-stateless structured extraction, so the gate returned `kill`.
+The v2 run completed all 108 observations. Schemas were valid on 108/108,
+107/108 proposals compiled and applied, every applied proof verified, and raw
+query intent was correct on all 108 observations. The model selected every
+gold signal record, selected no distractor record, and identified the correct
+target and change kind.
 
-That result blocks escalation to a broader standalone efficacy suite under the
-v1 claim. A future proposal-boundary model run requires a new operational
-hypothesis and preregistered decision rule; it cannot be presented as a
-post-hoc rescue of v1.
+It nevertheless corrupted the temporal semantics. Exact coordinates were
+correct on 108/108 assertions, while lower bounds were correct on 0/6, upper
+bounds on 1/12, and ranges on 1/6. Bounds-operator collapse caused 23 state
+failures. Revision overreach and one invalid copied quote caused the remaining
+nine, including rolling cascades. Overall assertion F1 was 0.7692,
+projected-state and end-to-end exactness were 76/108, and answer exactness was
+87/108.
+
+The acceptable-quote scorer is not a reliable grounding-quality measure. It
+rejected 75 otherwise matching supports solely because the model returned a
+shorter valid substring than the one frozen full-sentence quote, despite the
+prompt requesting the smallest supporting span. It also compared
+trajectory-dependent assertion handles against static handles. These defects
+do not change the decision: the semantic assertion, projected-state, and
+answer gates failed independently.
+
+The
+[complete result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
+preserves the raw output, score, gate, ledger, frozen inputs, and checksums. The
+v2 interface and corpus will not be tuned or rerun.
+
+A future model experiment must test a different mechanism. The evidence
+supports selection of a flat operator and action vocabulary, with the host
+owning candidate generation, identity, revision resolution, and admission. It
+does not support another prompt variant around the same generative protocol.
 
 The adoption gate remains one independent long-running-agent pilot that crosses
 a restart, admits delayed or corrected evidence, and publishes a redacted run
@@ -86,10 +105,10 @@ portability gate.
 ### Provider coverage
 
 The generated dialect is checked against the documented Structured Outputs
-subset and the benchmark adapters pass it without repair. Local Ollama
-compatibility must still be pinned to the runtime and model digest recorded in
-each result. OpenAI compatibility should not be claimed from static contract
-tests alone; a live run is required before publishing an OpenAI result.
+subset and completed the live GPT-5.6 Sol v2 run without response-schema
+failure. That establishes compatibility for the recorded model invocation, not
+all OpenAI models or future revisions. Local Ollama compatibility must still be
+pinned to the runtime and model digest recorded in each result.
 
 Fine-tuned OpenAI models are rejected because their supported schema subset is
 narrower. See the
@@ -102,8 +121,8 @@ narrower. See the
   the documented Node adapter path.
 - Add parent-directory synchronization if benchmark artifacts become
   irreplaceable operational records rather than reproducible evaluation output.
-- Publish the source proposal API in the next package alpha. Until then, public
-  examples use a built repository checkout.
+- Publish the compiler only as an untrusted preview API. Model-facing MCP
+  clients must not receive admission or direct-append authority by default.
 
 ## Acceptance
 

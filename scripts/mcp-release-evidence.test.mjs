@@ -16,8 +16,10 @@ import {
 import {
   assertMcpArchiveEntries,
   assertMcpArchiveFiles,
+  expectedMcpAlpha1ArchiveFiles,
   expectedMcpArchiveFiles,
   maxMcpArchiveUnpackedBytes,
+  mcpArchiveFilesForVersion,
   parseMcpTarListings,
 } from "./mcp-package-contents.mjs";
 import {
@@ -47,10 +49,9 @@ const mcpManifestText = await readFile(
   join(root, "packages/mcp-server/package.json"),
   "utf8",
 );
-const coreManifestText = runCommand(
-  "git",
-  ["show", `${sourceCommit}:packages/prototype/package.json`],
-  { cwd: root },
+const coreManifestText = await readFile(
+  join(root, "packages/prototype/package.json"),
+  "utf8",
 );
 
 test("accepts the closed MCP release record shape", () => {
@@ -311,16 +312,28 @@ test("binds the MCP checksum sidecar filename", () => {
   assert.doesNotThrow(() =>
     verifyChecksumSidecar(
       manifest,
-      `${manifest.artifact.sha256}  /build/${tarball.name}\n`,
+      `${manifest.artifact.sha256}  ${tarball.name}\n`,
     ),
   );
   assert.throws(
     () =>
       verifyChecksumSidecar(
         manifest,
-        `${manifest.artifact.sha256}  /build/timeline.tgz\n`,
+        `${manifest.artifact.sha256}  /build/${tarball.name}\n`,
       ),
     /checksum sidecar subject/,
+  );
+});
+
+test("keeps the historical MCP archive profile explicit", () => {
+  assert.equal(expectedMcpArchiveFiles, expectedMcpAlpha1ArchiveFiles);
+  assert.equal(
+    mcpArchiveFilesForVersion("0.0.0-alpha.1"),
+    expectedMcpAlpha1ArchiveFiles,
+  );
+  assert.throws(
+    () => mcpArchiveFilesForVersion("0.0.0-alpha.2"),
+    /unsupported MCP archive profile/,
   );
 });
 
@@ -442,7 +455,7 @@ function mcpRecord() {
       },
       {
         name: "@covenant-org/timeline",
-        version: "0.0.0-alpha.2",
+        version: "0.0.0-alpha.3",
         manifest: "packages/prototype/package.json",
         distribution: "runtime-dependency",
       },
@@ -454,7 +467,7 @@ function mcpRecord() {
         "https://registry.npmjs.org/@covenant-org/timeline-mcp/-/timeline-mcp-0.0.0-alpha.1.tgz",
       shasum: "a".repeat(40),
       integrity: `sha512-${Buffer.alloc(64).toString("base64")}`,
-      fileCount: 35,
+      fileCount: expectedMcpArchiveFiles.length,
       unpackedSize: 1000,
       provenanceUrl:
         "https://registry.npmjs.org/-/npm/v1/attestations/@covenant-org%2ftimeline-mcp@0.0.0-alpha.1",
@@ -521,9 +534,9 @@ function mcpRecord() {
       binary: "timeline-mcp",
       transport: "stdio",
       temporalSurface: "v0alpha3",
-      storeEnvelope: "covenant.timeline.mcp-run.v0alpha1",
+      storeEnvelope: "covenant.timeline.mcp-run.v0alpha2",
       runtimePins: {
-        "@covenant-org/timeline": "0.0.0-alpha.2",
+        "@covenant-org/timeline": "0.0.0-alpha.3",
         "@modelcontextprotocol/server": "2.0.0-beta.5",
         zod: "4.4.3",
       },

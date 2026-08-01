@@ -3,9 +3,10 @@ import type {
   StandardSchemaV1,
   StandardSchemaWithJSON,
 } from "@modelcontextprotocol/server";
+import { contentDigest, type JsonValue } from "@covenant-org/timeline";
 import {
   MAX_LIST_PAGE_SIZE,
-  MCP_ADMISSION,
+  MCP_WRITER_IDENTITY,
   MCP_KERNEL_LIMITS,
   MCP_MODEL_PROPOSAL_LIMITS,
   MAX_MODEL_PROPOSAL_EVENTS,
@@ -14,6 +15,8 @@ import {
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:/-]{0,127}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const PAGE_CURSOR = /^v1\.[0-9a-f]{64}\.[0-9a-f]{64}$/;
+const POLICY_REFERENCE = /^[\x21-\x7e]{1,512}$/;
+const SERVER_VERSION = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/;
 const EVENT_ID_DESCRIPTION =
   "Unique event ID. Omit schema and sequence; the server assigns both.";
 const ASSERTION_ID_DESCRIPTION =
@@ -808,21 +811,104 @@ const metadataSchema = z
   .object({
     runId: identifierSchema,
     revision: sequenceSchema,
+    auditDigest: digestSchema,
     subject: subjectSchema,
     contexts: z.array(contextSchema).max(MCP_KERNEL_LIMITS.maxContexts),
     eventCount: sequenceSchema,
+    admissionCount: sequenceSchema,
     latestRecordedThrough: recordedThroughSchema,
     runDigest: digestSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.eventCount !== value.revision) {
+      context.addIssue({
+        code: "custom",
+        message: "event count must match revision",
+        path: ["eventCount"],
+        input: value,
+      });
+    }
+    const latest = value.eventCount === 0 ? null : value.eventCount - 1;
+    if (value.latestRecordedThrough !== latest) {
+      context.addIssue({
+        code: "custom",
+        message: "latest record cut must match event count",
+        path: ["latestRecordedThrough"],
+        input: value,
+      });
+    }
+    if (value.admissionCount > value.eventCount) {
+      context.addIssue({
+        code: "custom",
+        message: "admission count must not exceed event count",
+        path: ["admissionCount"],
+        input: value,
+      });
+    }
+  });
 
-const admissionSchema = z
+export const admissionDecisionSchema = z
   .object({
-    mode: z.literal(MCP_ADMISSION.mode),
-    assertionAuthority: z.literal(MCP_ADMISSION.assertionAuthority),
-    evidencePayloads: z.literal(MCP_ADMISSION.evidencePayloads),
+    authorityId: identifierSchema.describe(
+      "Neutral host-controlled authority identifier responsible for this admission decision.",
+    ),
+    policyRef: z
+      .string()
+      .regex(POLICY_REFERENCE)
+      .describe("Stable reference for the admission policy bytes."),
+    policyDigest: digestSchema.describe(
+      "SHA-256 digest of the exact admission policy bytes.",
+    ),
   })
   .strict();
+
+export const writerIdentitySchema = z
+  .object({
+    timelinePackage: z.literal(MCP_WRITER_IDENTITY.timelinePackage),
+    timelineVersion: z.literal(MCP_WRITER_IDENTITY.timelineVersion),
+    reasoner: z.literal(MCP_WRITER_IDENTITY.reasoner),
+    serverPackage: z.literal(MCP_WRITER_IDENTITY.serverPackage),
+    serverVersion: z.string().regex(SERVER_VERSION).max(64),
+  })
+  .strict();
+
+const admissionRecordFields = {
+  schema: z.literal("covenant.timeline.mcp-admission.v0alpha1"),
+  decision: z.literal("admitted"),
+  authorityId: identifierSchema,
+  policyRef: z.string().regex(POLICY_REFERENCE),
+  policyDigest: digestSchema,
+  writer: writerIdentitySchema,
+  baseRevision: sequenceSchema,
+  baseRunDigest: digestSchema,
+  eventIds: z.array(identifierSchema).min(1).max(MAX_MODEL_PROPOSAL_EVENTS),
+  recordDigest: digestSchema,
+};
+
+export const directAdmissionRecordSchema = z
+  .object({
+    ...admissionRecordFields,
+    kind: z.literal("direct-event"),
+    eventIds: z.array(identifierSchema).length(1),
+  })
+  .strict()
+  .superRefine(validateAdmissionRecordDigest);
+
+export const modelProposalAdmissionRecordSchema = z
+  .object({
+    ...admissionRecordFields,
+    kind: z.literal("model-proposal"),
+    candidateDigest: digestSchema,
+    proposalDigest: digestSchema,
+  })
+  .strict()
+  .superRefine(validateAdmissionRecordDigest);
+
+export const admissionRecordSchema = z.union([
+  directAdmissionRecordSchema,
+  modelProposalAdmissionRecordSchema,
+]);
 
 const projectedStateSchema = z
   .object({
@@ -856,7 +942,6 @@ export const createRunOutputSchema = z
   .object({
     created: z.boolean(),
     timeline: metadataSchema,
-    admission: admissionSchema,
   })
   .strict();
 
@@ -902,6 +987,7 @@ export const appendEventInputSchema = z
     event: eventDraftSchema.describe(
       "One new event draft. References must target earlier records. Do not send schema or sequence; the server assigns them.",
     ),
+    admission: admissionDecisionSchema,
   })
   .strict();
 export const appendEventOutputSchema = z
@@ -909,123 +995,296 @@ export const appendEventOutputSchema = z
     appended: z.boolean(),
     event: eventSchema,
     timeline: metadataSchema,
-    admission: admissionSchema,
-  })
-  .strict();
-
-export const applyModelProposalInputSchema = z
-  .object({
-    runId: identifierSchema.describe("Existing run to update."),
-    expectedRevision: sequenceSchema.describe(
-      "Run revision paired with expectedRunDigest. Event-equivalent retries may bind an earlier append-only prefix.",
-    ),
-    expectedRunDigest: digestSchema.describe(
-      "Digest of the run prefix at expectedRevision. The store rechecks this prefix under its writer lock.",
-    ),
-    expectedRequestId: identifierSchema.describe(
-      "Host-generated request identifier that the model proposal must echo.",
-    ),
-    proposal: modelProposalSchema,
-    evidenceCatalog: modelEvidenceCatalogSchema.describe(
-      "Caller-supplied, unauthenticated evidence. Text is used transiently for exact quote matching and is never stored or returned.",
-    ),
-    referenceCatalog: modelReferenceCatalogSchema.describe(
-      "Caller-supplied handles mapped to declarations in the bound run prefix.",
-    ),
-    assertionCatalog: modelAssertionCatalogSchema
-      .describe(
-        "Optional caller-supplied handles for active assertions that may be superseded or retracted.",
-      )
-      .optional(),
-    knowledgeCutCatalog: modelKnowledgeCutCatalogSchema
-      .describe(
-        "Optional caller-supplied handles for prior record cuts in the bound run prefix.",
-      )
-      .optional(),
-  })
-  .strict();
-
-export const applyModelProposalOutputSchema = z
-  .object({
-    applied: z
-      .boolean()
-      .describe(
-        "true when this call appended the candidate events; false when identical candidate event bytes already occupied the bound prefix.",
-      ),
-    requestId: identifierSchema,
-    proposalDigest: digestSchema,
-    baseRevision: sequenceSchema,
-    baseRunDigest: digestSchema,
-    events: z.array(modelCandidateEventSchema).max(MAX_MODEL_PROPOSAL_EVENTS),
-    timeline: metadataSchema,
-    query: querySchema,
-    provenance: z
-      .array(modelCandidateProvenanceSchema)
-      .max(MAX_MODEL_PROPOSAL_EVENTS)
-      .describe(
-        "Source bindings produced by this compilation. They are not a durable record of the call that originally appended an event-equivalent batch.",
-      ),
-    admission: admissionSchema,
+    admissionRecord: directAdmissionRecordSchema,
   })
   .strict()
-  .superRefine(({ events, provenance }, context) => {
-    if (events.length !== provenance.length) {
+  .superRefine((value, context) => {
+    if (
+      value.admissionRecord.baseRevision !== value.event.sequence ||
+      value.admissionRecord.eventIds[0] !== value.event.id
+    ) {
       context.addIssue({
         code: "custom",
-        message: "events and provenance must have equal length",
-        path: ["provenance"],
+        message: "admission record must bind the appended event",
+        path: ["admissionRecord"],
+        input: value,
+      });
+    }
+    const minimumRevision = value.event.sequence + 1;
+    if (
+      value.timeline.revision < minimumRevision ||
+      (value.appended && value.timeline.revision !== minimumRevision)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "timeline revision must contain the appended event",
+        path: ["timeline", "revision"],
+        input: value,
+      });
+    }
+  });
+
+const modelProposalRequestFields = {
+  runId: identifierSchema.describe("Existing run to inspect or update."),
+  expectedRevision: sequenceSchema.describe(
+    "Run revision paired with expectedRunDigest. The server binds compilation to this exact append-only prefix.",
+  ),
+  expectedRunDigest: digestSchema.describe(
+    "Digest of the run prefix at expectedRevision.",
+  ),
+  expectedRequestId: identifierSchema.describe(
+    "Host-generated request identifier that the model proposal must echo.",
+  ),
+  proposal: modelProposalSchema,
+  evidenceCatalog: modelEvidenceCatalogSchema.describe(
+    "Caller-supplied, unauthenticated evidence. Text is used transiently for exact quote matching and is never stored or returned.",
+  ),
+  referenceCatalog: modelReferenceCatalogSchema.describe(
+    "Caller-supplied handles mapped to declarations in the bound run prefix.",
+  ),
+  assertionCatalog: modelAssertionCatalogSchema
+    .describe(
+      "Optional caller-supplied handles for active assertions that may be superseded or retracted.",
+    )
+    .optional(),
+  knowledgeCutCatalog: modelKnowledgeCutCatalogSchema
+    .describe(
+      "Optional caller-supplied handles for prior record cuts in the bound run prefix.",
+    )
+    .optional(),
+};
+
+export const previewModelProposalInputSchema = z
+  .object(modelProposalRequestFields)
+  .strict();
+
+export const admitModelProposalInputSchema = z
+  .object({
+    ...modelProposalRequestFields,
+    candidateDigest: digestSchema.describe(
+      "Candidate digest returned by timeline_preview_model_proposal or an equivalent trusted compilation. Admission recompiles and requires the resulting candidate to match it; preview sessions are not retained.",
+    ),
+    admission: admissionDecisionSchema,
+  })
+  .strict();
+
+const compiledModelProposalOutputFields = {
+  candidateDigest: digestSchema,
+  requestId: identifierSchema,
+  proposalDigest: digestSchema,
+  baseRevision: sequenceSchema,
+  baseRunDigest: digestSchema,
+  events: z.array(modelCandidateEventSchema).max(MAX_MODEL_PROPOSAL_EVENTS),
+  query: querySchema,
+  provenance: z
+    .array(modelCandidateProvenanceSchema)
+    .max(MAX_MODEL_PROPOSAL_EVENTS),
+};
+
+function validateCandidateProvenance(
+  value: {
+    candidateDigest: string;
+    requestId: string;
+    proposalDigest: string;
+    baseRevision: number;
+    baseRunDigest: string;
+    events: readonly z.infer<typeof modelCandidateEventSchema>[];
+    query: z.infer<typeof querySchema>;
+    provenance: readonly z.infer<typeof modelCandidateProvenanceSchema>[];
+  },
+  context: z.core.$RefinementCtx,
+): void {
+  const { events, provenance } = value;
+  const expectedCandidateDigest = contentDigest({
+    schema: "covenant.timeline.model-proposal-candidate.v1",
+    requestId: value.requestId,
+    baseRunDigest: value.baseRunDigest,
+    proposalDigest: value.proposalDigest,
+    candidateEvents: value.events,
+    candidateQuery: value.query,
+    provenance: value.provenance,
+  } as unknown as JsonValue);
+  if (value.candidateDigest !== expectedCandidateDigest) {
+    context.addIssue({
+      code: "custom",
+      message: "candidate digest must match the compiled artifact",
+      path: ["candidateDigest"],
+      input: value,
+    });
+  }
+  if (events.length !== provenance.length) {
+    context.addIssue({
+      code: "custom",
+      message: "events and provenance must have equal length",
+      path: ["provenance"],
+      input: value,
+    });
+    return;
+  }
+
+  events.forEach((event, index) => {
+    if (event.sequence !== value.baseRevision + index) {
+      context.addIssue({
+        code: "custom",
+        message: "event sequence must match the candidate base revision",
+        path: ["events", index, "sequence"],
+        input: value,
+      });
+    }
+    const eventProvenance = provenance[index];
+    if (!eventProvenance) return;
+    if (event.id !== eventProvenance.candidateEventId) {
+      context.addIssue({
+        code: "custom",
+        message: "provenance must match event order",
+        path: ["provenance", index, "candidateEventId"],
+        input: value,
+      });
+    }
+    const eventEvidenceRefs =
+      event.type === "assertion.retracted"
+        ? event.evidenceRefs
+        : event.assertion.evidenceRefs;
+    if (
+      eventEvidenceRefs.length !== eventProvenance.evidenceRefs.length ||
+      eventEvidenceRefs.some(
+        (reference, referenceIndex) =>
+          reference !== eventProvenance.evidenceRefs[referenceIndex],
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "provenance evidence references must match the event",
+        path: ["provenance", index, "evidenceRefs"],
+        input: value,
+      });
+    }
+    const supportEvidenceRefs = [
+      ...new Set(
+        eventProvenance.supports.map(({ evidenceRef }) => evidenceRef),
+      ),
+    ].sort();
+    const uniqueEventEvidenceRefs = [...new Set(eventEvidenceRefs)].sort();
+    if (
+      supportEvidenceRefs.length !== uniqueEventEvidenceRefs.length ||
+      supportEvidenceRefs.some(
+        (reference, referenceIndex) =>
+          reference !== uniqueEventEvidenceRefs[referenceIndex],
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "support evidence references must match the event",
+        path: ["provenance", index, "supports"],
+        input: value,
+      });
+    }
+  });
+}
+
+export const previewModelProposalOutputSchema = z
+  .object({
+    ...compiledModelProposalOutputFields,
+    timeline: metadataSchema,
+    conclusion: conclusionSchema,
+    persistence: z
+      .literal("not-admitted")
+      .describe("Preview only. No candidate event was persisted."),
+    verified: z.literal(true),
+  })
+  .strict()
+  .superRefine(validateCandidateProvenance);
+
+export const admitModelProposalOutputSchema = z
+  .object({
+    ...compiledModelProposalOutputFields,
+    admissionStatus: z
+      .enum(["admitted", "already-admitted", "empty-candidate"])
+      .describe(
+        "Whether this call wrote the candidate, found the exact prior admission, or had no candidate events to persist.",
+      ),
+    timeline: metadataSchema,
+    admissionRecord: z.union([modelProposalAdmissionRecordSchema, z.null()]),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    validateCandidateProvenance(value, context);
+    const { admissionRecord, events } = value;
+    const minimumRevision = value.baseRevision + events.length;
+    if (
+      value.timeline.revision < minimumRevision ||
+      (value.admissionStatus === "admitted" &&
+        value.timeline.revision !== minimumRevision)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "timeline revision must contain the candidate events",
+        path: ["timeline", "revision"],
+        input: value,
+      });
+    }
+    if (events.length === 0) {
+      if (
+        value.admissionStatus !== "empty-candidate" ||
+        admissionRecord !== null
+      ) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "an empty candidate requires empty-candidate status and no admission record",
+          path: ["admissionStatus"],
+          input: value,
+        });
+      }
+      return;
+    }
+    if (value.admissionStatus === "empty-candidate") {
+      context.addIssue({
+        code: "custom",
+        message: "a non-empty candidate cannot have empty-candidate status",
+        path: ["admissionStatus"],
+        input: value,
+      });
+    }
+    if (!admissionRecord) {
+      context.addIssue({
+        code: "custom",
+        message: "candidate events require an admission record",
+        path: ["admissionRecord"],
+        input: value,
       });
       return;
     }
-
-    events.forEach((event, index) => {
-      const eventProvenance = provenance[index];
-      if (!eventProvenance) return;
-      if (event.id !== eventProvenance.candidateEventId) {
-        context.addIssue({
-          code: "custom",
-          message: "provenance must match event order",
-          path: ["provenance", index, "candidateEventId"],
-        });
-      }
-      const eventEvidenceRefs =
-        event.type === "assertion.retracted"
-          ? event.evidenceRefs
-          : event.assertion.evidenceRefs;
-      if (
-        eventEvidenceRefs.length !== eventProvenance.evidenceRefs.length ||
-        eventEvidenceRefs.some(
-          (reference, referenceIndex) =>
-            reference !== eventProvenance.evidenceRefs[referenceIndex],
-        )
-      ) {
-        context.addIssue({
-          code: "custom",
-          message: "provenance evidence references must match the event",
-          path: ["provenance", index, "evidenceRefs"],
-        });
-      }
-      const supportEvidenceRefs = [
-        ...new Set(
-          eventProvenance.supports.map(({ evidenceRef }) => evidenceRef),
-        ),
-      ].sort();
-      const uniqueEventEvidenceRefs = [...new Set(eventEvidenceRefs)].sort();
-      if (
-        supportEvidenceRefs.length !== uniqueEventEvidenceRefs.length ||
-        supportEvidenceRefs.some(
-          (reference, referenceIndex) =>
-            reference !== uniqueEventEvidenceRefs[referenceIndex],
-        )
-      ) {
-        context.addIssue({
-          code: "custom",
-          message: "support evidence references must match the event",
-          path: ["provenance", index, "supports"],
-        });
-      }
-    });
+    if (
+      admissionRecord.baseRevision !== value.baseRevision ||
+      admissionRecord.baseRunDigest !== value.baseRunDigest ||
+      admissionRecord.candidateDigest !== value.candidateDigest ||
+      admissionRecord.proposalDigest !== value.proposalDigest ||
+      admissionRecord.eventIds.length !== events.length ||
+      admissionRecord.eventIds.some((id, index) => id !== events[index]?.id)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "admission record must bind the compiled candidate",
+        path: ["admissionRecord"],
+        input: value,
+      });
+    }
   });
+
+function validateAdmissionRecordDigest(
+  value: Record<string, unknown> & { recordDigest: string },
+  context: z.core.$RefinementCtx,
+): void {
+  const { recordDigest, ...record } = value;
+  if (contentDigest(record as unknown as JsonValue) === recordDigest) return;
+  context.addIssue({
+    code: "custom",
+    message: "admission record digest must match its content",
+    path: ["recordDigest"],
+    input: value,
+  });
+}
 
 export const projectStateInputSchema = z
   .object({
@@ -1049,7 +1308,7 @@ export const reasonInputSchema = z
     query: z
       .union([queryDraftSchema, querySchema])
       .describe(
-        "Exact temporal query. A draft omits schema; a query returned by timeline_apply_model_proposal may be passed unchanged. Always pin recordedThrough explicitly.",
+        "Exact temporal query. A draft omits schema; a query returned by timeline_preview_model_proposal may be passed unchanged. Always pin recordedThrough explicitly.",
       ),
   })
   .strict();
@@ -1065,8 +1324,11 @@ export const reasonOutputSchema = z
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;
 export type ListRunsInput = z.infer<typeof listRunsInputSchema>;
 export type AppendEventInput = z.infer<typeof appendEventInputSchema>;
-export type ApplyModelProposalInput = z.infer<
-  typeof applyModelProposalInputSchema
+export type PreviewModelProposalInput = z.infer<
+  typeof previewModelProposalInputSchema
+>;
+export type AdmitModelProposalInput = z.infer<
+  typeof admitModelProposalInputSchema
 >;
 export type ProjectStateInput = z.infer<typeof projectStateInputSchema>;
 export type ReasonInput = z.infer<typeof reasonInputSchema>;

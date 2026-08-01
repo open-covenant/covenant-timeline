@@ -1,0 +1,22 @@
+{
+  "schema": "covenant.timeline.contract.v0alpha3",
+  "id": "pilot.covenant-release-correction",
+  "subject": {
+    "kind": "release",
+    "id": "open-covenant/covenant:v0.1.0-alpha.1"
+  },
+  "axes": [
+    {
+      "id": "unix-milliseconds",
+      "kind": "metric",
+      "unit": "millisecond",
+      "origin": "unix-epoch.v1"
+    }
+  ],
+  "contexts": [
+    {
+      "id": "actual",
+      "mode": "actual"
+    }
+  ]
+}

@@ -33,7 +33,7 @@ importers:
   packages/mcp-server:
     dependencies:
       '@covenant-org/timeline':
-        specifier: workspace:0.0.0-alpha.2
+        specifier: workspace:0.0.0-alpha.3
         version: link:../prototype
       '@modelcontextprotocol/server':
         specifier: 2.0.0-beta.5

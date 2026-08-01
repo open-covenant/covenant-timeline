@@ -17,6 +17,7 @@ import {
   validateContractV0Alpha3,
   validateEventV0Alpha3,
   validateRunDocumentV0Alpha3,
+  verifyTemporalConclusionV0Alpha3,
   type TemporalConclusionV0Alpha3,
 } from "./v0alpha3/index.js";
 
@@ -35,6 +36,7 @@ export const DEFAULT_MAX_INPUT_BYTES = 16 * 1024 * 1024;
 const USAGE = `Usage:
   timeline <command> <file|-> [--json]
   timeline reason <run-file|-> <query-file> [--json]
+  timeline verify-conclusion <run-file|-> <query-file> <conclusion-file> [--json]
 
 Commands:
   validate  Validate a contract, event, command, decision, or portable run
@@ -42,6 +44,7 @@ Commands:
   inspect   Show checkpoints, evidence, commands, and receipts
   verify    Replay and structurally verify a portable run
   reason    Evaluate a v0alpha3 temporal query and emit its proof receipt
+  verify-conclusion  Verify a stored v0alpha3 conclusion without reasoning again
 
 Options:
   --json     Emit canonical JSON
@@ -70,11 +73,13 @@ export async function runCli(
     (argument) => !argument.startsWith("-") || argument === "-",
   );
   const command = positional[0];
-  const expectedPositionals = command === "reason" ? 3 : 2;
+  const expectedPositionals =
+    command === "verify-conclusion" ? 4 : command === "reason" ? 3 : 2;
+  const inputFiles = positional.slice(1);
   if (
     unknownFlags.length > 0 ||
     positional.length !== expectedPositionals ||
-    (command === "reason" && positional[1] === "-" && positional[2] === "-")
+    inputFiles.filter((value) => value === "-").length > 1
   ) {
     io.stderr(USAGE);
     return 2;
@@ -86,7 +91,8 @@ export async function runCli(
     command !== "replay" &&
     command !== "inspect" &&
     command !== "verify" &&
-    command !== "reason"
+    command !== "reason" &&
+    command !== "verify-conclusion"
   ) {
     io.stderr(`Unknown command: ${command}\n\n${USAGE}`);
     return 2;
@@ -113,7 +119,7 @@ export async function runCli(
     return 1;
   }
 
-  if (command === "reason") {
+  if (command === "reason" || command === "verify-conclusion") {
     const queryFile = positional[2]!;
     let queryInput: unknown;
     try {
@@ -136,25 +142,87 @@ export async function runCli(
       return 1;
     }
 
+    let run: ReturnType<typeof parseRunDocumentV0Alpha3>;
     try {
-      const run = parseRunDocumentV0Alpha3(input);
-      const query = parseQueryV0Alpha3(queryInput, run);
-      const conclusion = reasonTemporalQueryV0Alpha3(run, query);
-      writeResult(io, json, conclusion, renderTemporalConclusion(conclusion));
-      return 0;
+      run = parseRunDocumentV0Alpha3(input);
     } catch (error) {
       if (error instanceof TimelineDocumentError) {
+        writeTemporalDocumentError(io, json, file, error);
+        return 1;
+      }
+      throw error;
+    }
+    let query: ReturnType<typeof parseQueryV0Alpha3>;
+    try {
+      query = parseQueryV0Alpha3(queryInput, run);
+    } catch (error) {
+      if (error instanceof TimelineDocumentError) {
+        writeTemporalDocumentError(io, json, queryFile, error);
+        return 1;
+      }
+      throw error;
+    }
+
+    if (command === "verify-conclusion") {
+      const conclusionFile = positional[3]!;
+      let conclusionInput: unknown;
+      try {
+        conclusionInput = parseJson(await readInput(conclusionFile));
+      } catch (error) {
+        const result = inputError(error);
         writeResult(
           io,
           json,
-          { ok: false, code: error.code, file, issues: error.issues },
-          `INVALID TEMPORAL INPUT\n${error.issues
-            .map(({ path, message }) => `  ${path}: ${message}`)
-            .join("\n")}`,
+          {
+            ok: false,
+            code: result.code,
+            file: conclusionFile,
+            message: result.message,
+            ...(result.issues ? { issues: result.issues } : {}),
+          },
+          `INVALID ${conclusionFile}\n${result.message}`,
           true,
         );
         return 1;
       }
+
+      const conclusion = conclusionInput as TemporalConclusionV0Alpha3;
+      const verified = verifyTemporalConclusionV0Alpha3(run, query, conclusion);
+      if (!verified) {
+        writeResult(
+          io,
+          json,
+          {
+            ok: false,
+            code: "timeline.temporal.conclusion_invalid",
+            queryId: query.id,
+          },
+          `TEMPORAL CONCLUSION VERIFICATION FAILED ${query.id}`,
+          true,
+        );
+        return 1;
+      }
+      writeResult(
+        io,
+        json,
+        {
+          ok: true,
+          queryId: conclusion.queryId,
+          stateDigest: conclusion.receipt.stateDigest,
+          queryDigest: conclusion.receipt.queryDigest,
+          semanticResultDigest: conclusion.receipt.semanticResultDigest,
+          proof: conclusion.receipt.proof.kind,
+        },
+        renderTemporalVerification(conclusion),
+      );
+      return 0;
+    }
+
+    try {
+      const conclusion = reasonTemporalQueryV0Alpha3(run, query);
+      writeResult(io, json, conclusion, renderTemporalConclusion(conclusion));
+      return 0;
+    } catch (error) {
       if (error instanceof TemporalKernelErrorV0Alpha3) {
         writeResult(
           io,
@@ -216,6 +284,35 @@ export async function runCli(
 
   writeResult(io, json, report, renderVerify(report), !report.verification.ok);
   return report.verification.ok ? 0 : 1;
+}
+
+function renderTemporalVerification(
+  conclusion: TemporalConclusionV0Alpha3,
+): string {
+  return [
+    `TEMPORAL CONCLUSION VERIFIED ${conclusion.queryId}`,
+    `  state ${conclusion.receipt.stateDigest}`,
+    `  query ${conclusion.receipt.queryDigest}`,
+    `  result ${conclusion.receipt.semanticResultDigest}`,
+    `  proof ${conclusion.receipt.proof.kind}`,
+  ].join("\n");
+}
+
+function writeTemporalDocumentError(
+  io: CliIo,
+  json: boolean,
+  file: string,
+  error: TimelineDocumentError,
+): void {
+  writeResult(
+    io,
+    json,
+    { ok: false, code: error.code, file, issues: error.issues },
+    `INVALID TEMPORAL INPUT\n${error.issues
+      .map(({ path, message }) => `  ${path}: ${message}`)
+      .join("\n")}`,
+    true,
+  );
 }
 
 function validateDocument(

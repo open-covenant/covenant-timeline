@@ -68,6 +68,7 @@ jobs:
           -r scripts/requirements-cross-language.txt
       - run: python scripts/check-jcs-python.py
       - run: python scripts/check-python-reducer.py
+      - run: python scripts/check-python-v0alpha3-verifier.py
 
   supply-chain:
     name: supply chain

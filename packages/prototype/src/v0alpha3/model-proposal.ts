@@ -352,6 +352,8 @@ const textEncoder = new TextEncoder();
 /**
  * Projects a validated, request-scoped host into a provider JSON Schema.
  * Compilation remains authoritative for all semantic and resource checks.
+ * This experimental interface is a preview surface, not an automatic
+ * admission boundary.
  */
 export function createTemporalModelProposalOutputSchemaV1(
   host: TemporalModelProposalHostV1,
@@ -383,7 +385,8 @@ export function createTemporalModelProposalOutputSchemaV1(
 /**
  * Compiles untrusted model output into deterministic candidates. Quote matching
  * proves source location only; the caller remains responsible for semantic,
- * authenticity, authority, and admission decisions.
+ * authenticity, authority, and admission decisions. Do not admit the returned
+ * candidate without a separate host policy decision.
  */
 export function compileTemporalModelProposalV1(
   value: unknown,

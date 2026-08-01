@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -93,7 +93,7 @@ describe("timeline CLI", () => {
 
     expect(result).toEqual({
       code: 0,
-      stdout: "0.0.0-alpha.2\n",
+      stdout: "0.0.0-alpha.3\n",
       stderr: "",
     });
   });
@@ -103,6 +103,7 @@ describe("timeline CLI", () => {
     directories.push(directory);
     const runFile = join(directory, "temporal-run.json");
     const queryFile = join(directory, "temporal-query.json");
+    const conclusionFile = join(directory, "temporal-conclusion.json");
     await writeFile(
       runFile,
       JSON.stringify({
@@ -205,6 +206,54 @@ describe("timeline CLI", () => {
         maximum: 10,
       },
       receipt: { proof: { kind: "bounds" } },
+    });
+
+    await writeFile(conclusionFile, result.stdout, "utf8");
+    const verified = await invoke([
+      "verify-conclusion",
+      runFile,
+      queryFile,
+      conclusionFile,
+      "--json",
+    ]);
+    expect(verified.code).toBe(0);
+    expect(JSON.parse(verified.stdout)).toMatchObject({
+      ok: true,
+      queryId: "query.duration",
+      proof: "bounds",
+    });
+
+    const tampered = JSON.parse(result.stdout);
+    tampered.result.maximum = 11;
+    await writeFile(conclusionFile, JSON.stringify(tampered), "utf8");
+    const rejected = await invoke([
+      "verify-conclusion",
+      runFile,
+      queryFile,
+      conclusionFile,
+      "--json",
+    ]);
+    expect(rejected.code).toBe(1);
+    expect(JSON.parse(rejected.stderr)).toEqual({
+      ok: false,
+      code: "timeline.temporal.conclusion_invalid",
+      queryId: "query.duration",
+    });
+
+    const invalidQuery = JSON.parse(await readFile(queryFile, "utf8"));
+    invalidQuery.toPointId = "missing";
+    await writeFile(queryFile, JSON.stringify(invalidQuery), "utf8");
+    const invalid = await invoke([
+      "verify-conclusion",
+      runFile,
+      queryFile,
+      conclusionFile,
+      "--json",
+    ]);
+    expect(invalid.code).toBe(1);
+    expect(JSON.parse(invalid.stderr)).toMatchObject({
+      code: "schema.invalid",
+      file: queryFile,
     });
   });
 

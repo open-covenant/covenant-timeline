@@ -8,6 +8,9 @@ protocol portability.
 
 Release history belongs in the [changelog](./CHANGELOG.md). This document
 records the evidence required before the project can make broader claims.
+Together, the [public claim ledger](./docs/claim-ledger.md) and
+[publication-readiness audit](./docs/production-audit-publication-readiness.md)
+distinguish implemented properties from release and adoption evidence.
 
 ## Available foundation
 
@@ -27,6 +30,11 @@ example, model interface, and benchmark artifacts are public. They establish a
 working substrate and include a formal negative model result; they do not
 establish adoption.
 
+The source tree is preparing `@covenant-org/timeline@0.0.0-alpha.3`, which adds
+the proposal compiler, and `@covenant-org/timeline-mcp@0.0.0-alpha.1`, which
+pins that core version. Both are release candidates rather than registry
+onboarding paths until their publication and installed-artifact checks finish.
+
 The repository also provides deterministic model-proposal compilation with
 exact source-span provenance, a request-scoped Structured Outputs schema, and
 an atomic local MCP write path. The compiler reproduces the admitted state and
@@ -34,11 +42,11 @@ checked result for all 36 cuts in the public corpus. That establishes lowering
 equivalence, not model extraction quality.
 
 The
-[model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v1/README.md)
-runs that production interface as a rolling evaluation, preserves every
-failure, and independently scores extraction, state, query, answer, and proof
-outcomes. Its checked oracle proves benchmark representability; it is not a
-model result.
+[model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v2/README.md)
+runs the production-shaped proposal interface as a rolling evaluation,
+preserves every failure, and independently scores extraction, state, query,
+answer, and proof outcomes. Its checked oracle proves benchmark
+representability; it is not a model result.
 
 ## Evidence gates
 
@@ -74,31 +82,43 @@ and end-to-end exactness, with 0.9787 assertion F1 across all cuts. Current-cut
 extraction was strong, but rolling Timeline state produced no answer-accuracy
 advantage over full-context structured extraction.
 
+The follow-on deployment-shaped v2 gate also returned `kill`. Its 108
+GPT-5.6 Sol observations used opaque evidence IDs, irrelevant records, explicit
+source spans, request-scoped handles, and the proposal compiler. Assertion F1
+was 0.7692, projected-state and end-to-end exactness were 76/108, and answer
+exactness was 87/108. The model found every gold signal record but represented
+only 2 of 24 non-exact bounds correctly. The
+[complete v2 bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
+is public. Free-form proposals will not be the default durable-ingestion path,
+and the frozen v2 interface will not be tuned or rerun.
+
 ### 2. Low-friction agent integration
 
 The separate local stdio MCP server keeps the portable kernel dependency-light
-while giving MCP-capable agents durable temporal state through six explicit
-tools:
+and separates model work from operator authority. The default model role can
+list runs, preview an evidence-backed proposal without persistence, project
+admitted state, and request a verified conclusion. An explicit operator role
+can create runs, append typed events, and admit the exact digest of a previewed
+candidate.
 
-1. create a run from an exact v0alpha3 contract;
-2. list bounded run metadata after a new session;
-3. append one structurally validated event under optimistic concurrency;
-4. compile and atomically apply an evidence-backed model proposal against an
-   exact run prefix;
-5. project active state at an explicit knowledge cut; and
-6. reason over an exact query and return a verified conclusion.
+Every event write records an authority ID, policy reference, and policy digest
+in a content-bound admission envelope. The server requires a data directory,
+retains only evidence digests, and makes no network calls. Proposal evidence
+text is processed transiently and is not written or returned. Process roles do
+not authenticate evidence, operators, or policy bytes; deployments must isolate
+the operator surface and enforce those controls externally. The server does not
+provide semantic memory search, civil-time normalization, or remote hosting.
 
-The server requires a data directory, retains only evidence digests, makes no
-network calls, and classifies direct and compiled writes as structurally valid
-but unauthenticated. Proposal evidence text is processed transiently and is not
-written or returned. The server does not provide semantic memory search,
-civil-time normalization, remote hosting, or evidence authority.
+[The first maintainer-operated real-model attempt](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+is retained publicly. It crossed separate host and MCP processes, admitted an
+initial proposal and a staged correction under an exact policy digest,
+preserved the historical result, and verified three receipts without provider
+credentials. This closes the composed source-workflow gate. It does not count
+as independent operation or live delayed-evidence observation.
 
-The source-first pilot creates a run, appends a correction, stops and restarts
-the server, projects both historical and current state, exports the complete
-artifact, and verifies both receipts in another process. Registry publication
-is a distribution milestone; it does not block source pilots, model
-evaluation, or independent implementation work.
+Registry publication remains open for the alpha.1 MCP release candidate. It is
+a distribution milestone; it does not block source pilots, model evaluation,
+or independent implementation work.
 
 ### 3. Independent temporal pilot
 
@@ -110,7 +130,7 @@ reduces reconciliation work.
 The [pilot contract](./docs/temporal-pilot.md) requires a redacted export that
 another process can replay and verify. A negative result is useful if it
 identifies the wrong abstraction or shows that Timeline adds no operational
-value. The checked-in MCP starter supplies the export and verification
+value. The checked-in MCP pilot supplies the export and verification
 mechanics so the operator can focus on its own evidence and workflow.
 
 ### 4. Protocol portability

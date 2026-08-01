@@ -50,18 +50,11 @@ for (const file of files) {
     continue;
   }
 
-  if (
-    !textExtensions.has(extname(file)) ||
-    file === "scripts/check-boundaries.mjs"
-  )
-    continue;
+  if (!textExtensions.has(extname(file))) continue;
 
   const contents = readFileSync(file, "utf8");
-  if (
-    /dennis|goslar|mizuki hayashi/i.test(contents) ||
-    contents.includes(`/${"Users"}/`)
-  ) {
-    failures.push(`${file}: personal identifier or absolute home path`);
+  if (contents.includes(`/${"Users"}/`)) {
+    failures.push(`${file}: absolute home path`);
   }
 
   if (

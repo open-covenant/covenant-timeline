@@ -18,8 +18,8 @@ The project governs:
 - reference adapters; and
 - the frozen v0alpha1 and v0alpha2 checkpoint compatibility formats.
 
-Covenant is the first adopter. It is not a required dependency and does not own
-portable protocol semantics.
+Covenant is an intended first-party integration. It is not a required
+dependency and does not own portable protocol semantics.
 
 ## Core invariants
 

@@ -2,18 +2,21 @@
 
 **Verifiable temporal state for long-running agents.**
 
-A release agent records that security review finished before deployment. New
-evidence later reverses that order. Timeline preserves both historical views,
-recomputes what follows from the corrected record, and returns a proof receipt
-that another process can check.
+A release agent records that security review finished before deployment. Later
+evidence shows that record was wrong: the review finished after deployment.
+Timeline preserves the original and corrected views, recomputes what follows
+from each one, and returns proof receipts that another process can check.
 
-## Install
+## Install the published kernel
 
 ```sh
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
 The package supports Node.js 22 and 24.
+`@covenant-org/timeline@0.0.0-alpha.3`, including the model-proposal compiler
+documented below, is currently available from a source checkout. Run `pnpm
+verify` before integrating that workspace build.
 
 ## Correction and replay
 
@@ -139,21 +142,67 @@ The reference kernel supports:
 
 The solver uses exact integer arithmetic and explicit resource limits.
 
-## CLI
+## Preview model proposals from source
 
-```sh
-npx timeline reason temporal-run.json temporal-query.json --json
-npx timeline --version
+The source candidate `@covenant-org/timeline@0.0.0-alpha.3` includes the bounded
+proposal compiler used by the MCP server. It is not part of the published
+`@covenant-org/timeline@0.0.0-alpha.2` package installed above. From a built
+repository checkout, a host gives a model only request-scoped handles and exact
+evidence text. Timeline verifies the cited spans, derives the ledger events and
+query, and can recompile the complete candidate before admission:
+
+```js
+import {
+  compileTemporalModelProposalV1,
+  verifyTemporalModelProposalCandidateV1,
+} from "./packages/prototype/dist/index.js";
+
+const candidate = compileTemporalModelProposalV1(proposal, host);
+
+if (!verifyTemporalModelProposalCandidateV1(candidate, proposal, host)) {
+  throw new Error("temporal proposal verification failed");
+}
 ```
 
-Input is strict JSON, duplicate keys are rejected, and each file is limited to
-16 MiB. Add `--json` for canonical JSON output.
+Compilation establishes deterministic lowering and source-span provenance. It
+does not authenticate the evidence, establish that a quote entails a claim, or
+authorize the candidate for durable admission.
 
-## Current alpha
+The preregistered evaluation of this proposal shape failed its acceptance
+criteria: assertion F1 was 0.7692 and only 76/108 projected states were exact.
+Treat provider output as an untrusted preview. Do not admit it automatically.
+The
+[result and raw bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
+are public.
 
-`0.0.0-alpha.2` is the recommended package. It includes the Draft v0alpha3
-temporal API and retains the v0alpha1 and v0alpha2 checkpoint APIs for
-compatibility. Their
+## CLI
+
+The published `@covenant-org/timeline@0.0.0-alpha.2` package provides temporal
+reasoning:
+
+```sh
+npm exec --package=@covenant-org/timeline@0.0.0-alpha.2 -- \
+  timeline reason temporal-run.json temporal-query.json --json
+npm exec --package=@covenant-org/timeline@0.0.0-alpha.2 -- timeline --version
+```
+
+The source candidate `@covenant-org/timeline@0.0.0-alpha.3` adds stored-receipt
+verification:
+
+```sh
+pnpm timeline verify-conclusion \
+  temporal-run.json temporal-query.json temporal-conclusion.json --json
+```
+
+`verify-conclusion` checks a stored receipt without invoking the reasoner. Input
+is strict JSON, duplicate keys are rejected, and each file is limited to 16 MiB.
+Add `--json` for canonical JSON output.
+
+## Status and scope
+
+The source candidate `@covenant-org/timeline@0.0.0-alpha.3` includes the Draft
+v0alpha3 temporal API and model-proposal compiler, and retains the v0alpha1 and
+v0alpha2 checkpoint APIs for compatibility. Their
 [adoption guide](https://github.com/open-covenant/covenant-timeline/blob/main/docs/adoption-guide.md)
 documents the legacy integration path.
 

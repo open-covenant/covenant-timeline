@@ -18,28 +18,34 @@ the Temporal adapter survives a worker restart against a real local server; and
 the Python reducer agrees with the TypeScript corpus.
 
 The local MCP alpha adds a bounded stdio integration for the temporal
-substrate. Its six tools include a model-proposal boundary that resolves
-request-scoped handles, binds exact source spans, derives ledger records and a
-query, and appends the complete batch atomically. The server persists canonical
-runs across process restarts, uses whole-run-digest compare-and-swap for
-appends, replays corrections at explicit knowledge cuts, and verifies receipts
-before returning them. Run discovery is paginated; malformed protocol input
-terminates with a failure status; and a source-first pilot exports a
-restart-spanning artifact for separate offline verification. Package and
-release paths reproduce and inspect exact archive bytes, include the full
-production dependency graph in the SBOM, and distinguish npm publication from
-a later successful workflow retry.
+substrate. Its default model role exposes four read-only tools, including a
+proposal preview that compiles request-scoped handles and exact source spans
+without changing durable state. A separate operator role adds three mutation
+tools. Admitting a preview requires its exact candidate digest plus an explicit
+authority, policy reference, and policy digest. Every persisted event is
+covered by a content-bound admission record in the stored audit envelope.
 
-This is still a production-hardened alpha, not an independently proven
-production protocol. The Temporal.io adapter and Python checkpoint reducer are
+The server persists canonical runs across process restarts, uses whole-run
+digest compare-and-swap for appends, replays corrections at explicit knowledge
+cuts, and verifies receipts before returning them. Run discovery is paginated;
+malformed protocol input terminates with a failure status; and a local MCP
+pilot exports a restart-spanning artifact for separate offline verification.
+Package and release paths reproduce and inspect exact archive bytes, include
+the full production dependency graph in the SBOM, and distinguish npm
+publication from a later successful workflow retry.
+
+This is still an engineering alpha, not an independently proven production
+protocol. The Temporal.io adapter and Python checkpoint reducer are
 maintained in this repository. The external project represented by the public
 archive did not adopt Timeline. The alpha.2 package includes the Draft v0alpha3
 temporal reference implementation alongside v0alpha1 and v0alpha2 checkpoint
 compatibility APIs. External operation, an independently maintained temporal
-implementation, production proposal-boundary evidence, and RFC completion
-remain blockers to a production protocol claim. The lower-level frontier-model
-gate is complete and returned `kill`; it does not support a standalone
-model-memory accuracy claim.
+implementation, a public composed restart-and-correction pilot, and RFC
+completion remain blockers to a production protocol claim. Both preregistered
+frontier-model gates returned `kill`: the lower-level state comparison did not
+beat structured extraction, and the deployment-shaped proposal interface failed its
+semantic assertion and end-to-end thresholds. Neither result supports a
+standalone model-memory accuracy claim or automatic admission of model output.
 
 v0alpha3 adds explicit temporal axes, scenario contexts, points, proper
 intervals, digest-referenced coordinate and difference assertions, historical
@@ -218,6 +224,22 @@ published lower-level result does not establish a general model benefit.
   - the fixed gate returned `kill`. The source-bound
     [release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
     contains raw results, scores, diagnostics, gate output, and checksums.
+- Preregistered GPT-5.6 Sol deployment-shaped proposal-boundary evaluation on
+  2026-08-01:
+  - the first operationally valid attempt completed 108 observations with no
+    permitted performance rerun;
+  - 108/108 responses were schema-valid, 107/108 candidates compiled and
+    produced a projected result, and every resulting proof verified;
+  - assertion F1 was 0.7692, projected state and end-to-end output were exact
+    on 76/108 observations, and final answers were exact on 87/108;
+  - the model represented only 2/24 non-exact bounds correctly, while all 141
+    gold signal records were selected and no distractor record was selected;
+  - the fixed gate returned `kill`; and
+  - the source-bound
+    [release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
+    contains the preregistration, corpus, raw results, score, gate, ledgers, and
+    checksums. A defective acceptable-quote metric is documented but does not
+    affect the independently failed assertion, state, or answer thresholds.
 - `pnpm audit` and `pnpm audit --prod` reported no known findings on
   2026-07-30. The MCP integration uses the split Model Context Protocol v2
   packages at exact `2.0.0-beta.5` versions; beta API stability remains an
@@ -303,20 +325,25 @@ published lower-level result does not establish a general model benefit.
       attacker capabilities, replay/effect abuse paths, privacy constraints,
       and adopter obligations.
 - [x] **Provide a bounded agent integration.** The local stdio MCP server
-      exposes six explicit tools and one portable run resource. Its proposal
-      tool resolves request-scoped model handles, binds exact source spans, and
-      atomically appends the complete compiled batch. The server persists
-      canonical runs with crash-aware replacement and writer locks, bounds
-      messages, runs, events, bytes, graph work, and proof output, and labels
-      writes as unauthenticated. Catalog discovery is paginated, fatal protocol
-      input exits nonzero, and the source-first pilot exports a
-      restart-spanning artifact that a separate process verifies offline.
-- [x] **Run the frontier-model gate.** The operationally valid GPT-5.6 Sol run
-      met every absolute quality threshold and beat bounded narrative memory,
-      but failed the required answer-accuracy comparison with stateless
-      full-context structured extraction. The recorded `kill` decision stops
-      standalone model-memory expansion. No production proposal-boundary model
-      result has been published.
+      exposes four read-only model tools and three operator-only mutation tools.
+      Proposal preview resolves request-scoped handles, binds exact source
+      spans, and returns a verified candidate without persistence. Admission
+      recompiles that candidate, requires its exact digest, and atomically
+      records its events with the host's authority and policy decision. The
+      server persists canonical runs and admission envelopes with crash-aware
+      replacement and writer locks; bounds messages, runs, events, bytes, graph
+      work, and proof output; and exposes separate run and audit resources.
+      Catalog discovery is paginated, fatal protocol input exits nonzero, and
+      the local MCP pilot exports a restart-spanning artifact that a separate
+      process verifies offline.
+- [x] **Run the frontier-model gates.** The operationally valid GPT-5.6 Sol v1
+      run met its absolute thresholds and beat bounded narrative memory, but
+      failed the required comparison with stateless full-context structured
+      extraction. The deployment-shaped proposal-boundary v2 run then achieved 0.7692
+      assertion F1 and 76/108 exact end-to-end states. Both fixed gates returned
+      `kill`. Their source-bound raw results and checksums are public. Model
+      proposals remain preview-only until a separate operator admits the exact
+      candidate.
 - [ ] **Obtain independent operation.** The durable adapter and second-language
       reducer are repository-maintained references. Neither is independent
       evidence until another organization operates or maintains one.
@@ -396,8 +423,10 @@ published lower-level result does not establish a general model benefit.
   bytes that bind a revocation list containing that key.
 - Claims are declarative and can be self-asserted unless a host validates
   producer authority and payload integrity.
-- Direct MCP writes can admit structurally valid but false model output unless
-  the host authenticates evidence and applies an admission policy.
+- The operator MCP role can admit structurally valid but false records. Role
+  separation and durable admission records make that decision explicit; they
+  do not authenticate the operator, evidence, authority, or policy. A host must
+  isolate the operator process and enforce those controls before admission.
 - A process with write access to the MCP data directory can replace or delete
   run files. The store refuses symlinks and non-regular entries, while
   canonicalization and digests detect malformed or internally inconsistent
@@ -432,15 +461,16 @@ restart; it does not pretend that a process-local projection is a portable
 snapshot. Trend storage and snapshot hydration should wait for an independent
 host to demonstrate need.
 
-The MCP reference store separately limits a run to 2,000 events and 4 MiB,
-limits a directory to 256 runs, and limits incoming protocol messages to
+The MCP reference store separately limits a stored envelope to 2,000 events and
+4 MiB, limits a directory to 256 runs, and limits incoming protocol messages to
 1 MiB. MCP catalog discovery reads at most eight run files per call and
 continues with a cursor bound to the current catalog generation. Creating or
 deleting a run invalidates that cursor rather than skipping an entry. Every new
 event validates the complete candidate run and uses the current whole-run
-digest as its compare-and-swap token; an exact same-ID retry is idempotent.
-These limits make local alpha behavior bounded; they are not throughput claims
-for a remote or multi-tenant service.
+digest as its compare-and-swap token. An exact same-ID retry is idempotent only
+when its admission decision is also identical. The audit digest binds the run
+and its complete admission coverage. These limits make local alpha behavior
+bounded; they are not throughput claims for a remote or multi-tenant service.
 
 ## Observability Assessment
 
@@ -464,7 +494,7 @@ Recommended host metrics:
 1. Maintain the temporal kernel as an audit and replay component inside
    Covenant or another system with a measured need; do not expand the
    standalone model-memory product under the failed v1 claim.
-2. Obtain one externally operated temporal pilot with the source-first starter;
+2. Obtain one externally operated temporal pilot using the checked-in workflow;
    publish the MCP package as a distribution step when registry access is
    available.
 3. Add an independently maintained implementation of the temporal RFC before
@@ -479,8 +509,9 @@ Recommended host metrics:
 
 ## Test Coverage Gaps
 
-- No published proposal-boundary or blinded scale-suite model result. The
-  lower-level frontier-model result is published and negative.
+- Both preregistered model results are published and negative. No new balanced,
+  held-out evaluation has tested a materially different selection-first model
+  interface, and no result supports automatic model-authored admission.
 - No independently operated temporal pilot.
 - No independently maintained temporal implementation.
 - No production deployment evidence in the public archive.

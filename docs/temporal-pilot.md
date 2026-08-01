@@ -6,7 +6,7 @@ one operational benefit, failure, or required contract change.
 
 An operator can run the pilot independently from a source checkout. No hosted
 Covenant service, registry package, or formal partnership is required. The
-[MCP agent pilot starter](../examples/mcp-agent-pilot)
+[local MCP restart-and-correction pilot](../examples/mcp-agent-pilot)
 provides replaceable inputs, restart orchestration, complete export, and a
 separate offline verifier.
 

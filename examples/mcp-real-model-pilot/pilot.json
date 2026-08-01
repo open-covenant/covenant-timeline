@@ -1,0 +1,19 @@
+{
+  "schema": "covenant.timeline.real-model-pilot.input.v1",
+  "id": "covenant-release-correction",
+  "title": "Historical Covenant release evidence-disclosure replay",
+  "operator": "Open Covenant maintainers",
+  "workflow": "Stage already-public historical release fields across two process phases, then reconcile publication time against readiness evidence for the exact tagged commit.",
+  "contract": "contract.json",
+  "prompt": "prompt.md",
+  "initialEvidence": ["release-created.txt", "readiness-recorded.txt"],
+  "correctionEvidence": ["release-published.txt"],
+  "expected": {
+    "tagCommit": "94e7af53c2224aa40762c2061ac96cab34950b71",
+    "provisionalPublication": 1779957192000,
+    "authoritativePublication": 1779957345000,
+    "readinessRecorded": 1779957705698,
+    "initialDifference": 513698,
+    "correctedDifference": 360698
+  }
+}

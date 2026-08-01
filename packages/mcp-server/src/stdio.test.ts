@@ -22,6 +22,11 @@ import {
 import { DEFAULT_MAX_MESSAGE_BYTES } from "./constants.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+const admission = {
+  authorityId: "operator.test",
+  policyRef: "policy:test/v1",
+  policyDigest: `sha256:${"a".repeat(64)}`,
+} as const;
 
 describe("timeline-mcp stdio", () => {
   const directories: string[] = [];
@@ -60,6 +65,7 @@ describe("timeline-mcp stdio", () => {
                 runId: contract.id,
                 expectedRunDigest: runDigest,
                 event,
+                admission,
               },
             })
           ).structuredContent,
@@ -254,7 +260,7 @@ async function connect(directory: string): Promise<{
 }> {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [cliPath, "--data-dir", directory],
+    args: [cliPath, "--data-dir", directory, "--role", "operator"],
     stderr: "pipe",
   });
   const stderr: Buffer[] = [];

@@ -22,9 +22,9 @@ host authenticates evidence and admits the candidate batch
 Timeline returns a canonical result + verifiable receipt
 ```
 
-## Use the proposal compiler
+## Preview an untrusted proposal
 
-The production model boundary is
+The experimental proposal protocol is
 `covenant.timeline.model-proposal.v1`. Models work with request-scoped handles
 instead of mapped ledger identifiers, digests, sequence numbers, or raw
 knowledge-cut indices. The host is responsible for issuing opaque,
@@ -84,6 +84,13 @@ The result contains content-addressed candidate events, a pinned query, and
 provenance receipts with evidence and quote digests plus UTF-8 byte ranges. It
 does not contain source text, mutate the run, or admit a claim.
 
+The preregistered GPT-5.6 Sol v2 evaluation returned `kill`. Assertion F1 was
+0.7692 and projected-state exactness was 76/108. The model found every gold
+signal record but represented only 2 of 24 non-exact bounds correctly. This
+protocol is therefore retained for preview, diagnosis, and reproducibility;
+it is not a validated automatic-ingestion path. See the
+[result analysis](./model-proposal-v2-result.md).
+
 See [Compile model output into temporal candidates](./model-proposal.md) for a
 complete correction proposal, generated candidate artifact, JSON Schemas,
 limits, and responsibility boundaries.
@@ -99,10 +106,17 @@ establish that:
 - the caller has authority to change the run.
 
 The host must retain source bytes, authenticate evidence, apply domain policy,
-and decide whether the complete candidate batch enters the durable run.
-Timeline's local MCP server can compile and atomically persist a proposal, but
-its built-in admission mode remains explicitly unauthenticated and
-structural-only.
+and decide whether the complete candidate batch enters the durable run. The
+local MCP server defaults to a model role that can preview a candidate and its
+verified conclusion but cannot create, append, or admit records. An explicitly
+started operator role may admit a candidate identified by the digest returned
+from preview under an authority ID, policy reference, and policy digest. That
+decision is persisted with the run in the admission audit resource.
+
+Process roles enforce capability separation at the local server boundary; they
+do not authenticate an operating-system user or validate the policy bytes.
+Deployments must isolate the operator process and retain the policy identified
+by each admission record.
 
 ## Reason and verify
 
@@ -172,6 +186,8 @@ The public [model-interface v1 benchmark](./model-evaluation.md) compares
 bounded narrative memory, stateless full-context structured extraction, and
 rolling Timeline state. Direct full-context answering remains a secondary
 reference. The Timeline arm deliberately asks the model to author raw
-v0alpha3 events, making ledger bookkeeping failures visible. Production
-integrations should use the proposal compiler; results from the two boundaries
-are not interchangeable.
+v0alpha3 events, making ledger bookkeeping failures visible. The separate v2
+suite tests the proposal protocol. Both fixed gates returned `kill`; neither
+result supports automatic model-authored temporal memory. Integrations should
+prefer host-authored assertions or preview proposals before an explicit
+operator admission.

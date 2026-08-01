@@ -122,7 +122,10 @@ jobs:
           test -n "$archive"
           test -n "$comparison"
           cmp "$archive" "$comparison"
-          sha256sum "$archive" > "$archive.sha256"
+          (
+            cd "$(dirname "$archive")"
+            sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256"
+          )
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
           echo "checksum=$archive.sha256" >> "$GITHUB_OUTPUT"
 
@@ -164,17 +167,25 @@ jobs:
           checksum="${{ steps.artifact.outputs.checksum }}"
           sbom="${{ steps.sbom.outputs.path }}"
           version="$(node -p 'require("./packages/mcp-server/package.json").version')"
+          archive_name="$(basename "$archive")"
+          checksum_name="$(basename "$checksum")"
+          sbom_name="$(basename "$sbom")"
+          release_state="$RUNNER_TEMP/timeline-mcp-release-state.json"
+          expected_prerelease=false
           release_flags=()
           if [[ "$version" == *-* ]]; then
+            expected_prerelease=true
             release_flags+=(--prerelease)
           fi
 
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          if gh release view "$GITHUB_REF_NAME" \
+            --json isDraft,isPrerelease,tagName,assets \
+            > "$release_state" 2>/dev/null; then
+            node scripts/check-github-release-state.mjs \
+              "$release_state" "$GITHUB_REF_NAME" "$expected_prerelease" \
+              allow-missing "$archive_name" "$checksum_name" "$sbom_name"
             gh release upload "$GITHUB_REF_NAME" \
               "$archive" "$checksum" "$sbom" --clobber
-            if [[ "$version" == *-* ]]; then
-              gh release edit "$GITHUB_REF_NAME" --prerelease
-            fi
           else
             gh release create "$GITHUB_REF_NAME" \
               "$archive" "$checksum" "$sbom" \
@@ -183,6 +194,12 @@ jobs:
               "${release_flags[@]}" \
               --notes "Installable alpha release of Covenant Timeline's local stdio MCP server."
           fi
+          gh release view "$GITHUB_REF_NAME" \
+            --json isDraft,isPrerelease,tagName,assets \
+            > "$release_state"
+          node scripts/check-github-release-state.mjs \
+            "$release_state" "$GITHUB_REF_NAME" "$expected_prerelease" \
+            complete "$archive_name" "$checksum_name" "$sbom_name"
 
       - name: Publish to npm
         env:

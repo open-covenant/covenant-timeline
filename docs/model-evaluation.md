@@ -31,10 +31,29 @@ was -0.0093 with case-cluster `p = 0.875`, so the preregistered gate returned
 end-to-end artifacts; it is diagnostic and does not alter the primary result.
 
 The
-[immutable release](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+[retained, checksummed release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
 contains the configuration, raw JSONL, scores, diagnostics, gate output,
 execution record, and checksums. It is bound to source commit
 `a5c803de3dfb5fa7502f04a0dca417c775f1e38e`.
+
+## Proposal-interface follow-on
+
+The model-interface result motivated a separate test of the host-bound proposal
+compiler used by the source MCP integration. That v2 suite changed the evidence
+surface, added distractors and exact source-span requirements, and measured
+proposal reliability directly. It did not repeat the three-arm superiority
+claim.
+
+The preregistered 2026-08-01 GPT-5.6 Sol attempt also returned `kill`.
+Assertion F1 was 0.7692, projected-state and end-to-end exactness were 76/108,
+and answer exactness was 87/108. The model found the relevant evidence and
+query targets but repeatedly collapsed lower bounds, upper bounds, and ranges
+into exact coordinates.
+
+See the [v2 result analysis](./model-proposal-v2-result.md) and
+[complete release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01).
+The result rules out free-form model proposals as the default durable-ingestion
+path for the current alpha.
 
 ## Adapter contract
 

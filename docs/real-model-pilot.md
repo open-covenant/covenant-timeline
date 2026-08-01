@@ -38,6 +38,31 @@ SHA-256 evidence references and source-span receipts, not evidence text. The
 export keeps the public evidence in a separate directory and redacts it from
 the recorded model request.
 
+## Retained attempt
+
+The first formal attempt completed on 2026-08-01 and is retained in the
+[GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01).
+
+| Field                    | Result                                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| Source                   | `3fb0ce3249a028e52a5ae7fa25fd9ebbad229c8c`                         |
+| Model                    | GPT-5.6 Sol through the OpenAI Responses API                       |
+| Reservations and bundles | 2 provider reservations, 2 synchronized phase-result bundles       |
+| Admission                | 4 content-bound admission records                                  |
+| Results                  | 513,698 ms historical; 360,698 ms corrected                        |
+| Verification             | 3 receipts verified; recorded runtime matched exactly              |
+| Archive SHA-256          | `cb246e732553dc069e17d614fbbd7352dc77bcd5693b7d6cd8ba902bf55c0b2e` |
+
+The release archive was downloaded after publication, compared byte for byte
+with the verified local archive, checksum-checked, extracted into a fresh
+directory, and verified again without provider credentials. The artifact scan
+found no API-key bytes, credential patterns, personal identifiers, or absolute
+home paths.
+
+This attempt demonstrates the composed source-built workflow. It remains a
+maintainer-attested historical staged replay, not independent adoption or a live
+observation of evidence arriving over time.
+
 ## Formal run
 
 Use a clean committed checkout. Generate a source-bound OpenAI proposal

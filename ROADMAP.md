@@ -109,12 +109,16 @@ not authenticate evidence, operators, or policy bytes; deployments must isolate
 the operator surface and enforce those controls externally. The server does not
 provide semantic memory search, civil-time normalization, or remote hosting.
 
-The local restart-and-correction pilot creates a run, appends a correction,
-stops and restarts the server, projects both historical and current state,
-exports the complete artifact, and verifies both receipts in another process.
-Registry publication remains open for the alpha.1 release candidate. It is a
-distribution milestone; it does not block source pilots, model evaluation, or
-independent implementation work.
+[The first maintainer-operated real-model attempt](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+is retained publicly. It crossed separate host and MCP processes, admitted an
+initial proposal and a staged correction under an exact policy digest,
+preserved the historical result, and verified three receipts without provider
+credentials. This closes the composed source-workflow gate. It does not count
+as independent operation or live delayed-evidence observation.
+
+Registry publication remains open for the alpha.1 MCP release candidate. It is
+a distribution milestone; it does not block source pilots, model evaluation,
+or independent implementation work.
 
 ### 3. Independent temporal pilot
 

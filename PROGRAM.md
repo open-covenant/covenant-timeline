@@ -51,6 +51,14 @@ automatic admission of free-form model output. The
 [complete v2 result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
 is public.
 
+[The first composed real-model pilot](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+then exercised the source-built MCP path across separate host and MCP processes.
+It retained two model-call reservations, four explicit admission records, the
+historical and corrected conclusions, and three receipts that reproduced in a
+credential-free verifier. The run stages public historical evidence and is
+maintainer-operated; it is not independent adoption or a live delayed-evidence
+observation.
+
 ## Product boundary
 
 Timeline provides:
@@ -75,7 +83,6 @@ is an intended host integration, not a required service.
 ## Current priorities
 
 - publish and independently verify the exact core and MCP package artifacts;
-- retain one public restart-and-correction run over real evidence;
 - support an external operator running Timeline in its own workflow;
 - support a separately maintained implementation through the conformance
   corpus; and

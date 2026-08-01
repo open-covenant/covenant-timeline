@@ -26,6 +26,7 @@ the default model-facing surface cannot write to the record.
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an agent to the source-built MCP server](#connect-an-agent-to-the-source-built-mcp-server) ·
 [Run the local restart-and-correction pilot](./examples/mcp-agent-pilot) ·
+[Inspect the public real-model pilot](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
 [Review model results](./docs/model-evaluation.md) ·
@@ -209,6 +210,18 @@ admission, recovery, projection, and reasoning across a restart. It exports the
 evidence, portable run, queries, conclusions, environment, and an exact call
 transcript containing the admission records and audit digests, then verifies
 the artifact in a separate offline process.
+
+[One retained maintainer-operated run](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+applied that path to staged public release evidence with GPT-5.6 Sol. The
+artifact records two provider reservations, separate host and MCP processes,
+four admission records, and three verified receipts. The correction changed the
+readiness-minus-publication result from a provisional 513,698 ms to 360,698 ms
+while the original result remained reproducible at its historical record cut.
+A credential-free verifier reproduced the artifact and matched the recorded
+runtime exactly.
+
+The run is a historical staged replay, not an independent deployment, a live
+observation of delayed evidence, or evidence of a model-accuracy advantage.
 
 ## Use the temporal API
 

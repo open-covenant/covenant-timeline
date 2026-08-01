@@ -113,6 +113,9 @@
   retained evidence, chains append digests, exports the complete pilot artifact
   and tool transcript, and verifies historical and corrected conclusions in a
   separate offline process.
+- Add a formal two-phase real-model pilot with at-most-once provider
+  reservations, crash-recoverable phase bundles, exact runtime binding,
+  credential-free verification, and atomic artifact publication.
 
 #### Changed
 
@@ -121,6 +124,9 @@
   every persisted event to an auditable authority, policy, and writer identity.
 - Load MCP and Timeline runtime version identities from their installed package
   manifests so admission provenance cannot drift from shipped package metadata.
+- Retain the first maintainer-operated composed pilot as a public prerelease
+  artifact with two provider reservations, four admission records, a preserved
+  historical cut, and three verified receipts.
 - Describe MCP input semantics in tool discovery, cap each catalog page at
   eight runs, bind cursors to a catalog generation, cap reference-store
   configuration at its advertised ceilings, and make the source checkout a

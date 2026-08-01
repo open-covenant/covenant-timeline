@@ -266,7 +266,27 @@ export async function readBoundedExactFile(
       );
     }
     const exact = bytes.subarray(0, offset);
-    if (validate !== undefined) await validate(exact);
+    if (validate !== undefined) {
+      await validate(exact);
+      const reread = Buffer.alloc(expectedSize + 1);
+      let rereadOffset = 0;
+      while (rereadOffset < reread.byteLength) {
+        const { bytesRead } = await handle.read(
+          reread,
+          rereadOffset,
+          reread.byteLength - rereadOffset,
+          rereadOffset,
+        );
+        if (bytesRead === 0) break;
+        rereadOffset += bytesRead;
+      }
+      if (
+        rereadOffset !== expectedSize ||
+        !exact.equals(reread.subarray(0, rereadOffset))
+      ) {
+        throw new Error(`${label} changed while being validated`);
+      }
+    }
     const [validated, validatedPath] = await Promise.all([
       handle.stat({ bigint: true }),
       lstat(absolute, { bigint: true }),

@@ -128,8 +128,24 @@ test("existing output is not replaced without explicit overwrite", async (t) => 
   assert.equal((await readFile(fixture.log, "utf8")).length, 0);
 });
 
+test("runner binds a preregistered attempt ID before inference", async (t) => {
+  const fixture = await createFixture(t, "rolling");
+  const attemptId = "00000000-0000-4000-8000-000000000123";
+  await runFixture(fixture, { attemptId });
+  const records = await readJsonLines(fixture.output);
+  assert.equal(records[0].run.attemptId, attemptId);
+});
+
 async function assertArtifactIntegrity(records, requests) {
   const validators = await createModelProposalEvalValidators();
+  assert.match(
+    records[0].run.attemptId,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+  );
+  assert.equal(
+    new Date(records[0].run.startedAt).toISOString(),
+    records[0].run.startedAt,
+  );
   for (const [index, record] of records.entries()) {
     assert.equal(
       validators.result(record),
@@ -153,6 +169,8 @@ async function assertArtifactIntegrity(records, requests) {
     assert.equal(requests[index].outputSchemaDigest, record.outputSchemaDigest);
     assert.equal(requests[index].configDigest, record.run.configDigest);
     assert.deepEqual(requests[index].config, record.run.config);
+    assert.equal(record.run.attemptId, records[0].run.attemptId);
+    assert.equal(record.run.startedAt, records[0].run.startedAt);
     assertNoGoldLeak(requests[index]);
   }
 }
@@ -223,10 +241,11 @@ async function createFixture(t, mode) {
   return { adapter, config, directory, log, mode, output };
 }
 
-function runFixture(fixture) {
+function runFixture(fixture, { attemptId } = {}) {
   return runModelProposalEval(
     {
       adapter: [process.execPath, fixture.adapter, fixture.mode, fixture.log],
+      attemptId,
       caseIds: ["bounds.deploy-window"],
       config: fixture.config,
       output: fixture.output,

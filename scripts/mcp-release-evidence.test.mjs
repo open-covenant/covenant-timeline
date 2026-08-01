@@ -47,10 +47,9 @@ const mcpManifestText = await readFile(
   join(root, "packages/mcp-server/package.json"),
   "utf8",
 );
-const coreManifestText = runCommand(
-  "git",
-  ["show", `${sourceCommit}:packages/prototype/package.json`],
-  { cwd: root },
+const coreManifestText = await readFile(
+  join(root, "packages/prototype/package.json"),
+  "utf8",
 );
 
 test("accepts the closed MCP release record shape", () => {
@@ -442,7 +441,7 @@ function mcpRecord() {
       },
       {
         name: "@covenant-org/timeline",
-        version: "0.0.0-alpha.2",
+        version: "0.0.0-alpha.3",
         manifest: "packages/prototype/package.json",
         distribution: "runtime-dependency",
       },
@@ -523,7 +522,7 @@ function mcpRecord() {
       temporalSurface: "v0alpha3",
       storeEnvelope: "covenant.timeline.mcp-run.v0alpha1",
       runtimePins: {
-        "@covenant-org/timeline": "0.0.0-alpha.2",
+        "@covenant-org/timeline": "0.0.0-alpha.3",
         "@modelcontextprotocol/server": "2.0.0-beta.5",
         zod: "4.4.3",
       },

@@ -3,3 +3,4 @@ dist/
 coverage/
 pnpm-lock.yaml
 LICENSE
+benchmarks/model-proposal-boundary/v2/acceptable-supports.json

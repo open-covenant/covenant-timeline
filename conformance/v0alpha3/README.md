@@ -27,11 +27,14 @@ The query fixtures cover:
 - [`consistency-after-correction.json`](./queries/consistency-after-correction.json):
   consistency through the latest admitted record.
 
-[`conclusions/difference-bounds.json`](./conclusions/difference-bounds.json)
-is generated from the fixture run and is checked both against JSON Schema and
-by the independent certificate-verification API. [`cases.json`](./cases.json)
-contains positive and negative shape cases for closed objects, safe integer
-bounds, discriminated unions, result/proof invariants, and digest syntax.
+The [`conclusions`](./conclusions) directory retains the generated bounds
+receipt and the consistency schedules before and after correction. The
+TypeScript verifier checks the complete query surface. A separate
+repository-maintained Python proof profile projects the same run and verifies
+the schedules and bounds receipts directly; it does not yet implement point or
+interval relation cases. [`cases.json`](./cases.json) contains positive and
+negative shape cases for closed objects, safe integer bounds, discriminated
+unions, result/proof invariants, and digest syntax.
 
 These are schema fixtures. Cross-reference integrity, contiguous record
 sequence, proper interval ordering, assertion revision, knowledge-cut

@@ -1,0 +1,38 @@
+# Public claim ledger
+
+This ledger defines the strongest public language supported by current
+artifacts. Claims without a listed evidence source are goals, not product
+facts.
+
+| Claim                                                                                                          | Status                                                  | Evidence or required wording                                                                                      |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Timeline projects temporal state at an explicit historical record cut                                          | Supported                                               | v0alpha3 conformance corpus and correction-replay example                                                         |
+| Corrections preserve earlier replayable views                                                                  | Supported                                               | correction-replay run and verifier tests                                                                          |
+| The reference kernel returns deterministic semantic results for identical admitted bytes and query bytes       | Supported                                               | conformance replay across declared environments                                                                   |
+| A conclusion carries a verifier-checked receipt bound to state, query, result, and reasoner                    | Supported                                               | v0alpha3 kernel and verifier tests                                                                                |
+| The model-proposal compiler resolves host-issued handles and exact source spans without persisting source text | Supported as an implementation property                 | compiler, candidate-verifier, and MCP security tests                                                              |
+| Frontier models reliably use the production proposal boundary                                                  | Not yet supported                                       | Requires the preregistered proposal-boundary result                                                               |
+| Timeline improves model temporal accuracy over simpler structured extraction                                   | Rejected on the v1 suite                                | The fixed model-interface gate returned `kill`; Timeline scored 106/108 answers and structured extraction 107/108 |
+| Timeline outperforms bounded narrative memory on the v1 suite                                                  | Supported only for that suite and model                 | Timeline scored 106/108 answers and narrative memory 65/108                                                       |
+| Timeline makes models understand time                                                                          | Unsupported                                             | Use the narrower state, replay, and verification claim                                                            |
+| A proof shows admitted evidence is true                                                                        | Unsupported                                             | A proof shows only that the conclusion follows from admitted records under the identified reasoner                |
+| Python can verify v0alpha3 consistency and difference-bounds receipts                                          | Supported for the repository-maintained partial profile | Python checks schedules, negative cycles, bound paths, and substitution failures over six retained receipts       |
+| Any language can verify the full v0alpha3 query surface                                                        | Designed, not demonstrated                              | Point- and interval-relation proof cases still have only the TypeScript reference verifier                        |
+| Timeline has an independent adopter                                                                            | Unsupported                                             | Requires an organizationally independent operator artifact                                                        |
+| Timeline survives a real model-session and MCP-process restart with delayed correction                         | Not yet supported by one composed artifact              | Requires the real-model release-correction pilot                                                                  |
+| Calendar dates and named time zones are native kernel values                                                   | Unsupported                                             | Hosts normalize them to an exact integer axis under an explicit profile                                           |
+| The npm package contains the proposal compiler and MCP onboarding surface                                      | Not yet supported                                       | Requires the next core release followed by the MCP release                                                        |
+
+## Language rules
+
+- Use **record cut** or **knowledge cut**, not “point in time,” when referring to
+  visibility into the append-only record.
+- Use **proof verification**, not “proof of truth” or “proof the model was
+  correct.”
+- Qualify benchmark claims with the model, corpus, date, and comparator.
+- Describe Open Covenant runs as **maintainer-operated** unless an external
+  organization owns the workflow.
+- Describe v0alpha3 as a **portable contract with a reference implementation**
+  until independent conformance exists.
+- Keep source authentication, semantic admission, and runtime authorization
+  outside the kernel claim.

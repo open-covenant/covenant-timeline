@@ -8,6 +8,9 @@ protocol portability.
 
 Release history belongs in the [changelog](./CHANGELOG.md). This document
 records the evidence required before the project can make broader claims.
+The [public claim ledger](./docs/claim-ledger.md) and
+[post-readiness audit](./docs/production-audit-post-readiness.md) distinguish
+implemented properties from release and adoption evidence.
 
 ## Available foundation
 
@@ -26,6 +29,11 @@ The schemas, conformance corpus, CLI, reference kernel, correction-and-replay
 example, model interface, and benchmark artifacts are public. They establish a
 working substrate and include a formal negative model result; they do not
 establish adoption.
+
+The source tree is preparing `@covenant-org/timeline@0.0.0-alpha.3`, which adds
+the proposal compiler, and `@covenant-org/timeline-mcp@0.0.0-alpha.1`, which
+pins that core version. Both are release candidates rather than registry
+onboarding paths until their publication and installed-artifact checks finish.
 
 The repository also provides deterministic model-proposal compilation with
 exact source-span provenance, a request-scoped Structured Outputs schema, and
@@ -97,8 +105,9 @@ civil-time normalization, remote hosting, or evidence authority.
 The source-first pilot creates a run, appends a correction, stops and restarts
 the server, projects both historical and current state, exports the complete
 artifact, and verifies both receipts in another process. Registry publication
-is a distribution milestone; it does not block source pilots, model
-evaluation, or independent implementation work.
+remains open for the alpha.1 release candidate. It is a distribution milestone;
+it does not block source pilots, model evaluation, or independent
+implementation work.
 
 ### 3. Independent temporal pilot
 

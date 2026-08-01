@@ -10,10 +10,11 @@ that another process can check.
 ## Install
 
 ```sh
-npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
+npm install --save-exact @covenant-org/timeline@0.0.0-alpha.3
 ```
 
-The package supports Node.js 22 and 24.
+The package supports Node.js 22 and 24. To evaluate unreleased source, clone
+the repository and run `pnpm verify` before integrating its workspace build.
 
 ## Correction and replay
 
@@ -139,20 +140,47 @@ The reference kernel supports:
 
 The solver uses exact integer arithmetic and explicit resource limits.
 
+## Compile model proposals
+
+Alpha.3 includes the bounded proposal compiler used by the MCP server. A host
+gives a model only request-scoped handles and exact
+evidence text. Timeline verifies the cited spans, derives the ledger events and
+query, and can recompile the complete candidate before admission:
+
+```js
+import {
+  compileTemporalModelProposalV1,
+  verifyTemporalModelProposalCandidateV1,
+} from "@covenant-org/timeline";
+
+const candidate = compileTemporalModelProposalV1(proposal, host);
+
+if (!verifyTemporalModelProposalCandidateV1(candidate, proposal, host)) {
+  throw new Error("temporal proposal verification failed");
+}
+```
+
+Compilation establishes deterministic lowering and source-span provenance. It
+does not authenticate the evidence, establish that a quote entails a claim, or
+authorize the candidate for durable admission.
+
 ## CLI
 
 ```sh
 npx timeline reason temporal-run.json temporal-query.json --json
+npx timeline verify-conclusion \
+  temporal-run.json temporal-query.json temporal-conclusion.json --json
 npx timeline --version
 ```
 
+`verify-conclusion` checks a stored receipt without invoking the reasoner.
 Input is strict JSON, duplicate keys are rejected, and each file is limited to
 16 MiB. Add `--json` for canonical JSON output.
 
-## Current alpha
+## Status and scope
 
-`0.0.0-alpha.2` is the recommended package. It includes the Draft v0alpha3
-temporal API and retains the v0alpha1 and v0alpha2 checkpoint APIs for
+`0.0.0-alpha.3` includes the Draft v0alpha3 temporal API and model-proposal
+compiler, and retains the v0alpha1 and v0alpha2 checkpoint APIs for
 compatibility. Their
 [adoption guide](https://github.com/open-covenant/covenant-timeline/blob/main/docs/adoption-guide.md)
 documents the legacy integration path.

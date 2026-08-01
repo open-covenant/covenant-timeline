@@ -24,8 +24,14 @@ async function createFixture(changelog) {
   const directory = await mkdtemp(resolve(tmpdir(), "timeline-mcp-release-"));
   await mkdir(resolve(directory, "packages/mcp-server"), { recursive: true });
   await mkdir(resolve(directory, ".github/workflows"), { recursive: true });
+  await mkdir(resolve(directory, "docs"), { recursive: true });
 
   await Promise.all([
+    copyFile(resolve(root, "README.md"), resolve(directory, "README.md")),
+    copyFile(
+      resolve(root, "docs/getting-started.md"),
+      resolve(directory, "docs/getting-started.md"),
+    ),
     copyFile(
       resolve(root, "packages/mcp-server/package.json"),
       resolve(directory, "packages/mcp-server/package.json"),
@@ -54,6 +60,29 @@ function runCheck(directory, tag) {
     encoding: "utf8",
     env: { ...process.env, GITHUB_REF_NAME: "" },
   });
+}
+
+async function makeMcpReleaseCopy(directory) {
+  const readmePath = resolve(directory, "README.md");
+  const guidePath = resolve(directory, "docs/getting-started.md");
+  const install = `npm install --save-exact @covenant-org/timeline-mcp@${manifest.version}`;
+  const readme = (await readFile(readmePath, "utf8"))
+    .replace(
+      "The local MCP server keeps typed temporal state durable across agent sessions.",
+      `The local MCP server keeps typed temporal state durable across agent sessions.\n\n${install}`,
+    )
+    .replace(
+      "package is a source release candidate, not yet a published",
+      "package is a published",
+    );
+  const guide = (await readFile(guidePath, "utf8")).replace(
+    "The MCP server's `0.0.0-alpha.1` package is a source release candidate and is\nnot yet available from npm. Build the server from this repository:",
+    `Install the MCP server with ${install}. To evaluate source, build the repository:`,
+  );
+  await Promise.all([
+    writeFile(readmePath, readme),
+    writeFile(guidePath, guide),
+  ]);
 }
 
 test("validates an unreleased MCP package without a dated changelog entry", async () => {
@@ -94,9 +123,28 @@ test("accepts a release tag with a matching dated changelog entry", async () => 
   const directory = await createFixture(changelog);
 
   try {
+    await makeMcpReleaseCopy(directory);
     const result = runCheck(directory, releaseTag);
     assert.equal(result.status, 0, result.stderr);
     assert.ok(result.stdout.includes(`${releaseTag})`));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects an MCP tag that would freeze candidate onboarding copy", async () => {
+  const changelog = [
+    "# Changelog",
+    "",
+    `## @covenant-org/timeline-mcp ${manifest.version} - 2026-07-30`,
+    "",
+  ].join("\n");
+  const directory = await createFixture(changelog);
+
+  try {
+    const result = runCheck(directory, releaseTag);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /update immutable onboarding copy/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

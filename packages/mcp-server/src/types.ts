@@ -13,7 +13,7 @@ export type TemporalEventDraftV0Alpha3 = EventDraft<TemporalEventV0Alpha3>;
 
 export interface McpRunImplementationV0Alpha1 {
   timelinePackage: "@covenant-org/timeline";
-  timelineVersion: "0.0.0-alpha.2";
+  timelineVersion: "0.0.0-alpha.3";
   reasoner: "covenant.timeline.stn.v0alpha1";
   serverPackage: "@covenant-org/timeline-mcp";
   serverVersion: string;

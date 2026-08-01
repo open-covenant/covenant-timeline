@@ -22,6 +22,12 @@ requires:
 - no unresolved critical security finding;
 - signed checksums, SPDX SBOMs, and provenance attestations.
 
+The commit receiving a release tag must also update the repository README and
+getting-started guide to the package version that tag publishes. Candidate
+wording remains accurate before publication, but it must not be frozen into an
+immutable release tag. The core and MCP release checks enforce this transition
+independently so the core can publish before the MCP package it unlocks.
+
 Single-maintainer bootstrap may publish `0.0.x` previews but cannot publish a
 stable release. Published tags and artifacts are not overwritten. Registry
 authentication must be short-lived. Alpha releases may use a

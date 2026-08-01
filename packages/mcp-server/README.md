@@ -9,29 +9,37 @@ process can verify.
 
 ## Connect
 
-Requires Node.js 22 or 24. Build the repository once:
+Requires Node.js 22 or 24. Install the exact alpha version:
 
 ```sh
-corepack enable
-pnpm install --frozen-lockfile
-pnpm build
+npm install --save-exact @covenant-org/timeline-mcp@0.0.0-alpha.1
 ```
 
-Add the built server to any MCP client that supports local stdio servers:
+Add the installed server to any MCP client that supports local stdio servers.
+Use the absolute Node path reported by `node -p process.execPath` and the
+absolute package path under the application's `node_modules` directory:
 
 ```json
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "node",
+      "command": "/absolute/path/to/node",
       "args": [
-        "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
+        "/absolute/path/to/application/node_modules/@covenant-org/timeline-mcp/dist/cli.js",
         "--data-dir",
         "/absolute/path/to/private/timeline-data"
       ]
     }
   }
 }
+```
+
+To evaluate unreleased source, clone the repository and build the workspace:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
 Use an absolute path on a dedicated local filesystem and restrict the directory
@@ -167,7 +175,7 @@ reject symbolic links, FIFOs, devices, and other non-regular entries.
 
 ## Programmatic use
 
-From a source checkout:
+The alpha.1 package pins `@covenant-org/timeline@0.0.0-alpha.3`:
 
 ```ts
 import {
@@ -180,8 +188,7 @@ const server = createTimelineMcpServer(store);
 ```
 
 Connect the returned server with an MCP transport. The built `timeline-mcp`
-binary uses stdio. Until registry distribution is available, import the server
-from a pinned source checkout.
+binary uses stdio.
 
 ## Status
 

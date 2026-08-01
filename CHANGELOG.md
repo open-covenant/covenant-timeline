@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## @covenant-org/timeline-mcp 0.0.0-alpha.1 - 2026-08-01
+
+### Added
+
+- Add the installable local stdio server with restart-safe persistence,
+  correction replay, atomic evidence-backed model proposals, and verified
+  temporal conclusions. The package pins `@covenant-org/timeline` alpha.3 and
+  validates that registry dependency in an isolated release-candidate install.
+
+## 0.0.0-alpha.3 - 2026-08-01
+
 ### Added
 
 - Add a checked correction-and-replay example with before, inconsistent
@@ -54,6 +65,8 @@
   installed-model checks, post-inference loaded-model digest verification,
   fixed generation settings, structured output, bounded provider handling,
   token accounting, and source-bound configuration generation.
+- Verify the proposal compiler, complete candidate verifier, source-span
+  provenance, and temporal proof from the installed core tarball.
 
 ### Changed
 

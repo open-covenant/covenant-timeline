@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://covenant-timeline.org/benchmarks/model-proposal-boundary/v2/attempt-ledger.schema.json",
+  "title": "Covenant Timeline model-proposal attempt ledger v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ledgerId",
+    "initializedAt",
+    "benchmark",
+    "bindings",
+    "attempts",
+    "authoritativeAttemptId",
+    "closed"
+  ],
+  "properties": {
+    "schema": {
+      "const": "covenant.timeline.model-proposal-attempt-ledger.v2"
+    },
+    "ledgerId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "initializedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "benchmark": {
+      "const": "model-proposal-boundary-v2"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRevision",
+        "sourceStateDigest",
+        "runtimeDigest",
+        "corpusDigest",
+        "acceptableSupportsDigest",
+        "promptDigest",
+        "configDigest"
+      ],
+      "properties": {
+        "sourceRevision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceStateDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "runtimeDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "corpusDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "acceptableSupportsDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "promptDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "configDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/pendingAttempt"
+          },
+          {
+            "$ref": "#/$defs/claimedAttempt"
+          },
+          {
+            "$ref": "#/$defs/completedAttempt"
+          }
+        ]
+      }
+    },
+    "authoritativeAttemptId": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "closed": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "pendingAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "attemptId", "preparedAt", "status"],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "attemptId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "preparedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "const": "pending"
+        }
+      }
+    },
+    "claimedAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "attemptId",
+        "preparedAt",
+        "claimedAt",
+        "status",
+        "resultsArtifactId",
+        "resultsPathDigest"
+      ],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "attemptId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "preparedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "claimedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "const": "claimed"
+        },
+        "resultsArtifactId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "resultsPathDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "completedAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "attemptId",
+        "preparedAt",
+        "claimedAt",
+        "status",
+        "resultsArtifactId",
+        "resultsPathDigest",
+        "resultsDigest",
+        "decision",
+        "failedChecks",
+        "operationalErrors"
+      ],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "attemptId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "preparedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "claimedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "const": "complete"
+        },
+        "resultsArtifactId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "resultsPathDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "resultsDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "decision": {
+          "enum": ["continue", "kill", "inconclusive"]
+        },
+        "failedChecks": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "operationalErrors": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        }
+      }
+    }
+  }
+}

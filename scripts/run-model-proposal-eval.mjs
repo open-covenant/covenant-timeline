@@ -26,6 +26,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { TextDecoder, promisify } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
 import {
   TemporalModelProposalErrorV1,
   canonicalJson,
@@ -260,6 +261,7 @@ class JsonLineAdapter {
 
 export async function createModelProposalEvalValidators() {
   const ajv = new Ajv2020({ allErrors: true, strict: true });
+  addFormats(ajv);
   for (const path of [
     join(root, "schemas/v0alpha3/common.schema.json"),
     join(root, "schemas/v0alpha3/query.schema.json"),
@@ -306,7 +308,11 @@ export async function runModelProposalEval(options, dependencies = {}) {
   const runtimeDigest = await runtimeStateDigest(options.adapter);
 
   const casesPath = resolve(options.cases ?? defaultCasesPath);
-  const corpusArtifact = await loadBenchmarkCasesArtifact(casesPath);
+  const corpusArtifact = await loadBenchmarkCasesArtifact(
+    casesPath,
+    undefined,
+    { multipleEvidence: true },
+  );
   const corpus = corpusArtifact.cases;
   const selectedIds = new Set(options.caseIds);
   const availableIds = new Set(corpus.map(({ id }) => id));
@@ -324,6 +330,14 @@ export async function runModelProposalEval(options, dependencies = {}) {
   ]);
   const packageDocument = parseStrictJson(packageText, packagePath);
   const run = {
+    attemptId: options.attemptId ?? randomUUID(),
+    startedAt: options.startedAt ?? new Date().toISOString(),
+    ...(options.resultsArtifactId === undefined
+      ? {}
+      : {
+          resultsArtifactId: options.resultsArtifactId,
+          resultsPathDigest: options.resultsPathDigest,
+        }),
     config,
     configDigest: contentDigest(config),
     corpusDigest: corpusArtifact.digest,
@@ -967,6 +981,47 @@ function validateRunOptions(options) {
     throw new Error("overwrite must be a boolean");
   }
   if (
+    options.attemptId !== undefined &&
+    (typeof options.attemptId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        options.attemptId,
+      ))
+  ) {
+    throw new Error("attemptId must be a UUID v4");
+  }
+  if (
+    options.startedAt !== undefined &&
+    (typeof options.startedAt !== "string" ||
+      !Number.isFinite(Date.parse(options.startedAt)) ||
+      new Date(Date.parse(options.startedAt)).toISOString() !==
+        options.startedAt)
+  ) {
+    throw new Error("startedAt must be a canonical UTC timestamp");
+  }
+  const hasArtifactId = options.resultsArtifactId !== undefined;
+  const hasPathDigest = options.resultsPathDigest !== undefined;
+  if (hasArtifactId !== hasPathDigest) {
+    throw new Error(
+      "resultsArtifactId and resultsPathDigest must be provided together",
+    );
+  }
+  if (
+    hasArtifactId &&
+    (typeof options.resultsArtifactId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        options.resultsArtifactId,
+      ))
+  ) {
+    throw new Error("resultsArtifactId must be a UUID v4");
+  }
+  if (
+    hasPathDigest &&
+    (typeof options.resultsPathDigest !== "string" ||
+      !/^sha256:[0-9a-f]{64}$/u.test(options.resultsPathDigest))
+  ) {
+    throw new Error("resultsPathDigest must be a SHA-256 digest");
+  }
+  if (
     options.cases !== undefined &&
     (typeof options.cases !== "string" || options.cases.length === 0)
   ) {
@@ -980,18 +1035,28 @@ function assertBoundedOption(value, label, maximum) {
   }
 }
 
-async function runtimeStateDigest(adapter) {
-  const distRoot = join(root, "packages/prototype/dist");
+export async function runtimeStateDigest(
+  adapter,
+  { repositoryRoot = root, nodeExecutable = process.execPath } = {},
+) {
+  const canonicalAdapter = canonicalAdapterArgv(adapter, { nodeExecutable });
+  const adapterIdentity = runtimeAdapterIdentity(canonicalAdapter, {
+    repositoryRoot,
+    nodeExecutable,
+  });
+  const distRoot = join(repositoryRoot, "packages/prototype/dist");
   const distFiles = await runtimeJavaScriptFiles(distRoot);
-  const scriptFiles = await runtimeJavaScriptFiles(join(root, "scripts"));
+  const scriptFiles = await runtimeJavaScriptFiles(
+    join(repositoryRoot, "scripts"),
+  );
   const adapterFiles = [];
-  const command = basename(adapter[0]);
+  const command = basename(canonicalAdapter[0]);
   const interpreterCommand =
-    adapter[0] === process.execPath ||
-    command === basename(process.execPath) ||
+    canonicalAdapter[0] === nodeExecutable ||
+    command === basename(nodeExecutable) ||
     /^(?:bun|deno|node|nodejs|python(?:3(?:\.\d+)*)?)$/u.test(command);
   const entrypoint = interpreterCommand ? 1 : 0;
-  const value = adapter[entrypoint];
+  const value = canonicalAdapter[entrypoint];
 
   if (
     value !== undefined &&
@@ -1012,7 +1077,7 @@ async function runtimeStateDigest(adapter) {
   }
 
   return contentDigest({
-    adapterArgv: adapter,
+    adapterArgv: adapterIdentity,
     adapter: adapterFiles,
     dist: await Promise.all(
       distFiles.map(async (path) => ({
@@ -1022,10 +1087,47 @@ async function runtimeStateDigest(adapter) {
     ),
     scripts: await Promise.all(
       scriptFiles.map(async (path) => ({
-        path: relative(root, path).split(sep).join("/"),
+        path: relative(repositoryRoot, path).split(sep).join("/"),
         digest: await digestFile(path),
       })),
     ),
+  });
+}
+
+export function canonicalAdapterArgv(
+  adapter,
+  { nodeExecutable = process.execPath } = {},
+) {
+  const canonical = [...adapter];
+  const command = basename(canonical[0]);
+  if (
+    canonical[0] === nodeExecutable ||
+    command === basename(nodeExecutable) ||
+    command === "node" ||
+    command === "nodejs"
+  ) {
+    canonical[0] = nodeExecutable;
+    if (canonical[1] !== undefined && !canonical[1].startsWith("-")) {
+      canonical[1] = resolve(canonical[1]);
+    }
+  }
+  return canonical;
+}
+
+function runtimeAdapterIdentity(canonical, { repositoryRoot, nodeExecutable }) {
+  return canonical.map((value, position) => {
+    if (position === 0 && value === nodeExecutable) return "@node";
+    if (!isAbsolute(value)) return value;
+    const fromRoot = relative(repositoryRoot, value);
+    if (
+      fromRoot === "" ||
+      fromRoot === ".." ||
+      fromRoot.startsWith(`..${sep}`) ||
+      isAbsolute(fromRoot)
+    ) {
+      return value;
+    }
+    return `@repository/${fromRoot.split(sep).join("/")}`;
   });
 }
 
@@ -1047,7 +1149,7 @@ async function runtimeJavaScriptFiles(directory) {
   return files;
 }
 
-async function readSourceState() {
+export async function readSourceState() {
   try {
     const [{ stdout: revision }, { stdout: status }, { stdout: files }] =
       await Promise.all([
@@ -1137,6 +1239,7 @@ function parseArguments(argv) {
   const flags = argv.slice(0, separator);
   const options = {
     adapter: argv.slice(separator + 1),
+    attemptId: undefined,
     caseIds: [],
     cases: defaultCasesPath,
     config: null,
@@ -1158,6 +1261,9 @@ function parseArguments(argv) {
     switch (flag) {
       case "--case":
         options.caseIds.push(value);
+        break;
+      case "--attempt-id":
+        options.attemptId = value;
         break;
       case "--cases":
         options.cases = value;

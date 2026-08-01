@@ -1,0 +1,2 @@
+Covenant readiness evidence for tagged commit 94e7af53c2224aa40762c2061ac96cab34950b71 was generated at 1779957705698 Unix milliseconds.
+Source: https://raw.githubusercontent.com/open-covenant/covenant/3cdd45780fceaff8b6c786368922cfed8520a7fe/docs/releases/v0.1.0-alpha.1/timeline/evidence/readiness-recorded.json field generatedAt.

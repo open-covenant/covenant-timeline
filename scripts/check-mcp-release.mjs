@@ -6,6 +6,8 @@ const manifest = JSON.parse(
 );
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const workflow = await readFile(".github/workflows/release-mcp.yml", "utf8");
+const readme = await readFile("README.md", "utf8");
+const gettingStarted = await readFile("docs/getting-started.md", "utf8");
 const errors = [];
 const workflowConfig = parseWorkflow(workflow, errors);
 const jobs = record(workflowConfig.jobs);
@@ -48,6 +50,23 @@ if (tag && !releaseHeading.test(changelog)) {
 if (tag && tag !== expectedTag) {
   errors.push(`tag ${tag} does not match ${expectedTag}`);
 }
+if (
+  tag &&
+  (!readme.includes(
+    `npm install --save-exact @covenant-org/timeline-mcp@${manifest.version}`,
+  ) ||
+    readme.includes(
+      "package is a source release candidate, not yet a published",
+    ) ||
+    !gettingStarted.includes(
+      `npm install --save-exact @covenant-org/timeline-mcp@${manifest.version}`,
+    ) ||
+    gettingStarted.includes("not yet available from npm"))
+) {
+  errors.push(
+    "tagged MCP release must update immutable onboarding copy from candidate to published",
+  );
+}
 for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
   const exact =
     /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/.test(version) ||
@@ -58,7 +77,7 @@ for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
 }
 if (
   manifest.dependencies?.["@covenant-org/timeline"] !==
-  "workspace:0.0.0-alpha.2"
+  "workspace:0.0.0-alpha.3"
 ) {
   errors.push("MCP package must pin the reviewed Timeline alpha");
 }

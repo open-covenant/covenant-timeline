@@ -169,6 +169,21 @@
         "arch"
       ],
       "properties": {
+        "attemptId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "resultsArtifactId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "resultsPathDigest": {
+          "$ref": "https://covenant-timeline.org/schemas/v0alpha3/common.schema.json#/$defs/digest"
+        },
         "config": {
           "$ref": "#/$defs/runConfig"
         },
@@ -231,6 +246,10 @@
         "arch": {
           "$ref": "#/$defs/nonEmptyString"
         }
+      },
+      "dependentRequired": {
+        "resultsArtifactId": ["attemptId", "startedAt", "resultsPathDigest"],
+        "resultsPathDigest": ["attemptId", "startedAt", "resultsArtifactId"]
       }
     },
     "usage": {

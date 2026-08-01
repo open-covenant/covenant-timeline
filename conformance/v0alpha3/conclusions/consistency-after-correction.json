@@ -1,0 +1,23 @@
+{
+  "schema": "covenant.timeline.conclusion.v0alpha3",
+  "queryId": "query.consistency.latest",
+  "result": {
+    "type": "context.consistency",
+    "status": "consistent"
+  },
+  "receipt": {
+    "reasoner": "covenant.timeline.stn.v0alpha1",
+    "stateDigest": "sha256:c924b3ab6826570bab33a518c610d131e69694c24fc7b97f2ebb9803bfec9802",
+    "queryDigest": "sha256:0529bcd1918f6649c2d693a56af8355125036a3622745345a1108e31c3c6677a",
+    "semanticResultDigest": "sha256:5056606414ce63fcb2fdd0e30c7a722a842a1816e11b667a03eff4b9be6e6a1c",
+    "proof": {
+      "kind": "schedule",
+      "coordinates": {
+        "deploy-end": 90600,
+        "deploy-start": 90000,
+        "review-start": 86400,
+        "work-start": 0
+      }
+    }
+  }
+}

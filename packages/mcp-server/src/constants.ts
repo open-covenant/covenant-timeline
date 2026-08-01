@@ -5,7 +5,7 @@ import type {
 
 export const MCP_SERVER_NAME = "covenant-timeline";
 export const MCP_SERVER_VERSION = "0.0.0-alpha.1";
-export const TIMELINE_PACKAGE_VERSION = "0.0.0-alpha.2";
+export const TIMELINE_PACKAGE_VERSION = "0.0.0-alpha.3";
 export const TIMELINE_REASONER = "covenant.timeline.stn.v0alpha1";
 
 export const DEFAULT_MAX_RUN_BYTES = 4 * 1024 * 1024;

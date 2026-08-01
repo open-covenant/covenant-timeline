@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 
-import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { link, open, readFile, realpath, rm } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
@@ -71,7 +80,9 @@ export async function scoreModelProposalEval({
 }) {
   const validators = await createValidators();
   const [corpusArtifact, resultsArtifact] = await Promise.all([
-    loadBenchmarkCasesArtifact(casesPath),
+    loadBenchmarkCasesArtifact(casesPath, undefined, {
+      multipleEvidence: true,
+    }),
     readJsonLinesArtifact(resultsPath),
   ]);
   const cases = corpusArtifact.cases;
@@ -125,6 +136,15 @@ export async function scoreModelProposalEval({
       error: results.filter(({ status }) => status === "error").length,
     },
     metrics: metricsFor(observations),
+    repeatMetrics: Array.from(
+      { length: run.selection.repeats },
+      (_, repeat) => ({
+        repeat,
+        metrics: metricsFor(
+          observations.filter((observation) => observation.repeat === repeat),
+        ),
+      }),
+    ),
     families: Object.fromEntries(
       selectedFamilies.map((family) => [
         family,
@@ -440,14 +460,15 @@ function replayResults({ records, selectedCases, repeats, prompt, run }) {
               });
             }
           }
-          observations.push(
-            unusableObservation({
+          observations.push({
+            ...unusableObservation({
               results: entries,
               family: testCase.family,
               testCase,
               cut,
             }),
-          );
+            repeat,
+          });
           continuityAvailable = false;
           continue;
         }
@@ -473,6 +494,7 @@ function replayResults({ records, selectedCases, repeats, prompt, run }) {
           result,
           resourceResults: [result],
           family: testCase.family,
+          repeat,
           ...observationMetrics({
             result,
             cut,
@@ -1322,13 +1344,14 @@ function requireNull(value, fields, label) {
 }
 
 function parseArguments(argv) {
-  const options = { cases: defaultCasesPath, results: null };
+  const options = { cases: defaultCasesPath, output: null, results: null };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if (value === undefined) throw new Error(`${flag} requires a value`);
     index += 1;
     if (flag === "--cases") options.cases = value;
+    else if (flag === "--output") options.output = value;
     else if (flag === "--results") options.results = value;
     else throw new Error(`unknown option ${flag}`);
   }
@@ -1337,10 +1360,45 @@ function parseArguments(argv) {
 }
 
 async function main() {
-  const score = await scoreModelProposalEval(
-    parseArguments(process.argv.slice(2)),
+  const options = parseArguments(process.argv.slice(2));
+  const score = await scoreModelProposalEval(options);
+  if (options.output) {
+    await writeScore(options.output, score);
+  } else {
+    process.stdout.write(`${canonicalJson(score)}\n`);
+  }
+}
+
+async function writeScore(path, score) {
+  const target = resolve(path);
+  const [checkout, parent] = await Promise.all([
+    realpath(root),
+    realpath(dirname(target)),
+  ]);
+  const resolvedTarget = join(parent, basename(target));
+  const fromCheckout = relative(checkout, resolvedTarget);
+  if (
+    fromCheckout === "" ||
+    (!fromCheckout.startsWith(`..${sep}`) && !isAbsolute(fromCheckout))
+  ) {
+    throw new Error("score output must be outside the repository checkout");
+  }
+  const temporary = join(
+    dirname(resolvedTarget),
+    `.${basename(resolvedTarget)}.${randomUUID()}.partial`,
   );
-  process.stdout.write(`${canonicalJson(score)}\n`);
+  const file = await open(temporary, "wx", 0o600);
+  try {
+    await file.writeFile(`${canonicalJson(score)}\n`, "utf8");
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  try {
+    await link(temporary, resolvedTarget);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
 if (

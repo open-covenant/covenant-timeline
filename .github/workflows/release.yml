@@ -57,6 +57,7 @@ jobs:
           if [[ "$version" == *-* ]]; then
             dist_tag="next"
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "dist-tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       - id: artifact
@@ -110,7 +111,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: >-
-          npm publish "${{ steps.artifact.outputs.archive }}"
-          --access public
-          --provenance
-          --tag "${{ steps.metadata.outputs.dist-tag }}"
+          node scripts/publish-npm-package.mjs
+          "${{ steps.artifact.outputs.archive }}"
+          "@covenant-org/timeline"
+          "${{ steps.metadata.outputs.version }}"
+          "${{ steps.metadata.outputs.dist-tag }}"

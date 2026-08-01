@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after } from "node:test";
@@ -29,6 +29,10 @@ const promptPath = join(
   "benchmarks/model-proposal-boundary/v1/prompts/proposal.md",
 );
 const scorerPath = join(root, "scripts/score-model-proposal-eval.mjs");
+const scoreSchemaPath = join(
+  root,
+  "benchmarks/model-proposal-boundary/v1/score.schema.json",
+);
 const temporaryDirectories = [];
 
 after(async () => {
@@ -37,6 +41,11 @@ after(async () => {
       rm(directory, { recursive: true, force: true }),
     ),
   );
+});
+
+test("score schema requires per-repeat metrics", async () => {
+  const schema = JSON.parse(await readFile(scoreSchemaPath, "utf8"));
+  assert.ok(schema.required.includes("repeatMetrics"));
 });
 
 test("scores an exact run and emits the same canonical artifact from the CLI", async () => {
@@ -74,6 +83,12 @@ test("scores an exact run and emits the same canonical artifact from the CLI", a
   assert.deepEqual(score.metrics.answerExactRate, rate(3, 3));
   assert.deepEqual(score.metrics.proofVerificationRate, rate(3, 3));
   assert.deepEqual(score.metrics.endToEndExactRate, rate(3, 3));
+  assert.equal(score.repeatMetrics.length, 1);
+  assert.equal(score.repeatMetrics[0].repeat, 0);
+  assert.deepEqual(
+    score.repeatMetrics[0].metrics.endToEndExactRate,
+    rate(3, 3),
+  );
   assert.deepEqual(score.metrics.latencyMs, {
     count: 3,
     mean: 20,
@@ -91,6 +106,61 @@ test("scores an exact run and emits the same canonical artifact from the CLI", a
   ]);
   assert.equal(stderr, "");
   assert.equal(stdout, `${canonicalJson(score)}\n`);
+
+  const scorePath = join(dirname(resultsPath), "score.json");
+  const written = await execFileAsync(process.execPath, [
+    scorerPath,
+    "--results",
+    resultsPath,
+    "--cases",
+    casesPath,
+    "--output",
+    scorePath,
+  ]);
+  assert.equal(written.stdout, "");
+  assert.equal(written.stderr, "");
+  assert.equal(await readFile(scorePath, "utf8"), `${canonicalJson(score)}\n`);
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      scorerPath,
+      "--results",
+      resultsPath,
+      "--cases",
+      casesPath,
+      "--output",
+      scorePath,
+    ]),
+    /EEXIST/u,
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      scorerPath,
+      "--results",
+      resultsPath,
+      "--cases",
+      casesPath,
+      "--output",
+      join(root, "forbidden-score.json"),
+    ]),
+    /outside the repository/u,
+  );
+});
+
+test("rescoring is independent of the result artifact's current path", async () => {
+  const fixture = await createExactRun();
+  for (const result of fixture.results) {
+    result.run.resultsArtifactId = "00000000-0000-4000-8000-000000000101";
+    result.run.resultsPathDigest = `sha256:${"9".repeat(64)}`;
+  }
+  const original = await writeResults(fixture.results);
+  const copied = join(dirname(original), "copied-results.jsonl");
+  await copyFile(original, copied);
+
+  const [originalScore, copiedScore] = await Promise.all([
+    scoreModelProposalEval({ results: original }),
+    scoreModelProposalEval({ results: copied }),
+  ]);
+  assert.deepEqual(copiedScore, originalScore);
 });
 
 test("keeps failed observations in every downstream denominator", async () => {
@@ -346,6 +416,8 @@ async function createExactRun() {
     },
   };
   const run = {
+    attemptId: "00000000-0000-4000-8000-000000000001",
+    startedAt: "2026-08-01T00:00:00.000Z",
     config,
     configDigest: contentDigest(config),
     corpusDigest: await digestFile(casesPath),

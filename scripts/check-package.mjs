@@ -1,5 +1,6 @@
 import {
   access,
+  copyFile,
   mkdtemp,
   readFile,
   readdir,
@@ -64,11 +65,10 @@ try {
     ].map((file) => access(join(installed, file))),
   );
 
-  const version = run(
-    process.execPath,
-    [join(installed, "dist/cli.js"), "--version"],
-    { cwd: temporaryDirectory },
-  ).trim();
+  const installedCli = join(installed, "dist/cli.js");
+  const version = run(process.execPath, [installedCli, "--version"], {
+    cwd: temporaryDirectory,
+  }).trim();
   if (version !== packageJson.version) {
     throw new Error(
       `installed CLI version ${version} does not match ${packageJson.version}`,
@@ -107,8 +107,75 @@ try {
   ) {
     throw new Error(`installed package API smoke changed: ${smoke}`);
   }
+
+  await copyFile(
+    join(root, "scripts/core-installed-smoke.mjs"),
+    join(temporaryDirectory, "proposal-smoke.mjs"),
+  );
+  const proposalSmoke = run(
+    process.execPath,
+    [join(temporaryDirectory, "proposal-smoke.mjs")],
+    { cwd: temporaryDirectory },
+  ).trim();
+  const proposalResult = JSON.parse(proposalSmoke);
+  if (
+    proposalResult.candidateVerified !== true ||
+    proposalResult.events !== 2 ||
+    proposalResult.minimum !== 100 ||
+    proposalResult.maximum !== 100 ||
+    proposalResult.proof !== true ||
+    proposalResult.provenanceBound !== true ||
+    proposalResult.sourceTextAbsent !== true
+  ) {
+    throw new Error(
+      `installed package proposal smoke changed: ${proposalSmoke}`,
+    );
+  }
+
+  const verificationFiles = {
+    run: "installed-run.json",
+    query: "installed-query.json",
+    conclusion: "installed-conclusion.json",
+  };
+  await Promise.all([
+    copyFile(
+      join(root, "examples/correction-replay/run.json"),
+      join(temporaryDirectory, verificationFiles.run),
+    ),
+    copyFile(
+      join(root, "examples/correction-replay/queries/after.json"),
+      join(temporaryDirectory, verificationFiles.query),
+    ),
+    copyFile(
+      join(root, "examples/correction-replay/conclusions/after.json"),
+      join(temporaryDirectory, verificationFiles.conclusion),
+    ),
+  ]);
+  const verification = JSON.parse(
+    run(
+      process.execPath,
+      [
+        installedCli,
+        "verify-conclusion",
+        verificationFiles.run,
+        verificationFiles.query,
+        verificationFiles.conclusion,
+        "--json",
+      ],
+      { cwd: temporaryDirectory },
+    ).trim(),
+  );
+  if (
+    verification.ok !== true ||
+    verification.queryId !== "query.review-minus-deploy" ||
+    verification.proof !== "bounds"
+  ) {
+    throw new Error(
+      `installed conclusion verification changed: ${JSON.stringify(verification)}`,
+    );
+  }
   console.log(
-    `package check passed (${archives[0]}, installed CLI, checkpoint, temporal, and archive APIs)`,
+    `package check passed (${archives[0]}, installed CLI, stored conclusion verifier, checkpoint, temporal, proposal compiler, candidate verifier, proof, and archive APIs)`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

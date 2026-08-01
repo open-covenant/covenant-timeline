@@ -1,0 +1,2 @@
+GitHub authoritatively reports that Covenant release v0.1.0-alpha.1 at tagged commit 94e7af53c2224aa40762c2061ac96cab34950b71 was published at 1779957345000 Unix milliseconds. This replaces the provisional creation-time proxy.
+Source: https://api.github.com/repos/open-covenant/covenant/releases/tags/v0.1.0-alpha.1 field published_at.

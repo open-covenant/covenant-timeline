@@ -11,7 +11,8 @@ Choose the integration surface that matches the host:
 
 ## Connect an MCP agent
 
-Build the server from this repository:
+The MCP server's `0.0.0-alpha.1` package is a source release candidate and is
+not yet available from npm. Build the server from this repository:
 
 ```sh
 corepack enable
@@ -25,7 +26,7 @@ Configure the client with absolute paths:
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "node",
+      "command": "/absolute/path/to/node",
       "args": [
         "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
@@ -36,8 +37,10 @@ Configure the client with absolute paths:
 }
 ```
 
-The server uses local stdio, makes no network requests, and persists canonical
-append-only runs under the selected data directory. Direct writes are
+Use the absolute path reported by `node -p process.execPath`; GUI-launched MCP
+clients may not inherit the shell's `PATH`. The server uses local stdio, makes
+no network requests, and persists canonical append-only runs under the selected
+data directory. Direct writes are
 structurally valid but unauthenticated. See the
 [MCP server guide](../packages/mcp-server/README.md) for its six tools,
 portable run resource, restart semantics, and operating limits.
@@ -47,11 +50,15 @@ To exercise the complete integration before connecting an agent, run the
 restart, admits a correction, exports the full pilot artifact, and invokes an
 offline verifier in a separate process.
 
-## Install the library
+## Install the published library
 
 ```sh
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
+
+The published alpha.2 package contains the temporal kernel and v0alpha3 API. The
+source alpha.3 release candidate adds the proposal compiler and stored-
+conclusion CLI; build the repository to evaluate those candidate surfaces.
 
 ## Run a temporal query
 
@@ -64,6 +71,20 @@ npx timeline reason temporal-run.json temporal-query.json --json
 The conclusion contains canonical state and query identities, the semantic
 result, and a proof receipt. v0alpha3 remains a Draft API while RFC 0009 is
 under review.
+
+The alpha.3 source release candidate can store that conclusion and verify it
+later without asking the reasoner to produce another answer:
+
+```sh
+pnpm timeline verify-conclusion \
+  temporal-run.json \
+  temporal-query.json \
+  temporal-conclusion.json \
+  --json
+```
+
+The verifier reconstructs the projected constraint graph, checks the state,
+query, and semantic-result digests, and validates the supplied certificate.
 
 ## Use the library
 
@@ -121,6 +142,10 @@ pnpm timeline reason \
 
 See [Model interface](./model-interface.md) for the complete extraction,
 admission, reasoning, verification, and response loop.
+
+The [public claim ledger](./claim-ledger.md) records what current artifacts
+support. The [post-readiness audit](./production-audit-post-readiness.md) tracks
+the release and evidence gates that remain open.
 
 ## Checkpoint compatibility
 

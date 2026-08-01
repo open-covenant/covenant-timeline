@@ -190,14 +190,19 @@ export async function loadRunConfig(path, validator) {
   return config;
 }
 
-export async function loadBenchmarkCases(path = defaultCasesPath, validators) {
+export async function loadBenchmarkCases(
+  path = defaultCasesPath,
+  validators,
+  options,
+) {
   validators ??= await createModelEvalValidators();
-  return (await loadBenchmarkCasesArtifact(path, validators)).cases;
+  return (await loadBenchmarkCasesArtifact(path, validators, options)).cases;
 }
 
 export async function loadBenchmarkCasesArtifact(
   path = defaultCasesPath,
   validators,
+  options = {},
 ) {
   validators ??= await createModelEvalValidators();
   const artifact = await readJsonLinesArtifact(path, maxCorpusBytes);
@@ -274,7 +279,11 @@ export async function loadBenchmarkCasesArtifact(
       events: accumulatedEvents,
     });
 
-    validateEvidence(testCase.evidence, label);
+    validateEvidence(
+      testCase.evidence,
+      label,
+      options.multipleEvidence === true,
+    );
     if (!Array.isArray(testCase.cuts) || testCase.cuts.length !== 3) {
       fail(`${label}.cuts: expected exactly three cuts`);
     }
@@ -763,12 +772,23 @@ function assertResponseValid(validator, value, label, code) {
   }
 }
 
-function validateEvidence(evidence, label) {
-  if (!Array.isArray(evidence) || evidence.length !== 3) {
-    fail(`${label}.evidence: expected exactly three entries`);
+function validateEvidence(evidence, label, multipleEvidence) {
+  if (
+    !Array.isArray(evidence) ||
+    (multipleEvidence ? evidence.length < 3 : evidence.length !== 3)
+  ) {
+    fail(
+      multipleEvidence
+        ? `${label}.evidence: expected at least three entries`
+        : `${label}.evidence: expected exactly three entries`,
+    );
   }
   const ids = new Set();
-  const cuts = new Set();
+  const cuts = new Map([
+    [0, 0],
+    [1, 0],
+    [2, 0],
+  ]);
   for (const [index, entry] of evidence.entries()) {
     const entryLabel = `${label}.evidence[${index}]`;
     assertRecord(entry, entryLabel);
@@ -779,13 +799,13 @@ function validateEvidence(evidence, label) {
     if (!Number.isInteger(entry.cut) || entry.cut < 0 || entry.cut > 2) {
       fail(`${entryLabel}.cut: must be 0, 1, or 2`);
     }
-    if (entry.id !== `record-${entry.cut}`) {
+    if (!multipleEvidence && entry.id !== `record-${entry.cut}`) {
       fail(`${entryLabel}.id: must equal record-${entry.cut}`);
     }
-    if (cuts.has(entry.cut)) {
+    if (!multipleEvidence && cuts.get(entry.cut) > 0) {
       fail(`${entryLabel}.cut: duplicate cut ${entry.cut}`);
     }
-    cuts.add(entry.cut);
+    cuts.set(entry.cut, cuts.get(entry.cut) + 1);
     if (typeof entry.text !== "string" || entry.text.length === 0) {
       fail(`${entryLabel}.text: must be a non-empty string`);
     }
@@ -793,6 +813,9 @@ function validateEvidence(evidence, label) {
     if (entry.digest !== digest) {
       fail(`${entryLabel}.digest: expected ${digest}`);
     }
+  }
+  for (const [cut, count] of cuts) {
+    if (count === 0) fail(`${label}.evidence: cut ${cut} has no entry`);
   }
 }
 

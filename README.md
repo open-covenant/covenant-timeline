@@ -14,16 +14,19 @@ that another process can check.
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
-The published `0.0.0-alpha.2` package contains the temporal kernel. The model
-proposal API and benchmark are currently available from a source checkout; see
-[Integrate a language model](./docs/model-interface.md#use-the-proposal-compiler).
+The published `0.0.0-alpha.2` package contains the temporal kernel. Source now
+contains the `0.0.0-alpha.3` core and `0.0.0-alpha.1` MCP release candidates;
+neither candidate is presented as registry-available until its release checks
+complete. The model proposal API is currently available from a source checkout;
+see [Integrate a language model](./docs/model-interface.md#use-the-proposal-compiler).
 
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an MCP agent](#give-an-mcp-agent-temporal-memory) ·
 [Run a source-first agent pilot](./examples/mcp-agent-pilot) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
-[Evaluate the model boundary](./docs/model-evaluation.md)
+[Evaluate the model boundary](./docs/model-evaluation.md) ·
+[Review supported claims](./docs/claim-ledger.md)
 
 ## See a correction survive replay
 
@@ -139,7 +142,8 @@ decisions.
 ## Give an MCP agent temporal memory
 
 The local MCP server keeps typed temporal state durable across agent sessions.
-Build it once from a source checkout:
+Its `0.0.0-alpha.1` package is a source release candidate, not yet a published
+npm entry point. Build it from a source checkout:
 
 ```sh
 corepack enable
@@ -153,7 +157,7 @@ Then add the built server to an MCP client using absolute paths:
 {
   "mcpServers": {
     "covenant-timeline": {
-      "command": "node",
+      "command": "/absolute/path/to/node",
       "args": [
         "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
@@ -347,7 +351,7 @@ Before production use, review the
 The preregistered GPT-5.6 Sol evaluation completed 432 requests across three
 primary arms and a teacher-forced diagnostic. Timeline produced exact answers
 and end-to-end artifacts on 106 of 108 observations, reached 0.9574 assertion
-F1, and returned 108 independently verified proofs. It substantially
+F1, and all 108 proof receipts passed verification. It substantially
 outperformed bounded narrative memory on answer accuracy, 106/108 versus
 65/108, but did not outperform stateless full-context structured extraction,
 which scored 107/108.
@@ -362,11 +366,13 @@ The [preregistration](./benchmarks/model-interface/v1/PREREGISTRATION.md),
 are public.
 
 Development now focuses on reproducible temporal state, audit, and replay in
-real integrations rather than a model-accuracy claim. The remaining evidence
-gate is one independent long-running-agent pilot that crosses a restart,
-admits delayed or corrected evidence, and publishes a redacted run another
-process can reproduce. The
-[temporal pilot](./docs/temporal-pilot.md) defines the minimum evidence.
+real integrations rather than a model-accuracy claim. Before an engineering
+alpha post, the project still needs a live result from the frozen production
+proposal benchmark, a public maintainer-operated restart-and-correction
+artifact, and registry verification of the core and MCP packages. Independent
+operation remains the next adoption milestone. The
+[temporal pilot](./docs/temporal-pilot.md) defines the evidence required from an
+external operator.
 
 Timeline is also seeking a second implementer for the bounded RFC 0009
 conformance target in
@@ -387,6 +393,12 @@ Covenant.
 
 v0alpha3 is a Draft contract and may change between alpha releases. No second
 conforming implementation has yet been demonstrated.
+
+The source tree contains the alpha.3 core and alpha.1 MCP release candidates.
+The release below remains the latest package with a completed public release
+record. Current claim boundaries and remaining posting gates are tracked in the
+[public claim ledger](./docs/claim-ledger.md) and
+[post-readiness audit](./docs/production-audit-post-readiness.md).
 
 The
 [GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/timeline-v0.0.0-alpha.2)

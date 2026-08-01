@@ -181,3 +181,21 @@ the ledger before the first model call.
 
 `OPENAI_API_KEY` must be present only in the adapter environment. It must not
 appear in the configuration or result artifacts.
+
+## Recorded outcome
+
+Attempt 1 completed on 2026-08-01 with complete coverage and no operational
+error. The authoritative decision is `kill`.
+
+The failed checks were assertion precision, recall, and F1; projected-state,
+answer, and end-to-end exactness; acceptable-support precision, recall, and F1;
+and every repeat's assertion, end-to-end, and support stability floor. The
+complete result is retained in the
+[public release bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01).
+
+The acceptable-support oracle was later found to conflict with the prompt's
+quote-span instruction and to compare trajectory-dependent assertion handles
+against static handles. This affects interpretation of the support metric but
+does not alter the frozen decision: assertion, projected-state, answer, and
+end-to-end thresholds failed independently. The v2 interface and corpus will
+not be tuned or rerun.

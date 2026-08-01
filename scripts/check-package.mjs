@@ -11,6 +11,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {
+  assertCoreArchiveEntries,
+  parseCoreTarListings,
+} from "./core-package-contents.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageDirectory = join(root, "packages/prototype");
@@ -31,6 +35,13 @@ try {
       `expected one package archive, received ${archives.length}`,
     );
   }
+  const archive = join(temporaryDirectory, archives[0]);
+  assertCoreArchiveEntries(
+    parseCoreTarListings(
+      run("tar", ["-tzf", archive], { env: tarEnvironment() }),
+      run("tar", ["-tvzf", archive], { env: tarEnvironment() }),
+    ),
+  );
 
   await writeFile(
     join(temporaryDirectory, "package.json"),
@@ -38,13 +49,7 @@ try {
   );
   run(
     command("npm"),
-    [
-      "install",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      join(temporaryDirectory, archives[0]),
-    ],
+    ["install", "--ignore-scripts", "--no-audit", "--no-fund", archive],
     { cwd: temporaryDirectory },
   );
 
@@ -183,6 +188,10 @@ try {
 
 function command(name) {
   return process.platform === "win32" ? `${name}.cmd` : name;
+}
+
+function tarEnvironment() {
+  return { ...process.env, LANG: "C", LC_ALL: "C" };
 }
 
 function run(executable, args, options) {

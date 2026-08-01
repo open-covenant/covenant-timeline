@@ -20,7 +20,7 @@ jobs:
     environment: npm
     permissions:
       attestations: write
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +75,10 @@ jobs:
           test -n "$archive"
           test -n "$comparison"
           cmp "$archive" "$comparison"
-          sha256sum "$archive" > "$archive.sha256"
+          (
+            cd "$(dirname "$archive")"
+            sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256"
+          )
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
           echo "checksum=$archive.sha256" >> "$GITHUB_OUTPUT"
 
@@ -106,6 +109,50 @@ jobs:
         with:
           subject-path: ${{ steps.artifact.outputs.archive }}
           sbom-path: ${{ steps.sbom.outputs.path }}
+
+      - name: Retain release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ steps.artifact.outputs.archive }}"
+          checksum="${{ steps.artifact.outputs.checksum }}"
+          sbom="${{ steps.sbom.outputs.path }}"
+          version="${{ steps.metadata.outputs.version }}"
+          archive_name="$(basename "$archive")"
+          checksum_name="$(basename "$checksum")"
+          sbom_name="$(basename "$sbom")"
+          release_state="$RUNNER_TEMP/timeline-release-state.json"
+          expected_prerelease=false
+          release_flags=()
+          if [[ "$version" == *-* ]]; then
+            expected_prerelease=true
+            release_flags+=(--prerelease)
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" \
+            --json isDraft,isPrerelease,tagName,assets \
+            > "$release_state" 2>/dev/null; then
+            node scripts/check-github-release-state.mjs \
+              "$release_state" "$GITHUB_REF_NAME" "$expected_prerelease" \
+              allow-missing "$archive_name" "$checksum_name" "$sbom_name"
+            gh release upload "$GITHUB_REF_NAME" \
+              "$archive" "$checksum" "$sbom" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$archive" "$checksum" "$sbom" \
+              --verify-tag \
+              --title "@covenant-org/timeline $version" \
+              "${release_flags[@]}" \
+              --notes "Installable Covenant Timeline release."
+          fi
+          gh release view "$GITHUB_REF_NAME" \
+            --json isDraft,isPrerelease,tagName,assets \
+            > "$release_state"
+          node scripts/check-github-release-state.mjs \
+            "$release_state" "$GITHUB_REF_NAME" "$expected_prerelease" \
+            complete "$archive_name" "$checksum_name" "$sbom_name"
 
       - name: Publish to npm
         env:

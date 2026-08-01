@@ -217,6 +217,8 @@ try {
     smoke.proposal?.events !== 2 ||
     smoke.proposal?.minimum !== 100 ||
     smoke.proposal?.maximum !== 100 ||
+    smoke.proposal?.previewReadOnly !== true ||
+    smoke.proposal?.auditBound !== true ||
     smoke.proposal?.sourceTextAbsent !== true ||
     smoke.proposal?.proof !== true ||
     smoke.stderr !== ""
@@ -227,7 +229,7 @@ try {
   }
 
   console.log(
-    `MCP registry install passed (${basename(archive)}, Timeline ${timelineVersion}, restart, proposal, and proof smoke)`,
+    `MCP registry install passed (${basename(archive)}, Timeline ${timelineVersion}, restart, proposal preview/admission audit, and proof smoke)`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

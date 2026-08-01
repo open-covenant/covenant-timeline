@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   byteDigest,
+  contentDigest,
   parseRunDocumentV0Alpha3,
   verifyTemporalConclusionV0Alpha3,
 } from "@covenant-org/timeline";
@@ -17,11 +18,18 @@ const cli = fileURLToPath(
   ),
 );
 let stderr = "";
+const admission = {
+  authorityId: "operator.installed-smoke",
+  policyRef: "policy:installed-smoke/v1",
+  policyDigest: byteDigest(
+    new TextEncoder().encode("covenant timeline installed smoke admission v1"),
+  ),
+};
 
 async function connect() {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [cli, "--data-dir", dataDirectory],
+    args: [cli, "--data-dir", dataDirectory, "--role", "operator"],
     stderr: "pipe",
   });
   transport.stderr?.on("data", (chunk) => {
@@ -53,6 +61,7 @@ for (const event of fixture.events) {
     runId: fixture.contract.id,
     expectedRunDigest: runDigest,
     event,
+    admission,
   });
   runDigest = appended.timeline.runDigest;
 }
@@ -95,6 +104,7 @@ for (const event of fixture.events.slice(0, 2)) {
     runId: proposalRunId,
     expectedRunDigest: proposalTimeline.runDigest,
     event,
+    admission,
   });
   proposalTimeline = appended.timeline;
 }
@@ -103,7 +113,7 @@ const requestId = "request.proposal-smoke.v1";
 const deployQuote = "Deployment began at 200.";
 const durationQuote = "Review finished 100 seconds after deployment began.";
 const evidenceText = `${deployQuote} ${durationQuote}`;
-const applied = await call(second, "timeline_apply_model_proposal", {
+const proposalInput = {
   runId: proposalRunId,
   expectedRevision: proposalTimeline.revision,
   expectedRunDigest: proposalTimeline.runDigest,
@@ -153,13 +163,29 @@ const applied = await call(second, "timeline_apply_model_proposal", {
       toPointId: "review-finished",
     },
   ],
+};
+const previewed = await call(
+  second,
+  "timeline_preview_model_proposal",
+  proposalInput,
+);
+const previewResource = await second.readResource({
+  uri: `timeline://run/${encodeURIComponent(proposalRunId)}`,
+});
+const admitted = await call(second, "timeline_admit_model_proposal", {
+  ...proposalInput,
+  candidateDigest: previewed.candidateDigest,
+  admission,
 });
 const proposalReasoned = await call(second, "timeline_reason", {
   runId: proposalRunId,
-  query: applied.query,
+  query: admitted.query,
 });
 const proposalResource = await second.readResource({
   uri: `timeline://run/${encodeURIComponent(proposalRunId)}`,
+});
+const proposalAuditResource = await second.readResource({
+  uri: `timeline://audit/${encodeURIComponent(proposalRunId)}`,
 });
 await second.close();
 
@@ -173,6 +199,16 @@ if (!proposalContent || !("text" in proposalContent)) {
   throw new Error("proposal run resource did not contain JSON text");
 }
 const proposalRun = parseRunDocumentV0Alpha3(JSON.parse(proposalContent.text));
+const previewContent = previewResource.contents[0];
+if (!previewContent || !("text" in previewContent)) {
+  throw new Error("preview run resource did not contain JSON text");
+}
+const previewRun = parseRunDocumentV0Alpha3(JSON.parse(previewContent.text));
+const proposalAuditContent = proposalAuditResource.contents[0];
+if (!proposalAuditContent || !("text" in proposalAuditContent)) {
+  throw new Error("proposal audit resource did not contain JSON text");
+}
+const proposalAudit = JSON.parse(proposalAuditContent.text);
 const beforeResult = before.conclusion.result;
 const afterResult = after.conclusion.result;
 const proposalResult = proposalReasoned.conclusion.result;
@@ -186,22 +222,22 @@ if (
   throw new Error("installed MCP state did not survive restart");
 }
 
-const serializedProposal = JSON.stringify(applied);
+const serializedProposal = JSON.stringify({ previewed, admitted });
 const serializedProposalRun = JSON.stringify(proposalRun);
 const serializedProposalReasoning = JSON.stringify(proposalReasoned);
-const candidateEventIds = applied.events.map(({ id }) => id);
-const provenanceEventIds = applied.provenance.map(
+const candidateEventIds = admitted.events.map(({ id }) => id);
+const provenanceEventIds = admitted.provenance.map(
   ({ candidateEventId }) => candidateEventId,
 );
 const evidenceRef = byteDigest(new TextEncoder().encode(evidenceText));
 const supportBindings = [deployQuote, durationQuote].every((quote, index) => {
-  const support = applied.provenance[index]?.supports?.[0];
+  const support = admitted.provenance[index]?.supports?.[0];
   const start = Buffer.byteLength(
     evidenceText.slice(0, evidenceText.indexOf(quote)),
     "utf8",
   );
   return (
-    applied.provenance[index]?.supports?.length === 1 &&
+    admitted.provenance[index]?.supports?.length === 1 &&
     support?.evidenceId === "record.proposal-smoke" &&
     support.evidenceRef === evidenceRef &&
     support.quoteDigest === byteDigest(new TextEncoder().encode(quote)) &&
@@ -210,18 +246,44 @@ const supportBindings = [deployQuote, durationQuote].every((quote, index) => {
   );
 });
 const proposalAtomic =
-  applied.applied === true &&
-  applied.baseRevision === 2 &&
-  applied.timeline.revision === 4 &&
-  applied.events.length === 2 &&
-  applied.events[0]?.sequence === 2 &&
-  applied.events[0]?.type === "coordinate.asserted" &&
-  applied.events[1]?.sequence === 3 &&
-  applied.events[1]?.type === "constraint.asserted" &&
-  applied.provenance.length === 2 &&
+  admitted.admissionStatus === "admitted" &&
+  admitted.baseRevision === 2 &&
+  admitted.timeline.revision === 4 &&
+  admitted.events.length === 2 &&
+  admitted.events[0]?.sequence === 2 &&
+  admitted.events[0]?.type === "coordinate.asserted" &&
+  admitted.events[1]?.sequence === 3 &&
+  admitted.events[1]?.type === "constraint.asserted" &&
+  admitted.provenance.length === 2 &&
   JSON.stringify(candidateEventIds) === JSON.stringify(provenanceEventIds) &&
   supportBindings &&
   proposalRun.events.length === 4;
+const proposalPreviewReadOnly =
+  previewed.timeline.revision === 2 &&
+  previewed.timeline.runDigest === proposalTimeline.runDigest &&
+  previewed.events.length === 2 &&
+  previewed.persistence === "not-admitted" &&
+  previewed.verified === true &&
+  previewRun.events.length === 2 &&
+  contentDigest({
+    schema: "covenant.timeline.model-proposal-candidate.v1",
+    requestId: previewed.requestId,
+    baseRunDigest: previewed.baseRunDigest,
+    proposalDigest: previewed.proposalDigest,
+    candidateEvents: previewed.events,
+    candidateQuery: previewed.query,
+    provenance: previewed.provenance,
+  }) === previewed.candidateDigest;
+const proposalAuditBound =
+  proposalAudit.schema === "covenant.timeline.mcp-run.v0alpha2" &&
+  contentDigest(proposalAudit) === admitted.timeline.auditDigest &&
+  proposalAudit.runDigest === admitted.timeline.runDigest &&
+  proposalAudit.admissions.length === 3 &&
+  proposalAudit.admissions[2]?.kind === "model-proposal" &&
+  proposalAudit.admissions[2]?.candidateDigest === previewed.candidateDigest &&
+  proposalAudit.admissions[2]?.authorityId === admission.authorityId &&
+  proposalAudit.admissions[2]?.policyRef === admission.policyRef &&
+  proposalAudit.admissions[2]?.policyDigest === admission.policyDigest;
 const proposalSourceTextAbsent =
   !serializedProposal.includes(evidenceText) &&
   !serializedProposal.includes(deployQuote) &&
@@ -252,7 +314,8 @@ process.stdout.write(
       verifyTemporalConclusionV0Alpha3(run, after.query, after.conclusion),
     proposal: {
       atomic: proposalAtomic,
-      events: applied.events.length,
+      auditBound: proposalAuditBound,
+      events: admitted.events.length,
       minimum:
         proposalResult.type === "difference.bounds"
           ? proposalResult.minimum
@@ -262,6 +325,7 @@ process.stdout.write(
           ? proposalResult.maximum
           : null,
       sourceTextAbsent: proposalSourceTextAbsent,
+      previewReadOnly: proposalPreviewReadOnly,
       proof: proposalProof,
     },
     stderr,

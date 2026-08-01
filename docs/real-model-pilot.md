@@ -1,6 +1,6 @@
-# Maintainer-operated real-model MCP pilot
+# Run a maintainer-operated real-model MCP pilot
 
-This pilot combines the repository's model-proposal boundary, local MCP store,
+This procedure combines the repository's model-proposal boundary, local MCP store,
 restart recovery, correction semantics, and credential-free proof verification
 in one historical staged evidence-disclosure replay over public Covenant release
 evidence.
@@ -11,15 +11,21 @@ structured-extraction baseline.
 
 It is not a live observation of evidence arriving over time. The maintainer
 deliberately discloses already-public historical fields in two phases to exercise
-the restart and correction path. Model execution and process restart provenance
-are maintainer-attested; the artifact does not cryptographically prove either.
+the restart and correction path. Model execution, external evidence
+authenticity, and process restart provenance are maintainer-attested. The
+driver records each MCP child PID, a fresh launch ID, and the exact executable
+and server-script digests, but those observations are not cryptographic process
+attestation.
 
 ## Scenario
 
 The first process records GitHub's release creation time as an explicitly
 provisional publication proxy and the readiness timestamp for the exact tagged
 commit. A model proposes both coordinates and the query. The host checks the
-proposal against the normalized integer values before admission.
+proposal against the normalized integer values and exact supporting quotes
+before admission. The proposal is untrusted: the MCP server first returns a
+verified, non-mutating preview, and the host admits the exact candidate only
+after the scenario validator accepts it.
 
 The process exits. A second host invocation starts a new MCP server and a new
 one-shot model adapter, recovers the exact run prefix, supplies GitHub's later
@@ -78,13 +84,32 @@ before importing the pilot. It rechecks that identity after loading the phase
 implementation. Start, resume, export, and retained operator verification
 require those bytes and resolution edges to remain unchanged.
 
+Each phase writes and synchronizes an exclusive attempt-ledger entry before it
+invokes the model adapter. A provider response that later fails validation is a
+failed formal attempt, not a retry opportunity. A handled failure adds a
+terminal failure entry. Every ledger sequence has one exclusive filesystem slot,
+so a recovering process that completes a phase and the original process's
+failure path cannot record contradictory outcomes. A crash leaves the provider
+reservation in place.
+If the validated phase-result bundle was already synchronized, `resume`
+revalidates it and records the missing completion without invoking the provider
+again. Without that complete bundle, the phase cannot continue and a later run
+must use a new state directory. Preserve every failed or interrupted state
+directory as part of the attempt record.
+
 `resume` exports the artifact and starts a third process. The credential-free
 verifier performs no network requests. It reconstructs both complete model
 requests from the redacted records and retained public evidence, regenerates
-both request-bound schemas, recompiles and verifies both candidates, checks the
-MCP append prefixes, reproduces every conclusion, and verifies every proof
-receipt. It also validates the recorded runtime manifest and reports whether
-the verifier's local runtime is an exact match.
+both request-bound schemas, recompiles and verifies both candidates, checks
+preview/admit equality and MCP append prefixes, validates every admission
+record in the exported v0alpha2 audit envelope, reproduces every conclusion,
+and verifies every proof receipt. It also validates the recorded runtime
+manifest and reports whether the verifier's local runtime is an exact match.
+Artifact publication uses an exclusive attempt-bound claim and an atomically
+installed staging tree. If the process exits after installation but before the
+parent directory is synchronized, a later `resume` accepts the existing output
+only after the credential-free verifier proves that it belongs to the same
+completed attempt.
 
 Re-run it directly:
 
@@ -107,9 +132,16 @@ expected tagged commit and integer coordinate, and the correction must
 supersede the active provisional publication assertion. Any mismatch rejects
 the complete proposal before the MCP write.
 
-This narrow semantic check is specific to the release scenario. The generic
-MCP server still provides structural validation and does not authenticate
-GitHub, establish source truth, or decide which model claims deserve authority.
+Both MCP processes run in the explicit `operator` role. One canonical
+maintainer-operated policy covers the host-defined declarations and both model
+proposal batches. Every write records the neutral authority identifier, stable
+policy reference, and SHA-256 digest of the exact policy bytes. Previewing a
+proposal never writes state. Admission recompiles the same inputs, requires the
+previewed candidate digest, and records the proposal and candidate digests.
+
+This narrow semantic check and admission decision are specific to the release
+scenario. The generic MCP server does not authenticate GitHub, establish source
+truth, or decide which model claims deserve authority.
 
 ## Artifact
 
@@ -118,6 +150,9 @@ The export contains:
 ```text
 artifact.json
 README.md
+admission-policy.json
+attempt-ledger.json
+audit.json
 pilot-input.json
 run.json
 prompt.md
@@ -125,6 +160,7 @@ model-config.json
 evidence-manifest.json
 evidence/
 model-calls/
+phase-results/
 queries/
 conclusions/
 verification.json
@@ -132,11 +168,29 @@ content-manifest.json
 ```
 
 Each model-call record retains the exact model configuration, complete output
-schema, proposal, exact adapter response text, usage, request and response digests,
-catalog mappings, compiled MCP result, and a request view in which evidence
-text and prompt text are replaced by digests and byte lengths. The separate
-verifier restores those bytes from the artifact before checking the original
-request digest.
+schema, untrusted proposal, exact adapter response text, usage, request and
+response digests, catalog mappings, verified preview, host admission result,
+and a request view in which evidence text and prompt text are replaced by
+digests and byte lengths. The separate verifier restores those bytes from the
+artifact before checking the original request digest.
+
+`admission-policy.json` contains the exact canonical policy bytes bound to each
+write. `audit.json` is the canonical `timeline://audit/{runId}` envelope. It
+binds the portable run to the complete ordered admission record, including
+every run prefix, event batch, authority, policy, candidate, proposal, and
+admission-record digest.
+
+`attempt-ledger.json` contains the five-record successful trajectory: attempt
+opened, initial provider invocation reserved, initial phase completed,
+correction provider invocation reserved, and correction phase completed. Every
+record binds the previous digest. The opening record binds the input, model
+configuration, admission policy, source revision, and runtime. Each phase binds
+the host invocation, observed MCP child invocation, request, response,
+proposal, candidate, synchronized phase-result bundle, and resulting run
+prefix. `phase-results/` retains the two validated bundles used to recover and
+export the successful attempt. Failed attempts and interrupted attempts without
+a complete bundle remain in the operator state directory and cannot be
+exported as successful artifacts.
 
 The top-level runtime identity records the executable and Node runtime fields,
 the exact compiled and script bytes, content digests for every resolved runtime
@@ -163,7 +217,7 @@ reproduces a retained verification report when one is present.
 The public evidence is normalized by the maintainer host. The artifact proves
 what follows from those admitted records and that the retained proposal bytes
 compile to the admitted events. The maintainer attests that those proposal bytes
-came from the recorded model calls and that the phases crossed real process
-restarts. The artifact does not cryptographically prove those facts,
-independently authenticate GitHub's observations, or qualify as an external
-operator pilot.
+came from the recorded model calls. Distinct host and driver-observed MCP child
+identities support the process-restart record, but do not cryptographically
+prove process execution. The artifact does not independently authenticate
+GitHub's observations or qualify as an external operator pilot.

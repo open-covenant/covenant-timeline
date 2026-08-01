@@ -35,6 +35,17 @@ test("accepts the recorded alpha.2 release", () => {
   assert.deepEqual(validateLocalReleaseSource(manifest), []);
 });
 
+test("bounds the recorded core archive size", () => {
+  const candidate = structuredClone(manifest);
+  candidate.registry.unpackedSize = 8 * 1024 * 1024 + 1;
+
+  assert(
+    validateReleaseEvidenceDocument(candidate, fileName).some((error) =>
+      error.includes("registry/unpackedSize must be <= 8388608"),
+    ),
+  );
+});
+
 test("rejects workflow, artifact, and attestation substitution", () => {
   const candidate = structuredClone(manifest);
   candidate.workflow.url =
@@ -208,6 +219,22 @@ test("binds workflow attempt, artifact ID, checksum, and SBOM identity", () => {
         `${"a".repeat(64)}  /build/${tarball.name}\n`,
       ),
     /checksum sidecar digest/,
+  );
+  const portableManifest = structuredClone(manifest);
+  portableManifest.release.version = "0.0.0-alpha.3";
+  assert.doesNotThrow(() =>
+    verifyChecksumSidecar(
+      portableManifest,
+      `${manifest.artifact.sha256}  ${tarball.name}\n`,
+    ),
+  );
+  assert.throws(
+    () =>
+      verifyChecksumSidecar(
+        portableManifest,
+        `${manifest.artifact.sha256}  /build/${tarball.name}\n`,
+      ),
+    /checksum sidecar subject/,
   );
 
   const sbom = {

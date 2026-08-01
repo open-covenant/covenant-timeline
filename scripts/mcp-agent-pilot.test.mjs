@@ -24,7 +24,7 @@ const driver = join(root, "scripts/mcp-agent-pilot.mjs");
 const verifier = join(root, "scripts/mcp-agent-pilot-verify.mjs");
 const fixture = join(root, "examples/mcp-agent-pilot");
 
-test("exports and independently verifies a source-first pilot from paths with spaces", async () => {
+test("exports and independently verifies a local MCP pilot from paths with spaces", async () => {
   const { temporary, working, input, output, report } = await generateArtifact(
     "timeline pilot test ",
   );

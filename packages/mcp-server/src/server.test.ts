@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   byteDigest,
   canonicalJson,
+  contentDigest,
   parseRunDocumentV0Alpha3,
   verifyTemporalConclusionV0Alpha3,
   type JsonValue,
@@ -14,11 +15,12 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { correctionEvents, releaseContract } from "./__tests__/fixtures.js";
 import {
-  applyModelProposalInputSchema,
-  applyModelProposalOutputSchema,
+  admitModelProposalOutputSchema,
   appendEventOutputSchema,
   createRunOutputSchema,
   listRunsOutputSchema,
+  previewModelProposalInputSchema,
+  previewModelProposalOutputSchema,
   projectStateOutputSchema,
   reasonOutputSchema,
 } from "./schemas.js";
@@ -27,16 +29,22 @@ import {
   FileMcpRunStore,
   type McpRunStore,
 } from "./index.js";
-import { MAX_LIST_PAGE_SIZE } from "./constants.js";
+import { MAX_LIST_PAGE_SIZE, MCP_SERVER_VERSION } from "./constants.js";
 
 const toolNames = [
   "timeline_create_run",
   "timeline_list_runs",
   "timeline_append_event",
-  "timeline_apply_model_proposal",
+  "timeline_preview_model_proposal",
+  "timeline_admit_model_proposal",
   "timeline_project_state",
   "timeline_reason",
 ];
+const admission = {
+  authorityId: "operator.test",
+  policyRef: "policy:test/v1",
+  policyDigest: byteDigest(new TextEncoder().encode("test admission policy")),
+} as const;
 
 describe("Timeline MCP server", () => {
   let directory: string;
@@ -44,7 +52,7 @@ describe("Timeline MCP server", () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "timeline-mcp-server-"));
-    connection = await connect(new FileMcpRunStore(directory));
+    connection = await connect(new FileMcpRunStore(directory), "operator");
   });
 
   afterEach(async () => {
@@ -59,6 +67,47 @@ describe("Timeline MCP server", () => {
     expect(listed.tools.every(({ outputSchema }) => outputSchema)).toBe(true);
   });
 
+  test("defaults to the read-only model tool surface", async () => {
+    const model = await connect(new FileMcpRunStore(directory));
+    try {
+      const listed = await model.client.listTools();
+      expect(listed.tools.map(({ name }) => name)).toEqual([
+        "timeline_list_runs",
+        "timeline_preview_model_proposal",
+        "timeline_project_state",
+        "timeline_reason",
+      ]);
+    } finally {
+      await model.close();
+    }
+  });
+
+  test("rejects an invalid programmatic role", () => {
+    expect(() =>
+      createTimelineMcpServer(new FileMcpRunStore(directory), {
+        role: "combined" as never,
+      }),
+    ).toThrow("role must be model or operator");
+  });
+
+  test("always advertises the package version", async () => {
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    const server = createTimelineMcpServer(new FileMcpRunStore(directory), {
+      version: "9.9.9",
+    } as never);
+    const client = new Client({ name: "version-test", version: "0.0.0" });
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    expect(client.getServerVersion()).toMatchObject({
+      name: "covenant-timeline",
+      version: MCP_SERVER_VERSION,
+    });
+
+    await Promise.all([client.close(), server.close()]);
+  });
+
   test("describes the input semantics an agent must preserve", async () => {
     const tools = await connection.client.listTools();
     const create = tools.tools.find(
@@ -68,8 +117,11 @@ describe("Timeline MCP server", () => {
     const append = tools.tools.find(
       ({ name }) => name === "timeline_append_event",
     );
-    const apply = tools.tools.find(
-      ({ name }) => name === "timeline_apply_model_proposal",
+    const preview = tools.tools.find(
+      ({ name }) => name === "timeline_preview_model_proposal",
+    );
+    const admit = tools.tools.find(
+      ({ name }) => name === "timeline_admit_model_proposal",
     );
     const project = tools.tools.find(
       ({ name }) => name === "timeline_project_state",
@@ -95,13 +147,25 @@ describe("Timeline MCP server", () => {
         },
       },
     });
-    expect(apply?.inputSchema).toMatchObject({
+    expect(preview?.inputSchema).toMatchObject({
       properties: {
         expectedRevision: {
-          description: expect.stringContaining("earlier append-only prefix"),
+          description: expect.stringContaining("exact append-only prefix"),
         },
         evidenceCatalog: {
           description: expect.stringContaining("never stored or returned"),
+        },
+      },
+    });
+    expect(preview?.outputSchema).toMatchObject({
+      required: expect.arrayContaining(["persistence"]),
+      properties: { persistence: { const: "not-admitted" } },
+    });
+    expect(admit?.outputSchema).toMatchObject({
+      required: expect.arrayContaining(["admissionStatus"]),
+      properties: {
+        admissionStatus: {
+          enum: ["admitted", "already-admitted", "empty-candidate"],
         },
       },
     });
@@ -194,6 +258,10 @@ describe("Timeline MCP server", () => {
         name: "timeline-run",
         uriTemplate: "timeline://run/{runId}",
       }),
+      expect.objectContaining({
+        name: "timeline-audit",
+        uriTemplate: "timeline://audit/{runId}",
+      }),
     ]);
   });
 
@@ -232,7 +300,7 @@ describe("Timeline MCP server", () => {
     ).rejects.not.toThrow(secret);
   });
 
-  test("atomically applies a private model proposal and returns a reusable query", async () => {
+  test("previews without mutation and admits the exact candidate atomically", async () => {
     const timeline = await createModelBase(connection);
     const requestId = "request.release-correction";
     const deployQuote = "Deploy finished at 200.";
@@ -276,21 +344,20 @@ describe("Timeline MCP server", () => {
     } as const;
 
     const response = await connection.client.callTool({
-      name: "timeline_apply_model_proposal",
+      name: "timeline_preview_model_proposal",
       arguments: arguments_,
     });
-    const applied = applyModelProposalOutputSchema.parse(
+    const previewed = previewModelProposalOutputSchema.parse(
       response.structuredContent,
     );
 
-    expect(applied).toMatchObject({
-      applied: true,
+    expect(previewed).toMatchObject({
       requestId,
       baseRevision: 2,
       baseRunDigest: timeline.runDigest,
       timeline: {
-        revision: 4,
-        latestRecordedThrough: 3,
+        revision: 2,
+        latestRecordedThrough: 1,
       },
       query: {
         schema: "covenant.timeline.query.v0alpha3",
@@ -300,21 +367,36 @@ describe("Timeline MCP server", () => {
         fromPointId: "deployed",
         toPointId: "review-finished",
       },
-      admission: {
-        mode: "structural-only",
-        assertionAuthority: "unverified",
-        evidencePayloads: "external",
+      conclusion: {
+        result: {
+          type: "difference.bounds",
+          status: "bounded",
+          minimum: 100,
+          maximum: 100,
+        },
       },
+      persistence: "not-admitted",
+      verified: true,
     });
-    expect(applied.events).toHaveLength(2);
+    const { persistence: _, ...missingPersistence } = previewed;
     expect(
-      applied.events.every(
+      previewModelProposalOutputSchema.safeParse(missingPersistence).success,
+    ).toBe(false);
+    expect(
+      previewModelProposalOutputSchema.safeParse({
+        ...previewed,
+        persistence: "admitted",
+      }).success,
+    ).toBe(false);
+    expect(previewed.events).toHaveLength(2);
+    expect(
+      previewed.events.every(
         (event) =>
           event.type === "coordinate.asserted" &&
           event.assertion.evidenceRefs[0] === evidenceRef,
       ),
     ).toBe(true);
-    const reviewSupport = applied.provenance
+    const reviewSupport = previewed.provenance
       .flatMap(({ supports }) => supports)
       .find(
         ({ quoteDigest }) =>
@@ -334,13 +416,88 @@ describe("Timeline MCP server", () => {
     expect(JSON.stringify(response)).not.toContain(evidenceText);
     expect(JSON.stringify(response)).not.toContain(reviewQuote);
 
+    const rejected = await connection.client.callTool({
+      name: "timeline_admit_model_proposal",
+      arguments: {
+        ...arguments_,
+        candidateDigest: `sha256:${"f".repeat(64)}`,
+        admission,
+      },
+    });
+    expect(rejected).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "timeline.mcp.store.conflict: candidate digest does not match the compiled proposal",
+        },
+      ],
+    });
+    const afterRejectedAdmission = listRunsOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_list_runs",
+          arguments: {},
+        })
+      ).structuredContent,
+    );
+    expect(afterRejectedAdmission.timelines).toEqual([
+      expect.objectContaining({
+        runId: "agent.release",
+        revision: 2,
+        admissionCount: 2,
+        runDigest: timeline.runDigest,
+      }),
+    ]);
+
+    const admitted = admitModelProposalOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_admit_model_proposal",
+          arguments: {
+            ...arguments_,
+            candidateDigest: previewed.candidateDigest,
+            admission,
+          },
+        })
+      ).structuredContent,
+    );
+    expect(admitted).toMatchObject({
+      admissionStatus: "admitted",
+      candidateDigest: previewed.candidateDigest,
+      timeline: { revision: 4, admissionCount: 3 },
+      admissionRecord: {
+        kind: "model-proposal",
+        authorityId: admission.authorityId,
+        policyRef: admission.policyRef,
+        policyDigest: admission.policyDigest,
+        eventIds: previewed.events.map(({ id }) => id),
+      },
+    });
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...admitted,
+        admissionStatus: "empty-candidate",
+      }).success,
+    ).toBe(false);
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...admitted,
+        admissionStatus: "unknown",
+      }).success,
+    ).toBe(false);
+    const { admissionStatus: __, ...missingAdmissionStatus } = admitted;
+    expect(
+      admitModelProposalOutputSchema.safeParse(missingAdmissionStatus).success,
+    ).toBe(false);
+
     const reasoned = reasonOutputSchema.parse(
       (
         await connection.client.callTool({
           name: "timeline_reason",
           arguments: {
             runId: "agent.release",
-            query: applied.query,
+            query: admitted.query,
           },
         })
       ).structuredContent,
@@ -374,7 +531,7 @@ describe("Timeline MCP server", () => {
           name: "timeline_append_event",
           arguments: {
             runId: "agent.release",
-            expectedRunDigest: applied.timeline.runDigest,
+            expectedRunDigest: admitted.timeline.runDigest,
             event: {
               id: "event.follow-up-declared",
               type: "point.declared",
@@ -384,22 +541,38 @@ describe("Timeline MCP server", () => {
                 axisId: "utc-seconds",
               },
             },
+            admission,
           },
         })
       ).structuredContent,
     );
-    const retried = applyModelProposalOutputSchema.parse(
+    const retried = admitModelProposalOutputSchema.parse(
       (
         await connection.client.callTool({
-          name: "timeline_apply_model_proposal",
-          arguments: arguments_,
+          name: "timeline_admit_model_proposal",
+          arguments: {
+            ...arguments_,
+            candidateDigest: previewed.candidateDigest,
+            admission,
+          },
         })
       ).structuredContent,
     );
-    expect(retried.applied).toBe(false);
-    expect(retried.events).toEqual(applied.events);
-    expect(retried.query).toEqual(applied.query);
+    expect(retried.admissionStatus).toBe("already-admitted");
+    expect(retried.events).toEqual(admitted.events);
+    expect(retried.query).toEqual(admitted.query);
     expect(retried.timeline).toEqual(later.timeline);
+
+    const audit = await connection.client.readResource({
+      uri: "timeline://audit/agent.release",
+    });
+    const auditContent = audit.contents[0];
+    if (!auditContent || !("text" in auditContent)) {
+      throw new Error("timeline audit resource did not contain JSON text");
+    }
+    const envelope = JSON.parse(auditContent.text);
+    expect(envelope.schema).toBe("covenant.timeline.mcp-run.v0alpha2");
+    expect(envelope.admissions).toContainEqual(admitted.admissionRecord);
   });
 
   test("rejects invalid model proposal output event provenance", async () => {
@@ -419,13 +592,13 @@ describe("Timeline MCP server", () => {
     }
 
     expect(
-      applyModelProposalOutputSchema.safeParse({
+      admitModelProposalOutputSchema.safeParse({
         ...applied,
         provenance: [],
       }).success,
     ).toBe(false);
     expect(
-      applyModelProposalOutputSchema.safeParse({
+      admitModelProposalOutputSchema.safeParse({
         ...applied,
         provenance: [
           {
@@ -436,7 +609,7 @@ describe("Timeline MCP server", () => {
       }).success,
     ).toBe(false);
     expect(
-      applyModelProposalOutputSchema.safeParse({
+      admitModelProposalOutputSchema.safeParse({
         ...applied,
         provenance: [
           {
@@ -447,7 +620,7 @@ describe("Timeline MCP server", () => {
       }).success,
     ).toBe(false);
     expect(
-      applyModelProposalOutputSchema.safeParse({
+      admitModelProposalOutputSchema.safeParse({
         ...applied,
         provenance: [
           {
@@ -458,7 +631,7 @@ describe("Timeline MCP server", () => {
       }).success,
     ).toBe(false);
     expect(
-      applyModelProposalOutputSchema.safeParse({
+      admitModelProposalOutputSchema.safeParse({
         ...applied,
         provenance: [
           {
@@ -472,7 +645,7 @@ describe("Timeline MCP server", () => {
       }).success,
     ).toBe(false);
     expect(
-      applyModelProposalOutputSchema.safeParse({
+      admitModelProposalOutputSchema.safeParse({
         ...applied,
         events: [
           {
@@ -495,15 +668,98 @@ describe("Timeline MCP server", () => {
         ],
       }).success,
     ).toBe(false);
+
+    const admissionRecord = applied.admissionRecord;
+    if (!admissionRecord) {
+      throw new Error("proposal did not return an admission record");
+    }
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...applied,
+        admissionRecord: redigestAdmission({
+          ...admissionRecord,
+          candidateDigest: `sha256:${"0".repeat(64)}`,
+        }),
+      }).success,
+    ).toBe(false);
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...applied,
+        admissionRecord: redigestAdmission({
+          ...admissionRecord,
+          eventIds: ["event.wrong"],
+        }),
+      }).success,
+    ).toBe(false);
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...applied,
+        admissionRecord: redigestAdmission({
+          ...admissionRecord,
+          baseRevision: admissionRecord.baseRevision + 1,
+        }),
+      }).success,
+    ).toBe(false);
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...applied,
+        candidateDigest: `sha256:${"0".repeat(64)}`,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("cross-binds direct append output to its admission record", async () => {
+    const created = createRunOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_create_run",
+          arguments: { contract: releaseContract() },
+        })
+      ).structuredContent,
+    );
+    const appended = appendEventOutputSchema.parse(
+      (
+        await connection.client.callTool({
+          name: "timeline_append_event",
+          arguments: {
+            runId: created.timeline.runId,
+            expectedRunDigest: created.timeline.runDigest,
+            event: correctionEvents[0],
+            admission,
+          },
+        })
+      ).structuredContent,
+    );
+
+    expect(
+      appendEventOutputSchema.safeParse({
+        ...appended,
+        admissionRecord: redigestAdmission({
+          ...appended.admissionRecord,
+          baseRevision: appended.admissionRecord.baseRevision + 1,
+        }),
+      }).success,
+    ).toBe(false);
+    expect(
+      appendEventOutputSchema.safeParse({
+        ...appended,
+        admissionRecord: redigestAdmission({
+          ...appended.admissionRecord,
+          kind: "model-proposal",
+          candidateDigest: `sha256:${"0".repeat(64)}`,
+          proposalDigest: `sha256:${"1".repeat(64)}`,
+        }),
+      }).success,
+    ).toBe(false);
   });
 
   test("lowers prior knowledge cuts without mutating the run", async () => {
     const timeline = await createModelBase(connection);
     const requestId = "request.prior-consistency";
-    const result = applyModelProposalOutputSchema.parse(
+    const result = previewModelProposalOutputSchema.parse(
       (
         await connection.client.callTool({
-          name: "timeline_apply_model_proposal",
+          name: "timeline_preview_model_proposal",
           arguments: {
             runId: "agent.release",
             expectedRevision: timeline.revision,
@@ -533,7 +789,6 @@ describe("Timeline MCP server", () => {
     );
 
     expect(result).toMatchObject({
-      applied: false,
       events: [],
       timeline: { revision: 2 },
       query: {
@@ -542,6 +797,32 @@ describe("Timeline MCP server", () => {
         recordedThrough: 0,
       },
     });
+    const {
+      conclusion: _,
+      persistence: __,
+      verified: ___,
+      ...candidate
+    } = result;
+    const emptyAdmission = {
+      ...candidate,
+      admissionStatus: "empty-candidate",
+      admissionRecord: null,
+    };
+    expect(
+      admitModelProposalOutputSchema.safeParse(emptyAdmission).success,
+    ).toBe(true);
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...emptyAdmission,
+        baseRevision: timeline.revision + 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      admitModelProposalOutputSchema.safeParse({
+        ...emptyAdmission,
+        admissionStatus: "admitted",
+      }).success,
+    ).toBe(false);
     const reasoned = reasonOutputSchema.parse(
       (
         await connection.client.callTool({
@@ -604,54 +885,47 @@ describe("Timeline MCP server", () => {
     ]);
 
     const withdrawnText = "The corrected review record was withdrawn.";
-    const retracted = applyModelProposalOutputSchema.parse(
-      (
-        await connection.client.callTool({
-          name: "timeline_apply_model_proposal",
-          arguments: {
-            runId: "agent.release",
-            expectedRevision: corrected.timeline.revision,
-            expectedRunDigest: corrected.timeline.runDigest,
-            expectedRequestId: "request.review-withdrawal",
-            proposal: {
-              schema: "covenant.timeline.model-proposal.v1",
-              requestId: "request.review-withdrawal",
-              changes: [
-                {
-                  type: "retraction",
-                  assertionHandle: "review-corrected",
-                  supports: [
-                    {
-                      evidenceId: "record.review-withdrawal",
-                      quote: withdrawnText,
-                    },
-                  ],
-                },
-              ],
-              query: {
-                type: "consistency",
-                targetHandle: "actual-context",
-                knowledgeCut: { type: "current" },
-              },
-            },
-            evidenceCatalog: [
+    const retracted = await admitProposal(connection, {
+      runId: "agent.release",
+      expectedRevision: corrected.timeline.revision,
+      expectedRunDigest: corrected.timeline.runDigest,
+      expectedRequestId: "request.review-withdrawal",
+      proposal: {
+        schema: "covenant.timeline.model-proposal.v1",
+        requestId: "request.review-withdrawal",
+        changes: [
+          {
+            type: "retraction",
+            assertionHandle: "review-corrected",
+            supports: [
               {
-                id: "record.review-withdrawal",
-                status: "current",
-                text: withdrawnText,
-              },
-            ],
-            referenceCatalog: modelReferences(),
-            assertionCatalog: [
-              {
-                handle: "review-corrected",
-                assertionId: correctedEvent.assertion.id,
+                evidenceId: "record.review-withdrawal",
+                quote: withdrawnText,
               },
             ],
           },
-        })
-      ).structuredContent,
-    );
+        ],
+        query: {
+          type: "consistency",
+          targetHandle: "actual-context",
+          knowledgeCut: { type: "current" },
+        },
+      },
+      evidenceCatalog: [
+        {
+          id: "record.review-withdrawal",
+          status: "current",
+          text: withdrawnText,
+        },
+      ],
+      referenceCatalog: modelReferences(),
+      assertionCatalog: [
+        {
+          handle: "review-corrected",
+          assertionId: correctedEvent.assertion.id,
+        },
+      ],
+    });
     expect(retracted.events).toEqual([
       expect.objectContaining({
         type: "assertion.retracted",
@@ -730,7 +1004,7 @@ describe("Timeline MCP server", () => {
     ];
     for (const arguments_ of invalid) {
       const result = await connection.client.callTool({
-        name: "timeline_apply_model_proposal",
+        name: "timeline_preview_model_proposal",
         arguments: arguments_,
       });
       expect(result).toEqual({
@@ -789,11 +1063,11 @@ describe("Timeline MCP server", () => {
       },
     };
     expect(
-      applyModelProposalInputSchema.safeParse(excessiveChanges).success,
+      previewModelProposalInputSchema.safeParse(excessiveChanges).success,
     ).toBe(false);
 
     const oversized = await connection.client.callTool({
-      name: "timeline_apply_model_proposal",
+      name: "timeline_preview_model_proposal",
       arguments: {
         ...base,
         evidenceCatalog: Array.from({ length: 5 }, (_, index) => ({
@@ -832,11 +1106,6 @@ describe("Timeline MCP server", () => {
         revision: 0,
         latestRecordedThrough: null,
       },
-      admission: {
-        mode: "structural-only",
-        assertionAuthority: "unverified",
-        evidencePayloads: "external",
-      },
     });
 
     const listed = listRunsOutputSchema.parse(
@@ -859,6 +1128,7 @@ describe("Timeline MCP server", () => {
               runId: contract.id,
               expectedRunDigest: runDigest,
               event,
+              admission,
             },
           })
         ).structuredContent,
@@ -1066,10 +1336,10 @@ describe("Timeline MCP server", () => {
   });
 });
 
-async function connect(store: McpRunStore) {
+async function connect(store: McpRunStore, role?: "model" | "operator") {
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
-  const server = createTimelineMcpServer(store);
+  const server = createTimelineMcpServer(store, role ? { role } : {});
   const client = new Client({
     name: "timeline-mcp-tests",
     version: "0.0.0",
@@ -1107,6 +1377,7 @@ async function createModelBase(
             runId: created.timeline.runId,
             expectedRunDigest: timeline.runDigest,
             event,
+            admission,
           },
         })
       ).structuredContent,
@@ -1167,49 +1438,68 @@ async function applyCoordinateProposal(
   connection: Awaited<ReturnType<typeof connect>>,
   options: CoordinateProposalOptions,
 ) {
-  return applyModelProposalOutputSchema.parse(
-    (
-      await connection.client.callTool({
-        name: "timeline_apply_model_proposal",
-        arguments: {
-          runId: options.timeline.runId,
-          expectedRevision: options.timeline.revision,
-          expectedRunDigest: options.timeline.runDigest,
-          expectedRequestId: options.requestId,
-          proposal: {
-            schema: "covenant.timeline.model-proposal.v1",
-            requestId: options.requestId,
-            changes: [
-              {
-                type: "coordinate",
-                pointHandle: "review",
-                bounds: { type: "exact", value: options.value },
-                supports: [
-                  {
-                    evidenceId: options.evidenceId,
-                    quote: options.quote,
-                  },
-                ],
-                revision: options.revision ?? { type: "keep" },
-              },
-            ],
-            query: {
-              type: "consistency",
-              targetHandle: "actual-context",
-              knowledgeCut: { type: "current" },
-            },
-          },
-          evidenceCatalog: [
+  return admitProposal(connection, {
+    runId: options.timeline.runId,
+    expectedRevision: options.timeline.revision,
+    expectedRunDigest: options.timeline.runDigest,
+    expectedRequestId: options.requestId,
+    proposal: {
+      schema: "covenant.timeline.model-proposal.v1",
+      requestId: options.requestId,
+      changes: [
+        {
+          type: "coordinate",
+          pointHandle: "review",
+          bounds: { type: "exact", value: options.value },
+          supports: [
             {
-              id: options.evidenceId,
-              status: "current",
-              text: options.evidenceText,
+              evidenceId: options.evidenceId,
+              quote: options.quote,
             },
           ],
-          referenceCatalog: modelReferences(),
-          ...(options.assertionCatalog
-            ? { assertionCatalog: options.assertionCatalog }
-            : {}),
+          revision: options.revision ?? { type: "keep" },
+        },
+      ],
+      query: {
+        type: "consistency",
+        targetHandle: "actual-context",
+        knowledgeCut: { type: "current" },
+      },
+    },
+    evidenceCatalog: [
+      {
+        id: options.evidenceId,
+        status: "current",
+        text: options.evidenceText,
+      },
+    ],
+    referenceCatalog: modelReferences(),
+    ...(options.assertionCatalog
+      ? { assertionCatalog: options.assertionCatalog }
+      : {}),
+  });
+}
+
+async function admitProposal(
+  connection: Awaited<ReturnType<typeof connect>>,
+  arguments_: Record<string, unknown>,
+) {
+  const preview = previewModelProposalOutputSchema.parse(
+    (
+      await connection.client.callTool({
+        name: "timeline_preview_model_proposal",
+        arguments: arguments_,
+      })
+    ).structuredContent,
+  );
+  return admitModelProposalOutputSchema.parse(
+    (
+      await connection.client.callTool({
+        name: "timeline_admit_model_proposal",
+        arguments: {
+          ...arguments_,
+          candidateDigest: preview.candidateDigest,
+          admission,
         },
       })
     ).structuredContent,
@@ -1228,6 +1518,14 @@ function failingStore(secret: string): McpRunStore {
     require: fail,
     create: fail,
     append: fail,
-    appendCompiled: fail,
+    admitVerifiedModelProposal: fail,
+  };
+}
+
+function redigestAdmission<T extends Record<string, unknown>>(record: T) {
+  const { recordDigest: _, ...unsigned } = record;
+  return {
+    ...unsigned,
+    recordDigest: contentDigest(unsigned as JsonValue),
   };
 }

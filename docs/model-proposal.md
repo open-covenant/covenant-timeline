@@ -9,6 +9,12 @@ The published `0.0.0-alpha.2` package contains the temporal kernel. The proposal
 compiler is currently a source API. Run the example from a built repository
 checkout.
 
+This is an untrusted-candidate interface. Its preregistered GPT-5.6 Sol v2 gate
+returned `kill`: assertion F1 was 0.7692 and projected-state exactness was
+76/108. The compiler guarantees structure and reproducibility, not correct
+interpretation. Do not admit provider output automatically. See the
+[complete result analysis](./model-proposal-v2-result.md).
+
 The host gives the model opaque handles for the relevant relationship,
 existing assertion, evidence document, and knowledge cut. The model returns a
 small proposal:
@@ -267,6 +273,14 @@ A production host should:
 3. review the candidate under an explicit admission policy;
 4. append accepted events through its own durable write path; and
 5. reason over the admitted run and verify the resulting proof receipt.
+
+The local MCP server implements that split. Its default model role can compile
+and preview the candidate and checked conclusion without writing. The explicit
+operator role recompiles the proposal, requires the resulting candidate to
+match the digest returned from preview, and persists the admission under an
+authority ID, policy reference, and policy digest. The server does not retain
+preview sessions; the host retains the reviewed preview and digest. The audit
+resource retains the admission records across restart.
 
 The request ID correlates one model response with one host-issued request. It
 is not an authorization token.

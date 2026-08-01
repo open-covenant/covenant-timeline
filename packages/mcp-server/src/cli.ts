@@ -20,6 +20,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       options: {
         "data-dir": { type: "string" },
         help: { type: "boolean", short: "h" },
+        role: { type: "string" },
         version: { type: "boolean", short: "v" },
       },
     }));
@@ -33,7 +34,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
   if (values.help) {
     process.stdout.write(
-      "Usage: timeline-mcp --data-dir <directory>\n\nLocal stdio MCP server for Covenant Timeline.\n",
+      "Usage: timeline-mcp --data-dir <directory> [--role model|operator]\n\nLocal stdio MCP server for Covenant Timeline. The default model role is read-only; operator role enables admitted writes.\n",
     );
     return;
   }
@@ -44,9 +45,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (!isAbsolute(directory)) {
     throw new Error("--data-dir must be absolute");
   }
+  const role = values.role ?? "model";
+  if (role !== "model" && role !== "operator") {
+    throw new Error("--role must be model or operator");
+  }
 
   const store = new FileMcpRunStore(directory);
-  const server = createTimelineMcpServer(store);
+  const server = createTimelineMcpServer(store, { role });
   const transport = new StdioServerTransport(process.stdin, process.stdout, {
     maxBufferSize: DEFAULT_MAX_MESSAGE_BYTES,
   });

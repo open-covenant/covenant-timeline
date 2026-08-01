@@ -299,7 +299,7 @@
           "const": "v0alpha3"
         },
         "storeEnvelope": {
-          "const": "covenant.timeline.mcp-run.v0alpha1"
+          "const": "covenant.timeline.mcp-run.v0alpha2"
         },
         "runtimePins": {
           "type": "object",

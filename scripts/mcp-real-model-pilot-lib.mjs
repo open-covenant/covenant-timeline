@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import {
@@ -8,6 +7,7 @@ import {
   decodeUtf8,
   exactRecord,
   loadTimeline,
+  readBoundedExactFile,
   readBoundedInputFile,
   repositoryRoot,
   resolveInside,
@@ -23,6 +23,17 @@ import {
 
 export const REAL_MODEL_PILOT_SCHEMA =
   "covenant.timeline.real-model-pilot.artifact.v1";
+export const REAL_MODEL_PILOT_ADMISSION_POLICY = Object.freeze({
+  schema: "covenant.timeline.real-model-pilot.admission-policy.v1",
+  id: "maintainer-operated-pilot-admission-v1",
+  authorityId: "covenant-timeline-maintainers",
+  policyRef: "covenant.timeline/maintainer-operated-pilot-admission/v1",
+  operation: "maintainer-operated",
+  evidenceBoundary: "host-normalized-public-fields",
+  declarationRule: "host-defined-contract-consistent-declarations",
+  proposalRule:
+    "untrusted-model-proposal-previewed-and-host-admitted-only-after-scenario-semantic-validation",
+});
 export const REAL_MODEL_PILOT_LIMITS = Object.freeze({
   artifactBytes: 128 * 1024,
   artifactFiles: 64,
@@ -42,6 +53,46 @@ export const REAL_MODEL_PILOT_LIMITS = Object.freeze({
   runtimeFileBytes: 16 * 1024 * 1024,
   runtimeFiles: 256,
 });
+
+const MCP_SERVER_VERSION_PATTERN =
+  /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/u;
+
+export function validateMcpWriterIdentity(value) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !==
+      "reasoner,serverPackage,serverVersion,timelinePackage,timelineVersion" ||
+    value.timelinePackage !== "@covenant-org/timeline" ||
+    value.timelineVersion !== "0.0.0-alpha.3" ||
+    value.reasoner !== "covenant.timeline.stn.v0alpha1" ||
+    value.serverPackage !== "@covenant-org/timeline-mcp" ||
+    typeof value.serverVersion !== "string" ||
+    value.serverVersion.length > 64 ||
+    !MCP_SERVER_VERSION_PATTERN.test(value.serverVersion)
+  ) {
+    throw new Error("MCP writer identity is unsupported");
+  }
+  return value;
+}
+
+export function validateMcpWriterTrajectory(audit) {
+  const lastWriter = validateMcpWriterIdentity(audit.lastWriter);
+  if (!Array.isArray(audit.admissions) || audit.admissions.length === 0) {
+    throw new Error("MCP writer trajectory is empty");
+  }
+  for (const admission of audit.admissions) {
+    validateMcpWriterIdentity(admission.writer);
+  }
+  const finalWriter = audit.admissions.at(-1).writer;
+  if (
+    Object.keys(lastWriter).some((key) => lastWriter[key] !== finalWriter[key])
+  ) {
+    throw new Error("MCP last writer does not match the final admission");
+  }
+  return audit;
+}
 
 export async function captureRealModelPilotRuntime(timeline, options = {}) {
   const binding = await capturePilotRuntime(options);
@@ -78,6 +129,22 @@ export async function realModelPilotRuntimeMatches(
 ) {
   validateRealModelPilotRuntime(expected, timeline);
   return pilotRuntimeMatches(expected, options);
+}
+
+export function createRealModelPilotAdmissionPolicy(timeline) {
+  const document = structuredClone(REAL_MODEL_PILOT_ADMISSION_POLICY);
+  const bytes = Buffer.from(`${timeline.canonicalJson(document)}\n`);
+  const digest = timeline.byteDigest(bytes);
+  return {
+    document,
+    bytes,
+    digest,
+    decision: {
+      authorityId: document.authorityId,
+      policyRef: document.policyRef,
+      policyDigest: digest,
+    },
+  };
 }
 
 export async function loadPilotInput(directory) {
@@ -220,10 +287,11 @@ function validateExpected(expected, evidence) {
 
 export async function loadModelConfig(path, { allowDirty = false } = {}) {
   const timeline = await loadTimeline();
-  const bytes = await readFile(resolve(path));
-  if (bytes.byteLength > REAL_MODEL_PILOT_LIMITS.configBytes) {
-    throw new Error("model config exceeds its byte limit");
-  }
+  const bytes = await readBoundedExactFile(
+    resolve(path),
+    REAL_MODEL_PILOT_LIMITS.configBytes,
+    "model config",
+  );
   const config = timeline.parseJson(decodeUtf8(bytes, "model config"));
   exactRecord(
     config,
@@ -502,7 +570,8 @@ export function redactedModelCall({
   proposal,
   usage,
   scope,
-  apply,
+  preview,
+  admit,
 }) {
   const { evidence, request: redactedRequest } = redactAdapterRequest(request);
   return {
@@ -524,7 +593,8 @@ export function redactedModelCall({
       assertions: scope.host.assertionCatalog,
       knowledgeCuts: scope.host.knowledgeCutCatalog,
     },
-    apply,
+    preview,
+    admit,
   };
 }
 

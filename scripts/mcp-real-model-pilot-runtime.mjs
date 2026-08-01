@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { open, readdir, readFile, realpath } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeUtf8, readBoundedExactFile } from "./mcp-agent-pilot-lib.mjs";
 
 export const pilotRepositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -16,6 +18,7 @@ const limits = {
   packages: 128,
   packageFiles: 4096,
   packageBytes: 128 * 1024 * 1024,
+  packageManifestBytes: 1024 * 1024,
 };
 const profiles = new Set(["formal-openai", "development-unbound-adapter"]);
 const fixedDirectories = [
@@ -29,6 +32,7 @@ const fixedFiles = [
   "schemas/v0alpha3/common.schema.json",
   "scripts/mcp-agent-pilot-lib.mjs",
   "scripts/mcp-agent-pilot.mjs",
+  "scripts/formal-attempt-ledger.mjs",
   "scripts/mcp-real-model-pilot-bootstrap.mjs",
   "scripts/mcp-real-model-pilot-lib.mjs",
   "scripts/mcp-real-model-pilot-runtime.mjs",
@@ -114,24 +118,18 @@ export async function capturePilotRuntime({
 }
 
 export async function pilotRuntimeMatches(expected, options = {}) {
-  validatePilotRuntime(expected);
-  const dependencies = expected.identity.resolutions
-    .filter(({ from }) => from === "application")
-    .map(({ specifier }) => specifier);
-  const actual = await capturePilotRuntime({
-    dependencies,
-    ...options,
-    profile: expected.identity.profile,
-  });
-  return (
-    expected.digest === actual.digest &&
-    equal(expected.identity, actual.identity)
-  );
+  return (await comparePilotRuntime(expected, options)).matches;
 }
 
 export async function assertPilotRuntime(expected, options = {}) {
-  if (!(await pilotRuntimeMatches(expected, options))) {
-    throw new Error("real-model pilot runtime identity changed");
+  const comparison = await comparePilotRuntime(expected, options);
+  if (!comparison.matches) {
+    const changes = describeRuntimeChanges(
+      expected.identity,
+      comparison.actual.identity,
+    );
+    const detail = changes.length > 0 ? `: ${changes.join(", ")}` : "";
+    throw new Error(`real-model pilot runtime identity changed${detail}`);
   }
   return expected;
 }
@@ -145,6 +143,59 @@ export function validatePilotRuntime(expected) {
     throw new Error("real-model pilot runtime digest did not reproduce");
   }
   return expected;
+}
+
+async function comparePilotRuntime(expected, options) {
+  validatePilotRuntime(expected);
+  const dependencies = expected.identity.resolutions
+    .filter(({ from }) => from === "application")
+    .map(({ specifier }) => specifier);
+  const actual = await capturePilotRuntime({
+    dependencies,
+    ...options,
+    profile: expected.identity.profile,
+  });
+  return {
+    actual,
+    matches:
+      expected.digest === actual.digest &&
+      equal(expected.identity, actual.identity),
+  };
+}
+
+function describeRuntimeChanges(expected, actual) {
+  const changes = [];
+  if (!equal(expected.node, actual.node)) changes.push("Node runtime");
+
+  const expectedFiles = new Map(
+    expected.files.map((file) => [file.path, file]),
+  );
+  const actualFiles = new Map(actual.files.map((file) => [file.path, file]));
+  for (const path of [
+    ...new Set([...expectedFiles.keys(), ...actualFiles.keys()]),
+  ].sort()) {
+    if (!equal(expectedFiles.get(path), actualFiles.get(path))) {
+      changes.push(`file ${path}`);
+    }
+  }
+
+  const packageKeys = new Set([
+    ...expected.packages.map(packageKey),
+    ...actual.packages.map(packageKey),
+  ]);
+  for (const key of [...packageKeys].sort()) {
+    const before = expected.packages.filter((item) => packageKey(item) === key);
+    const after = actual.packages.filter((item) => packageKey(item) === key);
+    if (!equal(before, after)) changes.push(`package ${key}`);
+  }
+  if (!equal(expected.resolutions, actual.resolutions)) {
+    changes.push("package resolutions");
+  }
+  return changes.slice(0, 8);
+}
+
+function packageKey(item) {
+  return `${item.name}@${item.version}`;
 }
 
 async function resolvedPackageClosure(root, dependencies) {
@@ -235,9 +286,7 @@ async function resolvedPackageClosure(root, dependencies) {
 
   async function enqueue(packageRoot) {
     if (roots.has(packageRoot)) return;
-    const document = JSON.parse(
-      await readFile(join(packageRoot, "package.json"), "utf8"),
-    );
+    const document = await readPackageManifest(packageRoot);
     if (
       typeof document.name !== "string" ||
       typeof document.version !== "string"
@@ -277,9 +326,7 @@ async function resolvePackageFrom(specifier, importer) {
       if (!pathMissing(error)) throw error;
     }
     if (packageRoot) {
-      const document = JSON.parse(
-        await readFile(join(packageRoot, "package.json"), "utf8"),
-      );
+      const document = await readPackageManifest(packageRoot);
       if (document.name === specifier) return packageRoot;
     }
     const parent = dirname(directory);
@@ -300,9 +347,7 @@ async function resolvePackage(specifier, resolver) {
   for (;;) {
     let document;
     try {
-      document = JSON.parse(
-        await readFile(join(directory, "package.json"), "utf8"),
-      );
+      document = await readPackageManifest(directory);
     } catch (error) {
       if (!pathMissing(error)) throw error;
     }
@@ -339,6 +384,15 @@ async function digestPackage(root) {
     fileCount: entries.length,
     byteLength,
   };
+}
+
+async function readPackageManifest(root) {
+  const bytes = await readBoundedExactFile(
+    join(root, "package.json"),
+    limits.packageManifestBytes,
+    "runtime package manifest",
+  );
+  return JSON.parse(decodeUtf8(bytes, "runtime package manifest"));
 }
 
 async function packageFiles(root, directory = "") {
@@ -388,35 +442,66 @@ async function javascriptFiles(root, directory) {
 }
 
 async function digestFile(path, maximum, label) {
-  const handle = await open(path, "r");
+  const link = await lstat(path, { bigint: true });
+  if (!link.isFile()) {
+    throw new Error(`${label} is not a bounded regular file`);
+  }
+  const flags =
+    process.platform === "win32"
+      ? "r"
+      : fsConstants.O_RDONLY |
+        (fsConstants.O_NOFOLLOW ?? 0) |
+        (fsConstants.O_NONBLOCK ?? 0) |
+        (fsConstants.O_CLOEXEC ?? 0);
+  const handle = await open(path, flags);
   try {
-    const before = await handle.stat();
-    if (!before.isFile() || before.size < 0 || before.size > maximum) {
+    const before = await handle.stat({ bigint: true });
+    if (
+      !before.isFile() ||
+      before.dev !== link.dev ||
+      before.ino !== link.ino ||
+      before.size < 0n ||
+      before.size > BigInt(maximum) ||
+      before.size > BigInt(Number.MAX_SAFE_INTEGER)
+    ) {
       throw new Error(`${label} is not a bounded regular file`);
     }
     const hash = createHash("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
+    const expectedSize = Number(before.size);
     let offset = 0;
-    while (offset < before.size) {
+    while (offset < expectedSize) {
       const { bytesRead } = await handle.read(
         buffer,
         0,
-        Math.min(buffer.length, before.size - offset),
+        Math.min(buffer.length, expectedSize - offset),
         offset,
       );
       if (bytesRead === 0) break;
       hash.update(buffer.subarray(0, bytesRead));
       offset += bytesRead;
     }
-    const after = await handle.stat();
+    const [after, current] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(path, { bigint: true }),
+    ]);
     if (
-      offset !== before.size ||
+      offset !== expectedSize ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
       after.size !== before.size ||
-      after.mtimeMs !== before.mtimeMs
+      after.mtimeNs !== before.mtimeNs ||
+      after.ctimeNs !== before.ctimeNs ||
+      !current.isFile() ||
+      current.dev !== before.dev ||
+      current.ino !== before.ino
     ) {
       throw new Error(`${label} changed while hashing`);
     }
-    return { digest: `sha256:${hash.digest("hex")}`, byteLength: before.size };
+    return {
+      digest: `sha256:${hash.digest("hex")}`,
+      byteLength: expectedSize,
+    };
   } finally {
     await handle.close();
   }

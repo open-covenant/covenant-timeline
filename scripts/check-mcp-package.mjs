@@ -195,15 +195,19 @@ try {
     smoke.proposal?.events !== 2 ||
     smoke.proposal?.minimum !== 100 ||
     smoke.proposal?.maximum !== 100 ||
+    smoke.proposal?.previewReadOnly !== true ||
+    smoke.proposal?.auditBound !== true ||
     smoke.proposal?.sourceTextAbsent !== true ||
     smoke.proposal?.proof !== true ||
     smoke.stderr !== ""
   ) {
-    throw new Error(`installed MCP package smoke changed: ${smoke}`);
+    throw new Error(
+      `installed MCP package smoke changed: ${JSON.stringify(smoke)}`,
+    );
   }
 
   console.log(
-    `MCP package check passed (${mcpArchive}, workspace Timeline ${coreVersion}, installed stdio restart, correction replay, atomic model proposal, and proof verification)`,
+    `MCP package check passed (${mcpArchive}, workspace Timeline ${coreVersion}, installed stdio restart, correction replay, read-only proposal preview, admitted batch audit, and proof verification)`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

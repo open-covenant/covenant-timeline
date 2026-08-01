@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmod,
   mkdtemp,
@@ -13,27 +14,101 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { TemporalEventV0Alpha3 } from "@covenant-org/timeline";
+import {
+  canonicalJson,
+  contentDigest,
+  type JsonValue,
+  type TemporalEventV0Alpha3,
+  type TemporalModelProposalCandidateV1,
+} from "@covenant-org/timeline";
 import {
   FileMcpRunStore,
-  parseMcpRunEnvelopeV0Alpha1,
+  parseMcpRunEnvelopeV0Alpha2,
   TimelineMcpError,
+  type McpRunEnvelopeV0Alpha2,
 } from "./index.js";
 import {
   DEFAULT_MAX_RUN_BYTES,
   DEFAULT_MAX_RUNS,
   MAX_LIST_PAGE_SIZE,
   MAX_MODEL_PROPOSAL_EVENTS,
+  MCP_KERNEL_LIMITS,
+  MCP_SERVER_VERSION,
+  MCP_WRITER_IDENTITY,
 } from "./constants.js";
 import { correctionEvents, releaseContract } from "./__tests__/fixtures.js";
+import { sealVerifiedModelProposalAdmission } from "./model-admission.js";
+
+const directAdmission = {
+  authorityId: "operator.test",
+  policyRef: "policy:test/v1",
+  policyDigest: `sha256:${"a".repeat(64)}`,
+} as const;
+const modelAdmission = directAdmission;
+
+class TestStore extends FileMcpRunStore {
+  override append(
+    runId: string,
+    draft: unknown,
+    expectedRunDigest: string,
+    admission: unknown = directAdmission,
+  ) {
+    return super.append(runId, draft, expectedRunDigest, admission);
+  }
+
+  admitCompiled(
+    runId: string,
+    events: unknown,
+    expected: { revision: number; runDigest: string },
+    admission: unknown = modelAdmission,
+  ) {
+    const proposal = {
+      schema: "covenant.timeline.model-proposal.v1",
+      requestId: "request.store-test",
+      changes: [],
+      query: {
+        type: "consistency",
+        targetHandle: "actual",
+        knowledgeCut: { type: "current" },
+      },
+    } as const;
+    const candidateEvents = events as readonly TemporalEventV0Alpha3[];
+    const candidate = {
+      schema: "covenant.timeline.model-proposal-candidate.v1",
+      requestId: proposal.requestId,
+      baseRunDigest: expected.runDigest,
+      proposalDigest: contentDigest(proposal as unknown as JsonValue),
+      candidateEvents,
+      candidateQuery: {
+        schema: "covenant.timeline.query.v0alpha3",
+        id: "query.store-test",
+        contextId: "actual",
+        recordedThrough: null,
+        type: "context.consistency",
+      },
+      provenance: candidateEvents.map(({ id }) => ({
+        candidateEventId: id,
+        evidenceRefs: [],
+        supports: [],
+      })),
+    } as TemporalModelProposalCandidateV1;
+    const permit = sealVerifiedModelProposalAdmission(
+      runId,
+      candidate,
+      proposal,
+      expected,
+    );
+    return super.admitVerifiedModelProposal(permit, admission);
+  }
+}
 
 describe("FileMcpRunStore", () => {
   let directory: string;
-  let store: FileMcpRunStore;
+  let store: TestStore;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "timeline-mcp-store-"));
-    store = new FileMcpRunStore(directory);
+    store = new TestStore(directory);
   });
 
   afterEach(async () => {
@@ -48,11 +123,7 @@ describe("FileMcpRunStore", () => {
     expect(created.created).toBe(true);
     expect(created.envelope.revision).toBe(0);
     expect(created.envelope.runDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(created.envelope.admission).toEqual({
-      mode: "structural-only",
-      assertionAuthority: "unverified",
-      evidencePayloads: "external",
-    });
+    expect(created.envelope.admissions).toEqual([]);
 
     const loaded = await new FileMcpRunStore(directory).require(contract.id);
     expect(loaded).toEqual(created.envelope);
@@ -60,9 +131,11 @@ describe("FileMcpRunStore", () => {
       {
         runId: contract.id,
         revision: 0,
+        auditDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
         subject: contract.subject,
         contexts: contract.contexts,
         eventCount: 0,
+        admissionCount: 0,
         latestRecordedThrough: null,
         runDigest: created.envelope.runDigest,
       },
@@ -71,6 +144,75 @@ describe("FileMcpRunStore", () => {
     const reopened = await store.create(contract);
     expect(reopened.created).toBe(false);
     expect(reopened.envelope).toEqual(created.envelope);
+  });
+
+  test("snapshots a contract before the first filesystem await", async () => {
+    const contract = structuredClone(releaseContract());
+    const runId = contract.id;
+
+    const pending = store.create(contract);
+    contract.id = "agent.mutated";
+
+    const created = await pending;
+    expect(created.envelope.runId).toBe(runId);
+    expect(created.envelope.run.contract.id).toBe(runId);
+    expect(await store.require(runId)).toEqual(created.envelope);
+    expect(await store.load(contract.id)).toBeUndefined();
+  });
+
+  test("snapshots an event and admission before the first filesystem await", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const fixture = correctionEvents[0];
+    if (!fixture || fixture.type !== "point.declared") {
+      throw new Error("correction fixture must begin with a point declaration");
+    }
+    const draft = structuredClone(fixture);
+    const admission: {
+      authorityId: string;
+      policyRef: string;
+      policyDigest: string;
+    } = { ...directAdmission };
+    const pointId = draft.point.id;
+
+    const pending = store.append(
+      contract.id,
+      draft,
+      created.envelope.runDigest,
+      admission,
+    );
+    draft.point.id = "point.mutated";
+    admission.authorityId = "INVALID";
+
+    const appended = await pending;
+    expect(appended.event).toMatchObject({ point: { id: pointId } });
+    expect(appended.admissionRecord.authorityId).toBe(
+      directAdmission.authorityId,
+    );
+    expect(await store.require(contract.id)).toEqual(appended.envelope);
+  });
+
+  test("rejects missing or forged model admission capabilities before filesystem access", async () => {
+    const untouched = join(directory, "untouched");
+    const rawStore = new FileMcpRunStore(untouched);
+
+    expect("admitCompiled" in rawStore).toBe(false);
+    await expect(
+      rawStore.admitVerifiedModelProposal(undefined, directAdmission),
+    ).rejects.toMatchObject({ code: "timeline.mcp.input.invalid" });
+    await expect(
+      rawStore.admitVerifiedModelProposal(
+        {
+          artifact: {
+            runId: "../../forged",
+            events: [],
+            exactPrefix: { revision: 0, runDigest: "not-a-digest" },
+          },
+        },
+        directAdmission,
+      ),
+    ).rejects.toMatchObject({ code: "timeline.mcp.input.invalid" });
+    await expect(stat(untouched)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("lists deterministic first, middle, and final pages", async () => {
@@ -273,6 +415,15 @@ describe("FileMcpRunStore", () => {
     expect(retried.event).toEqual(first.event);
     expect(retried.envelope.revision).toBe(2);
 
+    await expect(
+      store.append(
+        contract.id,
+        correctionEvents[0],
+        created.envelope.runDigest,
+        { ...directAdmission, policyRef: "policy:test/v2" },
+      ),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
+
     const firstDraft = correctionEvents[0];
     if (firstDraft?.type !== "point.declared") {
       throw new Error("correction fixture must begin with a point declaration");
@@ -307,12 +458,12 @@ describe("FileMcpRunStore", () => {
     const created = await store.create(contract);
     const batch = materializeEvents(correctionEvents.slice(0, 2), 0);
 
-    const applied = await store.appendCompiled(contract.id, batch, {
+    const applied = await store.admitCompiled(contract.id, batch, {
       revision: 0,
       runDigest: created.envelope.runDigest,
     });
     expect(applied).toMatchObject({
-      appended: true,
+      admissionStatus: "admitted",
       events: [{ sequence: 0 }, { sequence: 1 }],
       envelope: { revision: 2 },
     });
@@ -322,13 +473,21 @@ describe("FileMcpRunStore", () => {
       correctionEvents[2],
       applied.envelope.runDigest,
     );
-    const retried = await store.appendCompiled(contract.id, batch, {
+    const retried = await store.admitCompiled(contract.id, batch, {
       revision: 0,
       runDigest: created.envelope.runDigest,
     });
-    expect(retried.appended).toBe(false);
+    expect(retried.admissionStatus).toBe("already-admitted");
     expect(retried.events).toEqual(batch);
     expect(retried.envelope).toEqual(later.envelope);
+    await expect(
+      store.admitCompiled(
+        contract.id,
+        batch,
+        { revision: 0, runDigest: created.envelope.runDigest },
+        { ...modelAdmission, authorityId: "operator.different" },
+      ),
+    ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
   });
 
   test("rejects incomplete, changed, reordered, colliding, and stale occupied prefixes", async () => {
@@ -342,7 +501,7 @@ describe("FileMcpRunStore", () => {
       created.envelope.runDigest,
     );
     await expect(
-      store.appendCompiled(contract.id, batch, {
+      store.admitCompiled(contract.id, batch, {
         revision: 0,
         runDigest: created.envelope.runDigest,
       }),
@@ -355,7 +514,7 @@ describe("FileMcpRunStore", () => {
     }
     changed[0].point.id = "changed";
     await expect(
-      store.appendCompiled(contract.id, changed, {
+      store.admitCompiled(contract.id, changed, {
         revision: 0,
         runDigest: created.envelope.runDigest,
       }),
@@ -366,7 +525,7 @@ describe("FileMcpRunStore", () => {
       { ...batch[0]!, sequence: 1 },
     ];
     await expect(
-      store.appendCompiled(contract.id, reordered, {
+      store.admitCompiled(contract.id, reordered, {
         revision: 0,
         runDigest: created.envelope.runDigest,
       }),
@@ -379,20 +538,20 @@ describe("FileMcpRunStore", () => {
       },
     ];
     await expect(
-      store.appendCompiled(contract.id, colliding, {
+      store.admitCompiled(contract.id, colliding, {
         revision: 1,
         runDigest: current.runDigest,
       }),
     ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
 
     await expect(
-      store.appendCompiled(contract.id, [], {
+      store.admitCompiled(contract.id, [], {
         revision: 0,
         runDigest: `sha256:${"0".repeat(64)}`,
       }),
     ).rejects.toMatchObject({ code: "timeline.mcp.store.conflict" });
     await expect(
-      store.appendCompiled(contract.id, [], {
+      store.admitCompiled(contract.id, [], {
         revision: current.revision + 1,
         runDigest: current.runDigest,
       }),
@@ -421,7 +580,7 @@ describe("FileMcpRunStore", () => {
     ];
 
     await expect(
-      store.appendCompiled(contract.id, events, {
+      store.admitCompiled(contract.id, events, {
         revision: 0,
         runDigest: created.envelope.runDigest,
       }),
@@ -441,8 +600,8 @@ describe("FileMcpRunStore", () => {
     };
 
     const writes = await Promise.allSettled([
-      store.appendCompiled(contract.id, first, expected),
-      store.appendCompiled(contract.id, second, expected),
+      store.admitCompiled(contract.id, first, expected),
+      store.admitCompiled(contract.id, second, expected),
     ]);
     expect(writes.filter(({ status }) => status === "fulfilled")).toHaveLength(
       1,
@@ -458,18 +617,18 @@ describe("FileMcpRunStore", () => {
   test("bounds compiled batches and accepts a bound empty no-op", async () => {
     const contract = releaseContract();
     const created = await store.create(contract);
-    const empty = await store.appendCompiled(contract.id, [], {
+    const empty = await store.admitCompiled(contract.id, [], {
       revision: 0,
       runDigest: created.envelope.runDigest,
     });
     expect(empty).toMatchObject({
-      appended: false,
+      admissionStatus: "empty-candidate",
       events: [],
       envelope: { revision: 0 },
     });
 
     await expect(
-      store.appendCompiled(
+      store.admitCompiled(
         contract.id,
         Array.from(
           { length: MAX_MODEL_PROPOSAL_EVENTS + 1 },
@@ -551,7 +710,7 @@ describe("FileMcpRunStore", () => {
   });
 
   test("serializes the global run limit and never steals fixed locks", async () => {
-    const limited = new FileMcpRunStore(directory, { maxRuns: 1 });
+    const limited = new TestStore(directory, { maxRuns: 1 });
     const creates = await Promise.allSettled([
       limited.create(releaseContract("agent.one")),
       limited.create(releaseContract("agent.two")),
@@ -613,8 +772,8 @@ describe("FileMcpRunStore", () => {
     });
 
     const duplicate = canonical.replace(
-      '{"admission":',
-      '{"schema":"covenant.timeline.mcp-run.v0alpha1","admission":',
+      '{"admissions":',
+      '{"schema":"covenant.timeline.mcp-run.v0alpha2","admissions":',
     );
     await writeFile(path, duplicate);
     await expect(store.require(contract.id)).rejects.toMatchObject({
@@ -624,6 +783,11 @@ describe("FileMcpRunStore", () => {
 
   test("rejects every stored envelope identity invariant", async () => {
     const created = await store.create(releaseContract());
+    const appended = await store.append(
+      created.envelope.runId,
+      correctionEvents[0],
+      created.envelope.runDigest,
+    );
     const mutations: Array<(value: Record<string, unknown>) => void> = [
       (value) => {
         value.extra = true;
@@ -641,16 +805,38 @@ describe("FileMcpRunStore", () => {
         value.runDigest = "not-a-digest";
       },
       (value) => {
-        record(value.admission).mode = "trusted";
+        record((value.admissions as unknown[])[0]).policyDigest =
+          `sha256:${"0".repeat(64)}`;
       },
       (value) => {
-        record(value.implementation).serverVersion = "unrecognized";
+        value.admissions = [];
+      },
+      (value) => {
+        record((value.admissions as unknown[])[0]).eventIds = [
+          "event.different",
+        ];
+      },
+      (value) => {
+        record(value.lastWriter).serverVersion = "unrecognized";
+      },
+      (value) => {
+        record(value.lastWriter).serverVersion = "0.0.0-alpha.2";
+      },
+      (value) => {
+        record(
+          record((value.admissions as unknown[])[0]).writer,
+        ).serverVersion = "0.0.0-alpha.2";
+      },
+      (value) => {
+        record(
+          record((value.admissions as unknown[])[0]).writer,
+        ).serverVersion = "unrecognized";
       },
       (value) => {
         record(record(value.run).contract).id = "different.run";
       },
       (value) => {
-        value.revision = 1;
+        value.revision = 2;
       },
       (value) => {
         value.runDigest = `sha256:${"0".repeat(64)}`;
@@ -658,29 +844,130 @@ describe("FileMcpRunStore", () => {
     ];
 
     for (const mutate of mutations) {
-      const value = structuredClone(created.envelope) as unknown as Record<
+      const value = structuredClone(appended.envelope) as unknown as Record<
         string,
         unknown
       >;
       mutate(value);
-      expect(() => parseMcpRunEnvelopeV0Alpha1(value)).toThrowError(
+      expect(() => parseMcpRunEnvelopeV0Alpha2(value)).toThrowError(
         expect.objectContaining({ code: "timeline.mcp.store.corrupt" }),
       );
     }
-    expect(() => parseMcpRunEnvelopeV0Alpha1(null)).toThrowError(
+    expect(() => parseMcpRunEnvelopeV0Alpha2(null)).toThrowError(
       expect.objectContaining({ code: "timeline.mcp.store.corrupt" }),
     );
   });
 
-  test("preserves compatible server versions across process upgrades", async () => {
+  test("preserves compatible last-writer versions across process upgrades", async () => {
     const created = await store.create(releaseContract());
     const value = structuredClone(created.envelope);
-    value.implementation.serverVersion = "0.0.0-alpha.2";
+    value.lastWriter.serverVersion = "0.0.0-alpha.2";
 
-    expect(parseMcpRunEnvelopeV0Alpha1(value).implementation).toEqual({
-      ...created.envelope.implementation,
+    expect(parseMcpRunEnvelopeV0Alpha2(value).lastWriter).toEqual({
+      ...created.envelope.lastWriter,
       serverVersion: "0.0.0-alpha.2",
     });
+  });
+
+  test("validates incremental prefix digests against canonical run prefixes", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    let current = created.envelope;
+    for (const event of correctionEvents.slice(0, 4)) {
+      current = (await store.append(contract.id, event, current.runDigest))
+        .envelope;
+    }
+
+    const loaded = await store.require(contract.id);
+    expect(loaded.admissions.map(({ baseRunDigest }) => baseRunDigest)).toEqual(
+      loaded.run.events.map((_, revision) =>
+        contentDigest({
+          schema: loaded.run.schema,
+          contract: loaded.run.contract,
+          events: loaded.run.events.slice(0, revision),
+        } as unknown as JsonValue),
+      ),
+    );
+  });
+
+  test("validates the supported direct-admission ceiling", () => {
+    const envelope = directAdmissionEnvelope(MCP_KERNEL_LIMITS.maxEvents);
+    expect(
+      Buffer.byteLength(canonicalJson(envelope as unknown as JsonValue)),
+    ).toBeLessThanOrEqual(DEFAULT_MAX_RUN_BYTES);
+    const parsed = parseMcpRunEnvelopeV0Alpha2(envelope);
+
+    expect(parsed.revision).toBe(MCP_KERNEL_LIMITS.maxEvents);
+    expect(parsed.admissions).toHaveLength(MCP_KERNEL_LIMITS.maxEvents);
+  });
+
+  test("retries a direct admission without replacing its original writer", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const appended = await store.append(
+      contract.id,
+      correctionEvents[0],
+      created.envelope.runDigest,
+    );
+    const historical = withWriterVersion(appended.envelope, "0.0.0-alpha.2");
+    await writeFile(
+      await storedPath(directory),
+      `${canonicalJson(historical as unknown as JsonValue)}\n`,
+    );
+
+    const retried = await store.append(
+      contract.id,
+      correctionEvents[0],
+      created.envelope.runDigest,
+    );
+    expect(retried.appended).toBe(false);
+    expect(retried.admissionRecord.writer.serverVersion).toBe("0.0.0-alpha.2");
+    expect(retried.envelope.lastWriter.serverVersion).toBe("0.0.0-alpha.2");
+
+    const later = await store.append(
+      contract.id,
+      correctionEvents[1],
+      retried.envelope.runDigest,
+    );
+    expect(
+      later.envelope.admissions.map(({ writer }) => writer.serverVersion),
+    ).toEqual(["0.0.0-alpha.2", MCP_SERVER_VERSION]);
+    expect(later.envelope.lastWriter.serverVersion).toBe(MCP_SERVER_VERSION);
+  });
+
+  test("retries a model admission without replacing its original writer", async () => {
+    const contract = releaseContract();
+    const created = await store.create(contract);
+    const batch = materializeEvents(correctionEvents.slice(0, 2), 0);
+    const admitted = await store.admitCompiled(
+      contract.id,
+      batch,
+      { revision: 0, runDigest: created.envelope.runDigest },
+      modelAdmission,
+    );
+    const historical = withWriterVersion(admitted.envelope, "0.0.0-alpha.2");
+    await writeFile(
+      await storedPath(directory),
+      `${canonicalJson(historical as unknown as JsonValue)}\n`,
+    );
+
+    const empty = await store.admitCompiled(
+      contract.id,
+      [],
+      { revision: historical.revision, runDigest: historical.runDigest },
+      modelAdmission,
+    );
+    expect(empty.envelope.lastWriter.serverVersion).toBe("0.0.0-alpha.2");
+
+    const retried = await store.admitCompiled(
+      contract.id,
+      batch,
+      { revision: 0, runDigest: created.envelope.runDigest },
+      modelAdmission,
+    );
+    expect(retried.admissionStatus).toBe("already-admitted");
+    expect(retried.admissionRecord?.writer.serverVersion).toBe("0.0.0-alpha.2");
+    expect(retried.envelope.lastWriter.serverVersion).toBe("0.0.0-alpha.2");
   });
 
   test("rejects stored files whose names do not bind their run IDs", async () => {
@@ -797,6 +1084,109 @@ function materializeEvents(
         sequence: start + index,
       }) as TemporalEventV0Alpha3,
   );
+}
+
+function withWriterVersion(
+  envelope: McpRunEnvelopeV0Alpha2,
+  serverVersion: string,
+): McpRunEnvelopeV0Alpha2 {
+  const value = structuredClone(envelope);
+  value.lastWriter.serverVersion = serverVersion;
+  value.admissions = value.admissions.map((admission) => {
+    const writer = { ...admission.writer, serverVersion };
+    const { recordDigest: _, ...unsigned } = { ...admission, writer };
+    return {
+      ...unsigned,
+      recordDigest: contentDigest(unsigned as unknown as JsonValue),
+    };
+  });
+  return value;
+}
+
+function directAdmissionEnvelope(eventCount: number): McpRunEnvelopeV0Alpha2 {
+  const contract = releaseContract("agent.admission-ceiling");
+  const events: TemporalEventV0Alpha3[] = [
+    {
+      schema: "covenant.timeline.event.v0alpha3",
+      sequence: 0,
+      id: "event.point",
+      type: "point.declared",
+      point: {
+        id: "point",
+        contextId: "actual",
+        axisId: "utc-seconds",
+      },
+    },
+  ];
+  const assertionCount = Math.min(
+    eventCount - events.length,
+    MCP_KERNEL_LIMITS.maxAssertions,
+  );
+  for (let index = 0; index < assertionCount; index += 1) {
+    events.push({
+      schema: "covenant.timeline.event.v0alpha3",
+      sequence: events.length,
+      id: `event.assertion-${index}`,
+      type: "coordinate.asserted",
+      assertion: {
+        id: `assertion-${index}`,
+        contextId: "actual",
+        pointId: "point",
+        coordinate: { minimum: index, maximum: index },
+        evidenceRefs: [directAdmission.policyDigest],
+      },
+    });
+  }
+  while (events.length < eventCount) {
+    const assertionIndex = events.length - assertionCount - 1;
+    events.push({
+      schema: "covenant.timeline.event.v0alpha3",
+      sequence: events.length,
+      id: `event.retraction-${assertionIndex}`,
+      type: "assertion.retracted",
+      assertionId: `assertion-${assertionIndex}`,
+      evidenceRefs: [directAdmission.policyDigest],
+    });
+  }
+
+  const run = {
+    schema: "covenant.timeline.run.v0alpha3" as const,
+    contract,
+    events,
+  };
+  const prefixHash = createHash("sha256")
+    .update('{"contract":')
+    .update(canonicalJson(contract as unknown as JsonValue))
+    .update(',"events":[');
+  const admissions = events.map((event, revision) => {
+    const unsigned = {
+      schema: "covenant.timeline.mcp-admission.v0alpha1" as const,
+      kind: "direct-event" as const,
+      decision: "admitted" as const,
+      ...directAdmission,
+      writer: MCP_WRITER_IDENTITY,
+      baseRevision: revision,
+      baseRunDigest:
+        `sha256:${prefixHash.copy().update('],"schema":"covenant.timeline.run.v0alpha3"}').digest("hex")}` as const,
+      eventIds: [event.id],
+    };
+    if (revision > 0) prefixHash.update(",");
+    prefixHash.update(canonicalJson(event as unknown as JsonValue));
+    return {
+      ...unsigned,
+      recordDigest: contentDigest(unsigned as unknown as JsonValue),
+    };
+  });
+
+  return {
+    schema: "covenant.timeline.mcp-run.v0alpha2",
+    runId: contract.id,
+    revision: events.length,
+    runDigest: contentDigest(run as unknown as JsonValue),
+    admissions,
+    lastWriter: MCP_WRITER_IDENTITY,
+    run,
+  };
 }
 
 function record(value: unknown): Record<string, unknown> {

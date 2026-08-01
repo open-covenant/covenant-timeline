@@ -10,8 +10,8 @@ facts.
 | Corrections preserve earlier replayable views                                                                  | Supported                                               | correction-replay run and verifier tests                                                                          |
 | The reference kernel returns deterministic semantic results for identical admitted bytes and query bytes       | Supported                                               | conformance replay across declared environments                                                                   |
 | A conclusion carries a verifier-checked receipt bound to state, query, result, and reasoner                    | Supported                                               | v0alpha3 kernel and verifier tests                                                                                |
-| The model-proposal compiler resolves host-issued handles and exact source spans without persisting source text | Supported as an implementation property                 | compiler, candidate-verifier, and MCP security tests                                                              |
-| Frontier models reliably use the production proposal boundary                                                  | Not yet supported                                       | Requires the preregistered proposal-boundary result                                                               |
+| The model-proposal compiler resolves host-issued handles and exact source spans without persisting source text | Supported as a structural implementation property       | compiler and candidate-verifier tests; this does not establish semantic extraction quality                        |
+| Frontier models reliably use the deployment-shaped proposal boundary                                           | Rejected on the v2 suite                                | The fixed gate returned `kill`: assertion F1 0.7692 and end-to-end exactness 76/108                               |
 | Timeline improves model temporal accuracy over simpler structured extraction                                   | Rejected on the v1 suite                                | The fixed model-interface gate returned `kill`; Timeline scored 106/108 answers and structured extraction 107/108 |
 | Timeline outperforms bounded narrative memory on the v1 suite                                                  | Supported only for that suite and model                 | Timeline scored 106/108 answers and narrative memory 65/108                                                       |
 | Timeline makes models understand time                                                                          | Unsupported                                             | Use the narrower state, replay, and verification claim                                                            |
@@ -30,6 +30,8 @@ facts.
 - Use **proof verification**, not “proof of truth” or “proof the model was
   correct.”
 - Qualify benchmark claims with the model, corpus, date, and comparator.
+- Preserve the model-proposal v2 result as a failed gate; do not describe it as
+  an inconclusive run or retune the frozen interface against its corpus.
 - Describe Open Covenant runs as **maintainer-operated** unless an external
   organization owns the workflow.
 - Describe v0alpha3 as a **portable contract with a reference implementation**

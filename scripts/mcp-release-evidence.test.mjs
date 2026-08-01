@@ -16,8 +16,10 @@ import {
 import {
   assertMcpArchiveEntries,
   assertMcpArchiveFiles,
+  expectedMcpAlpha1ArchiveFiles,
   expectedMcpArchiveFiles,
   maxMcpArchiveUnpackedBytes,
+  mcpArchiveFilesForVersion,
   parseMcpTarListings,
 } from "./mcp-package-contents.mjs";
 import {
@@ -310,16 +312,28 @@ test("binds the MCP checksum sidecar filename", () => {
   assert.doesNotThrow(() =>
     verifyChecksumSidecar(
       manifest,
-      `${manifest.artifact.sha256}  /build/${tarball.name}\n`,
+      `${manifest.artifact.sha256}  ${tarball.name}\n`,
     ),
   );
   assert.throws(
     () =>
       verifyChecksumSidecar(
         manifest,
-        `${manifest.artifact.sha256}  /build/timeline.tgz\n`,
+        `${manifest.artifact.sha256}  /build/${tarball.name}\n`,
       ),
     /checksum sidecar subject/,
+  );
+});
+
+test("keeps the historical MCP archive profile explicit", () => {
+  assert.equal(expectedMcpArchiveFiles, expectedMcpAlpha1ArchiveFiles);
+  assert.equal(
+    mcpArchiveFilesForVersion("0.0.0-alpha.1"),
+    expectedMcpAlpha1ArchiveFiles,
+  );
+  assert.throws(
+    () => mcpArchiveFilesForVersion("0.0.0-alpha.2"),
+    /unsupported MCP archive profile/,
   );
 });
 
@@ -453,7 +467,7 @@ function mcpRecord() {
         "https://registry.npmjs.org/@covenant-org/timeline-mcp/-/timeline-mcp-0.0.0-alpha.1.tgz",
       shasum: "a".repeat(40),
       integrity: `sha512-${Buffer.alloc(64).toString("base64")}`,
-      fileCount: 35,
+      fileCount: expectedMcpArchiveFiles.length,
       unpackedSize: 1000,
       provenanceUrl:
         "https://registry.npmjs.org/-/npm/v1/attestations/@covenant-org%2ftimeline-mcp@0.0.0-alpha.1",
@@ -520,7 +534,7 @@ function mcpRecord() {
       binary: "timeline-mcp",
       transport: "stdio",
       temporalSurface: "v0alpha3",
-      storeEnvelope: "covenant.timeline.mcp-run.v0alpha1",
+      storeEnvelope: "covenant.timeline.mcp-run.v0alpha2",
       runtimePins: {
         "@covenant-org/timeline": "0.0.0-alpha.3",
         "@modelcontextprotocol/server": "2.0.0-beta.5",

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { opendir, readFile } from "node:fs/promises";
+import { opendir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { validateAttemptLedgerDocument } from "./formal-attempt-ledger.mjs";
 import {
   decodeUtf8,
   exactRecord,
@@ -12,6 +13,7 @@ import {
   canonicalArtifactRoot,
   assertArtifactDirectory,
   readBoundedArtifactFile,
+  readBoundedExactFile,
   repositoryRoot,
   resolveInside,
   safeEvidenceName,
@@ -21,18 +23,22 @@ import {
 import {
   REAL_MODEL_PILOT_LIMITS,
   REAL_MODEL_PILOT_SCHEMA,
+  createRealModelPilotAdmissionPolicy,
   createAdapterRequest,
   createProposalScope,
   realModelPilotRuntimeMatches,
   redactAdapterRequest,
   validateRealModelPilotRuntime,
   validateProposalSemantics,
+  validateMcpWriterIdentity,
+  validateMcpWriterTrajectory,
 } from "./mcp-real-model-pilot-lib.mjs";
 
 const ARTIFACT_DIRECTORIES = new Set([
   "conclusions",
   "evidence",
   "model-calls",
+  "phase-results",
   "queries",
 ]);
 const CONTENT_MANIFEST = "content-manifest.json";
@@ -74,16 +80,24 @@ export async function verifyRealModelPilot(
       "pilotInput",
       "run",
       "runDigest",
+      "audit",
+      "auditDigest",
+      "admissionPolicy",
+      "admissionPolicyDigest",
+      "attemptLedger",
+      "attemptLedgerDigest",
       "evidenceManifest",
       "modelConfig",
       "modelConfigDigest",
       "prompt",
       "promptDigest",
       "contentManifest",
+      "phaseResults",
       "expected",
       "modelCalls",
       "conclusions",
       "invocations",
+      "mcpInvocations",
       "source",
       "runtime",
       "runtimeDigest",
@@ -96,7 +110,17 @@ export async function verifyRealModelPilot(
     artifact.operation !== "maintainer-operated" ||
     artifact.provenance.modelExecution !== "maintainer-attested" ||
     artifact.provenance.processRestart !== "maintainer-attested" ||
-    !artifact.limitations.includes("not-independent-adoption")
+    artifact.provenance.externalEvidenceAuthenticity !==
+      "maintainer-attested" ||
+    artifact.provenance.mcpProcessIdentity !==
+      "driver-observed-maintainer-attested" ||
+    !artifact.limitations.includes("not-independent-adoption") ||
+    !artifact.limitations.includes(
+      "external-evidence-authenticity-not-cryptographically-proven",
+    ) ||
+    !artifact.limitations.includes(
+      "model-proposals-untrusted-and-host-admitted-after-semantic-validation",
+    )
   ) {
     throw new Error("real-model pilot scope is invalid");
   }
@@ -109,6 +133,17 @@ export async function verifyRealModelPilot(
       artifact.invocations[1].invocationId
   ) {
     throw new Error("pilot did not cross two host process invocations");
+  }
+  if (
+    artifact.mcpInvocations.length !== 2 ||
+    artifact.mcpInvocations[0].phase !== "initial" ||
+    artifact.mcpInvocations[1].phase !== "correction" ||
+    artifact.mcpInvocations[0].processId ===
+      artifact.mcpInvocations[1].processId ||
+    artifact.mcpInvocations[0].invocationId ===
+      artifact.mcpInvocations[1].invocationId
+  ) {
+    throw new Error("pilot did not cross two observed MCP child invocations");
   }
 
   const verifierSource = sourceIdentity();
@@ -128,6 +163,22 @@ export async function verifyRealModelPilot(
     { identity: artifact.runtime, digest: artifact.runtimeDigest },
     timeline,
   );
+  const mcpScript = artifact.runtime.files.find(
+    ({ path }) => path === "packages/mcp-server/dist/cli.js",
+  );
+  if (
+    !mcpScript ||
+    artifact.mcpInvocations.some(
+      (invocation) =>
+        invocation.provenance !== "driver-observed-maintainer-attested" ||
+        invocation.executableDigest !==
+          artifact.runtime.node.executableDigest ||
+        invocation.script !== mcpScript.path ||
+        invocation.scriptDigest !== mcpScript.digest,
+    )
+  ) {
+    throw new Error("MCP child invocation runtime binding changed");
+  }
   let runtimeMatched = false;
   if (verifierRuntime) {
     validateRealModelPilotRuntime(verifierRuntime, timeline);
@@ -155,6 +206,43 @@ export async function verifyRealModelPilot(
     totalBudget,
   });
 
+  const policyBytes = await readBoundedArtifactFile(
+    root,
+    resolveInside(root, artifact.admissionPolicy, "admission policy path"),
+    REAL_MODEL_PILOT_LIMITS.artifactBytes,
+    "admission policy",
+    (size) => consume(totalBudget, size),
+  );
+  const policy = parseCanonicalBytes(policyBytes, timeline, "admission policy");
+  const expectedPolicy = createRealModelPilotAdmissionPolicy(timeline);
+  if (
+    artifact.admissionPolicy !== "admission-policy.json" ||
+    timeline.byteDigest(policyBytes) !== artifact.admissionPolicyDigest ||
+    !Buffer.from(policyBytes).equals(expectedPolicy.bytes) ||
+    timeline.canonicalJson(policy) !==
+      timeline.canonicalJson(expectedPolicy.document) ||
+    artifact.admissionPolicyDigest !== expectedPolicy.digest
+  ) {
+    throw new Error("pilot admission policy did not reproduce");
+  }
+  const attemptLedger = validateAttemptLedgerDocument(
+    await readCanonical(
+      root,
+      resolveInside(root, artifact.attemptLedger, "attempt ledger path"),
+      timeline,
+      "attempt ledger",
+      REAL_MODEL_PILOT_LIMITS.artifactBytes,
+      totalBudget,
+    ),
+    timeline,
+  );
+  if (
+    artifact.attemptLedger !== "attempt-ledger.json" ||
+    timeline.contentDigest(attemptLedger) !== artifact.attemptLedgerDigest
+  ) {
+    throw new Error("attempt ledger digest changed");
+  }
+
   const run = timeline.parseRunDocumentV0Alpha3(
     await readCanonical(
       root,
@@ -167,6 +255,20 @@ export async function verifyRealModelPilot(
   );
   if (timeline.contentDigest(run) !== artifact.runDigest) {
     throw new Error("pilot run digest changed");
+  }
+  const audit = await readCanonical(
+    root,
+    resolveInside(root, artifact.audit, "pilot audit path"),
+    timeline,
+    "pilot audit",
+    REAL_MODEL_PILOT_LIMITS.runBytes,
+    totalBudget,
+  );
+  if (
+    artifact.audit !== "audit.json" ||
+    timeline.contentDigest(audit) !== artifact.auditDigest
+  ) {
+    throw new Error("pilot audit digest changed");
   }
   const config = await readCanonical(
     root,
@@ -252,17 +354,26 @@ export async function verifyRealModelPilot(
       timeline,
       artifact,
       pilotInput,
+      audit,
     });
     calls.push(call);
   }
   if (
     calls[0].phase !== "initial" ||
     calls[1].phase !== "correction" ||
-    calls[0].apply.timeline.revision !== calls[1].apply.baseRevision ||
-    calls[1].apply.timeline.revision !== run.events.length
+    calls[0].admit.timeline.revision !== calls[1].admit.baseRevision ||
+    calls[1].admit.timeline.revision !== run.events.length
   ) {
     throw new Error("model-call phases do not form one append-only trajectory");
   }
+  verifyAttemptLedger({ attemptLedger, artifact, calls, timeline });
+  verifyMcpAuditEnvelope({
+    audit,
+    run,
+    calls,
+    policy: expectedPolicy,
+    timeline,
+  });
 
   const conclusions = new Map();
   for (const entry of artifact.conclusions) {
@@ -303,6 +414,10 @@ export async function verifyRealModelPilot(
   assertDifference(historical.conclusion, artifact.expected.initialDifference);
   assertDifference(current.conclusion, artifact.expected.correctedDifference);
   if (
+    timeline.canonicalJson(calls[0].preview.conclusion) !==
+      timeline.canonicalJson(initial.conclusion) ||
+    timeline.canonicalJson(calls[1].preview.conclusion) !==
+      timeline.canonicalJson(current.conclusion) ||
     initial.query.recordedThrough !== historical.query.recordedThrough ||
     initial.conclusion.receipt.stateDigest !==
       historical.conclusion.receipt.stateDigest ||
@@ -313,6 +428,17 @@ export async function verifyRealModelPilot(
   ) {
     throw new Error("historical cut was not preserved across the correction");
   }
+  await verifyPhaseResultBundles({
+    root,
+    artifact,
+    attemptLedger,
+    calls,
+    conclusions,
+    run,
+    audit,
+    timeline,
+    totalBudget,
+  });
 
   const report = {
     schema: "covenant.timeline.real-model-pilot.verification.v1",
@@ -324,12 +450,23 @@ export async function verifyRealModelPilot(
     runtimeDigest: artifact.runtimeDigest,
     runtimeMatched,
     contentManifestDigest: content.digest,
+    auditDigest: artifact.auditDigest,
+    admissionPolicyDigest: artifact.admissionPolicyDigest,
+    attemptLedgerDigest: artifact.attemptLedgerDigest,
+    formalAttemptLedgerVerified: true,
+    providerInvocationReservationCount: 2,
+    phaseResultBundleCount: 2,
+    admissionRecordCount: audit.admissions.length,
+    untrustedProposalsHostAdmitted: true,
     requestDigests: calls.map(({ requestDigest }) => requestDigest),
     responseDigests: calls.map(({ responseDigest }) => responseDigest),
     crossedHostProcessRestart: true,
     crossedMcpProcessRestart: true,
     modelExecutionProvenance: artifact.provenance.modelExecution,
     processRestartProvenance: artifact.provenance.processRestart,
+    mcpProcessIdentityProvenance: artifact.provenance.mcpProcessIdentity,
+    externalEvidenceAuthenticityProvenance:
+      artifact.provenance.externalEvidenceAuthenticity,
     historicalCutPreserved: true,
     sourceTextAbsentFromMcpState: true,
     receiptCount: conclusions.size,
@@ -398,16 +535,20 @@ async function validateArtifactSchema(value, timeline) {
   addFormats(ajv);
   const common = timeline.parseJson(
     decodeUtf8(
-      await readFile(
+      await readBoundedExactFile(
         join(repositoryRoot, "schemas/v0alpha3/common.schema.json"),
+        REAL_MODEL_PILOT_LIMITS.configBytes,
+        "common schema",
       ),
       "common schema",
     ),
   );
   const schema = timeline.parseJson(
     decodeUtf8(
-      await readFile(
+      await readBoundedExactFile(
         join(repositoryRoot, "schemas/mcp-real-model-pilot.v1.schema.json"),
+        REAL_MODEL_PILOT_LIMITS.configBytes,
+        "real-model pilot schema",
       ),
       "real-model pilot schema",
     ),
@@ -606,7 +747,12 @@ async function collectArtifactFiles(root, maxFiles) {
 }
 
 function artifactFileLimit(path) {
-  if (path === "artifact.json" || path === "evidence-manifest.json") {
+  if (
+    path === "artifact.json" ||
+    path === "evidence-manifest.json" ||
+    path === "admission-policy.json" ||
+    path === "attempt-ledger.json"
+  ) {
     return REAL_MODEL_PILOT_LIMITS.artifactBytes;
   }
   if (path === "README.md") return REAL_MODEL_PILOT_LIMITS.readmeBytes;
@@ -614,12 +760,16 @@ function artifactFileLimit(path) {
     return REAL_MODEL_PILOT_LIMITS.pilotInputBytes;
   }
   if (path === "run.json") return REAL_MODEL_PILOT_LIMITS.runBytes;
+  if (path === "audit.json") return REAL_MODEL_PILOT_LIMITS.runBytes;
   if (path === "prompt.md") return REAL_MODEL_PILOT_LIMITS.promptBytes;
   if (path === "model-config.json") {
     return REAL_MODEL_PILOT_LIMITS.configBytes;
   }
   if (/^model-calls\/(?:initial|correction)\.json$/u.test(path)) {
     return REAL_MODEL_PILOT_LIMITS.modelCallBytes;
+  }
+  if (/^phase-results\/(?:initial|correction)\.json$/u.test(path)) {
+    return 16 * 1024 * 1024;
   }
   if (/^queries\/(?:initial|historical|current)\.json$/u.test(path)) {
     return REAL_MODEL_PILOT_LIMITS.queryBytes;
@@ -642,6 +792,7 @@ function verifyModelCall({
   timeline,
   artifact,
   pilotInput,
+  audit,
 }) {
   exactRecord(
     call,
@@ -659,7 +810,8 @@ function verifyModelCall({
       "proposal",
       "usage",
       "catalogs",
-      "apply",
+      "preview",
+      "admit",
     ],
     "real-model call",
   );
@@ -671,7 +823,42 @@ function verifyModelCall({
   ) {
     throw new Error("model-call identity changed");
   }
-  const baseRevision = call.apply.baseRevision;
+  exactRecord(
+    call.preview,
+    [
+      "candidateDigest",
+      "requestId",
+      "proposalDigest",
+      "baseRevision",
+      "baseRunDigest",
+      "events",
+      "query",
+      "provenance",
+      "timeline",
+      "conclusion",
+      "persistence",
+      "verified",
+    ],
+    "model proposal preview output",
+  );
+  exactRecord(
+    call.admit,
+    [
+      "candidateDigest",
+      "requestId",
+      "proposalDigest",
+      "baseRevision",
+      "baseRunDigest",
+      "events",
+      "query",
+      "provenance",
+      "admissionStatus",
+      "timeline",
+      "admissionRecord",
+    ],
+    "model proposal admission output",
+  );
+  const baseRevision = call.preview.baseRevision;
   if (
     !Number.isSafeInteger(baseRevision) ||
     baseRevision < 0 ||
@@ -684,7 +871,11 @@ function verifyModelCall({
     contract: run.contract,
     events: run.events.slice(0, baseRevision),
   });
-  if (timeline.contentDigest(prefix) !== call.apply.baseRunDigest) {
+  if (
+    timeline.contentDigest(prefix) !== call.preview.baseRunDigest ||
+    call.admit.baseRevision !== baseRevision ||
+    call.admit.baseRunDigest !== call.preview.baseRunDigest
+  ) {
     throw new Error("model call does not bind its run prefix");
   }
   const publicationAssertions = prefix.events.filter(
@@ -751,27 +942,68 @@ function verifyModelCall({
   ) {
     throw new Error("model proposal candidate did not verify");
   }
-  const appliedCandidate = {
+  const previewCandidate = {
     ...candidate,
-    candidateEvents: call.apply.events,
-    candidateQuery: call.apply.query,
-    provenance: call.apply.provenance,
+    candidateEvents: call.preview.events,
+    candidateQuery: call.preview.query,
+    provenance: call.preview.provenance,
   };
   if (
+    call.preview.verified !== true ||
+    call.preview.persistence !== "not-admitted" ||
+    call.preview.candidateDigest !== timeline.contentDigest(candidate) ||
+    call.preview.proposalDigest !== timeline.contentDigest(call.proposal) ||
     timeline.canonicalJson(candidate) !==
-    timeline.canonicalJson(appliedCandidate)
+      timeline.canonicalJson(previewCandidate) ||
+    timeline.canonicalJson(proposalResultCandidate(call.preview)) !==
+      timeline.canonicalJson(proposalResultCandidate(call.admit))
   ) {
     throw new Error(
-      "stored model candidate differs from the applied MCP result",
+      "stored model candidate differs from the preview or admission result",
     );
   }
-  const endRevision = baseRevision + call.apply.events.length;
+  const candidateRun = timeline.parseRunDocumentV0Alpha3({
+    schema: run.schema,
+    contract: run.contract,
+    events: [...prefix.events, ...call.preview.events],
+  });
   if (
-    call.apply.applied !== true ||
+    !timeline.verifyTemporalConclusionV0Alpha3(
+      candidateRun,
+      call.preview.query,
+      call.preview.conclusion,
+    ) ||
+    timeline.canonicalJson(
+      timeline.reasonTemporalQueryV0Alpha3(candidateRun, call.preview.query),
+    ) !== timeline.canonicalJson(call.preview.conclusion)
+  ) {
+    throw new Error("stored model proposal preview conclusion did not verify");
+  }
+  const endRevision = baseRevision + call.admit.events.length;
+  const previewMetadata = metadataAtRevision({
+    run,
+    audit,
+    revision: baseRevision,
+    timeline,
+  });
+  const admittedMetadata = metadataAtRevision({
+    run,
+    audit,
+    revision: endRevision,
+    timeline,
+  });
+  if (
+    timeline.canonicalJson(call.preview.timeline) !==
+      timeline.canonicalJson(previewMetadata) ||
+    timeline.canonicalJson(call.admit.timeline) !==
+      timeline.canonicalJson(admittedMetadata)
+  ) {
+    throw new Error("model-call timeline metadata did not reproduce");
+  }
+  if (
+    call.admit.admissionStatus !== "admitted" ||
     endRevision > run.events.length ||
-    call.apply.timeline?.runId !== run.contract.id ||
-    call.apply.timeline.revision !== endRevision ||
-    timeline.canonicalJson(call.apply.events) !==
+    timeline.canonicalJson(call.admit.events) !==
       timeline.canonicalJson(run.events.slice(baseRevision, endRevision))
   ) {
     throw new Error("model-call events do not match the admitted run slice");
@@ -782,7 +1014,7 @@ function verifyModelCall({
     events: run.events.slice(0, endRevision),
   });
   if (
-    call.apply.timeline.runDigest !== timeline.contentDigest(admittedPrefix)
+    call.admit.timeline.runDigest !== timeline.contentDigest(admittedPrefix)
   ) {
     throw new Error("model-call result does not bind the admitted run prefix");
   }
@@ -804,6 +1036,406 @@ function verifyModelCall({
       "stored model response does not match the admitted proposal",
     );
   }
+}
+
+function metadataAtRevision({ run, audit, revision, timeline }) {
+  const prefix = timeline.parseRunDocumentV0Alpha3({
+    schema: run.schema,
+    contract: run.contract,
+    events: run.events.slice(0, revision),
+  });
+  const admissions = [];
+  let covered = 0;
+  for (const admission of audit.admissions) {
+    if (covered === revision) break;
+    if (covered + admission.eventIds.length > revision) {
+      throw new Error(
+        "MCP admission records do not align with a model-call prefix",
+      );
+    }
+    admissions.push(admission);
+    covered += admission.eventIds.length;
+  }
+  if (covered !== revision) {
+    throw new Error("MCP admissions do not cover a model-call prefix");
+  }
+  const envelope = {
+    schema: audit.schema,
+    runId: run.contract.id,
+    revision,
+    runDigest: timeline.contentDigest(prefix),
+    admissions,
+    lastWriter: audit.lastWriter,
+    run: prefix,
+  };
+  return {
+    runId: envelope.runId,
+    revision,
+    auditDigest: timeline.contentDigest(envelope),
+    subject: run.contract.subject,
+    contexts: run.contract.contexts,
+    eventCount: revision,
+    admissionCount: admissions.length,
+    latestRecordedThrough: revision === 0 ? null : revision - 1,
+    runDigest: envelope.runDigest,
+  };
+}
+
+async function verifyPhaseResultBundles({
+  root,
+  artifact,
+  attemptLedger,
+  calls,
+  conclusions,
+  run,
+  audit,
+  timeline,
+  totalBudget,
+}) {
+  if (
+    artifact.phaseResults.length !== 2 ||
+    artifact.phaseResults[0].phase !== "initial" ||
+    artifact.phaseResults[0].path !== "phase-results/initial.json" ||
+    artifact.phaseResults[1].phase !== "correction" ||
+    artifact.phaseResults[1].path !== "phase-results/correction.json"
+  ) {
+    throw new Error("phase result manifest is invalid");
+  }
+  const bundles = [];
+  for (const [index, descriptor] of artifact.phaseResults.entries()) {
+    exactRecord(
+      descriptor,
+      ["phase", "path", "digest"],
+      `phase result descriptor ${index}`,
+    );
+    const bundle = await readCanonical(
+      root,
+      resolveInside(root, descriptor.path, "phase result path"),
+      timeline,
+      `${descriptor.phase} phase result bundle`,
+      16 * 1024 * 1024,
+      totalBudget,
+    );
+    if (timeline.contentDigest(bundle) !== descriptor.digest) {
+      throw new Error("phase result bundle digest changed");
+    }
+    bundles.push(bundle);
+  }
+  const [initial, correction] = bundles;
+  const binding = attemptLedger.entries[0].binding;
+  const commonKeys = [
+    "schema",
+    "phase",
+    "binding",
+    "invocation",
+    "mcpInvocation",
+    "runtime",
+    "resultRevision",
+    "resultRunDigest",
+    "recordedThrough",
+    "modelCall",
+    "baseRun",
+    "run",
+    "audit",
+  ];
+  exactRecord(
+    initial,
+    [...commonKeys, "conclusion"],
+    "initial phase result bundle",
+  );
+  exactRecord(
+    correction,
+    [...commonKeys, "historical", "current"],
+    "correction phase result bundle",
+  );
+  if (
+    initial.schema !== "covenant.timeline.real-model-pilot.phase-result.v1" ||
+    correction.schema !==
+      "covenant.timeline.real-model-pilot.phase-result.v1" ||
+    initial.phase !== "initial" ||
+    correction.phase !== "correction" ||
+    timeline.canonicalJson(initial.binding) !==
+      timeline.canonicalJson(binding) ||
+    timeline.canonicalJson(correction.binding) !==
+      timeline.canonicalJson(binding) ||
+    timeline.canonicalJson(initial.runtime) !==
+      timeline.canonicalJson(artifact.runtime) ||
+    timeline.canonicalJson(correction.runtime) !==
+      timeline.canonicalJson(artifact.runtime)
+  ) {
+    throw new Error("phase result execution binding changed");
+  }
+  for (const [index, bundle] of bundles.entries()) {
+    const call = calls[index];
+    const completed = attemptLedger.entries[index === 0 ? 2 : 4];
+    if (
+      timeline.canonicalJson(bundle.invocation) !==
+        timeline.canonicalJson(artifact.invocations[index]) ||
+      timeline.canonicalJson(bundle.mcpInvocation) !==
+        timeline.canonicalJson(artifact.mcpInvocations[index]) ||
+      timeline.canonicalJson(bundle.modelCall) !==
+        timeline.canonicalJson(call) ||
+      timeline.contentDigest(bundle.baseRun) !== call.preview.baseRunDigest ||
+      bundle.baseRun.events.length !== call.preview.baseRevision ||
+      timeline.contentDigest(bundle.run) !== bundle.resultRunDigest ||
+      bundle.resultRevision !== call.admit.timeline.revision ||
+      bundle.resultRunDigest !== call.admit.timeline.runDigest ||
+      bundle.recordedThrough !== call.admit.query.recordedThrough ||
+      completed.resultBundleDigest !== artifact.phaseResults[index].digest
+    ) {
+      throw new Error("phase result bundle does not bind its completed phase");
+    }
+  }
+  const initialRun = timeline.parseRunDocumentV0Alpha3({
+    schema: run.schema,
+    contract: run.contract,
+    events: run.events.slice(0, calls[0].admit.timeline.revision),
+  });
+  const initialAudit = {
+    schema: audit.schema,
+    runId: audit.runId,
+    revision: initialRun.events.length,
+    runDigest: timeline.contentDigest(initialRun),
+    admissions: audit.admissions.slice(0, 3),
+    lastWriter: audit.lastWriter,
+    run: initialRun,
+  };
+  for (const [label, response, expected, metadata] of [
+    [
+      "initial",
+      initial.conclusion,
+      required(conclusions, "initial"),
+      calls[0].admit.timeline,
+    ],
+    [
+      "historical",
+      correction.historical,
+      required(conclusions, "historical"),
+      calls[1].admit.timeline,
+    ],
+    [
+      "current",
+      correction.current,
+      required(conclusions, "current"),
+      calls[1].admit.timeline,
+    ],
+  ]) {
+    exactRecord(
+      response,
+      ["timeline", "query", "conclusion", "verified"],
+      `${label} phase result conclusion`,
+    );
+    if (
+      response.verified !== true ||
+      timeline.canonicalJson(response.timeline) !==
+        timeline.canonicalJson(metadata) ||
+      timeline.canonicalJson(response.query) !==
+        timeline.canonicalJson(expected.query) ||
+      timeline.canonicalJson(response.conclusion) !==
+        timeline.canonicalJson(expected.conclusion)
+    ) {
+      throw new Error("phase result conclusion changed");
+    }
+  }
+  if (
+    timeline.canonicalJson(initial.run) !==
+      timeline.canonicalJson(initialRun) ||
+    timeline.canonicalJson(initial.audit) !==
+      timeline.canonicalJson(initialAudit) ||
+    timeline.canonicalJson(correction.run) !== timeline.canonicalJson(run) ||
+    timeline.canonicalJson(correction.audit) !== timeline.canonicalJson(audit)
+  ) {
+    throw new Error("correction phase result run or audit changed");
+  }
+}
+
+function verifyAttemptLedger({ attemptLedger, artifact, calls, timeline }) {
+  const [
+    opened,
+    initialStarted,
+    initialCompleted,
+    correctionStarted,
+    correctionCompleted,
+  ] = attemptLedger.entries;
+  const binding = opened.binding;
+  if (
+    binding.inputDigest !== artifact.inputDigest ||
+    binding.modelConfigDigest !== artifact.modelConfigDigest ||
+    binding.admissionPolicyDigest !== artifact.admissionPolicyDigest ||
+    binding.runtimeDigest !== artifact.runtimeDigest ||
+    timeline.canonicalJson(binding.source) !==
+      timeline.canonicalJson(artifact.source)
+  ) {
+    throw new Error("attempt ledger execution binding changed");
+  }
+  for (const [index, [started, completed, call]] of [
+    [initialStarted, initialCompleted, calls[0]],
+    [correctionStarted, correctionCompleted, calls[1]],
+  ].entries()) {
+    const invocation = artifact.invocations[index];
+    const mcpInvocation = artifact.mcpInvocations[index];
+    if (
+      timeline.canonicalJson(started.invocation) !==
+        timeline.canonicalJson(invocation) ||
+      timeline.canonicalJson(started.mcpInvocation) !==
+        timeline.canonicalJson(mcpInvocation) ||
+      started.requestDigest !== call.requestDigest ||
+      started.baseRevision !== call.admit.baseRevision ||
+      started.baseRunDigest !== call.admit.baseRunDigest ||
+      completed.invocationId !== invocation.invocationId ||
+      completed.requestDigest !== call.requestDigest ||
+      completed.responseDigest !== call.responseDigest ||
+      completed.proposalDigest !== call.preview.proposalDigest ||
+      completed.proposalDigest !== timeline.contentDigest(call.proposal) ||
+      completed.candidateDigest !== call.preview.candidateDigest ||
+      completed.candidateDigest !== call.admit.candidateDigest ||
+      completed.resultRevision !== call.admit.timeline.revision ||
+      completed.resultRunDigest !== call.admit.timeline.runDigest
+    ) {
+      throw new Error("attempt ledger phase binding changed");
+    }
+  }
+}
+
+function verifyMcpAuditEnvelope({ audit, run, calls, policy, timeline }) {
+  exactRecord(
+    audit,
+    [
+      "schema",
+      "runId",
+      "revision",
+      "runDigest",
+      "admissions",
+      "lastWriter",
+      "run",
+    ],
+    "MCP audit envelope",
+  );
+  exactRecord(
+    audit.lastWriter,
+    [
+      "timelinePackage",
+      "timelineVersion",
+      "reasoner",
+      "serverPackage",
+      "serverVersion",
+    ],
+    "MCP audit last writer",
+  );
+  if (
+    audit.schema !== "covenant.timeline.mcp-run.v0alpha2" ||
+    audit.runId !== run.contract.id ||
+    audit.revision !== run.events.length ||
+    audit.runDigest !== timeline.contentDigest(run) ||
+    timeline.canonicalJson(audit.run) !== timeline.canonicalJson(run) ||
+    audit.lastWriter.timelinePackage !== "@covenant-org/timeline" ||
+    audit.lastWriter.timelineVersion !== "0.0.0-alpha.3" ||
+    audit.lastWriter.reasoner !== "covenant.timeline.stn.v0alpha1" ||
+    audit.lastWriter.serverPackage !== "@covenant-org/timeline-mcp" ||
+    audit.lastWriter.serverVersion !== "0.0.0-alpha.1" ||
+    !Array.isArray(audit.admissions) ||
+    audit.admissions.length !== 4
+  ) {
+    throw new Error("MCP v0alpha2 audit envelope is invalid");
+  }
+
+  const expectedKinds = [
+    "direct-event",
+    "direct-event",
+    "model-proposal",
+    "model-proposal",
+  ];
+  let revision = 0;
+  let modelIndex = 0;
+  for (const [index, value] of audit.admissions.entries()) {
+    const modelProposal = value?.kind === "model-proposal";
+    const record = exactRecord(
+      value,
+      [
+        "schema",
+        "kind",
+        "decision",
+        "authorityId",
+        "policyRef",
+        "policyDigest",
+        "writer",
+        "baseRevision",
+        "baseRunDigest",
+        "eventIds",
+        ...(modelProposal ? ["candidateDigest", "proposalDigest"] : []),
+        "recordDigest",
+      ],
+      `MCP admission record ${index}`,
+    );
+    const { recordDigest, ...unsigned } = record;
+    exactRecord(
+      record.writer,
+      [
+        "timelinePackage",
+        "timelineVersion",
+        "reasoner",
+        "serverPackage",
+        "serverVersion",
+      ],
+      `MCP admission writer ${index}`,
+    );
+    validateMcpWriterIdentity(record.writer);
+    const eventIds = run.events
+      .slice(revision, revision + record.eventIds.length)
+      .map(({ id }) => id);
+    const prefix = {
+      schema: run.schema,
+      contract: run.contract,
+      events: run.events.slice(0, revision),
+    };
+    if (
+      record.schema !== "covenant.timeline.mcp-admission.v0alpha1" ||
+      record.kind !== expectedKinds[index] ||
+      record.decision !== "admitted" ||
+      record.authorityId !== policy.decision.authorityId ||
+      record.policyRef !== policy.decision.policyRef ||
+      record.policyDigest !== policy.digest ||
+      record.baseRevision !== revision ||
+      record.baseRunDigest !== timeline.contentDigest(prefix) ||
+      timeline.canonicalJson(record.eventIds) !==
+        timeline.canonicalJson(eventIds) ||
+      timeline.contentDigest(unsigned) !== recordDigest
+    ) {
+      throw new Error("MCP admission record did not reproduce");
+    }
+    if (modelProposal) {
+      const call = calls[modelIndex++];
+      if (
+        !call ||
+        record.candidateDigest !== call.preview.candidateDigest ||
+        record.proposalDigest !== call.preview.proposalDigest ||
+        timeline.canonicalJson(record) !==
+          timeline.canonicalJson(call.admit.admissionRecord)
+      ) {
+        throw new Error("MCP model admission does not bind its proposal");
+      }
+    } else if (record.eventIds.length !== 1) {
+      throw new Error("MCP direct admission must cover one event");
+    }
+    revision += record.eventIds.length;
+  }
+  if (revision !== run.events.length || modelIndex !== calls.length) {
+    throw new Error("MCP admissions do not cover the exact event trajectory");
+  }
+  validateMcpWriterTrajectory(audit);
+}
+
+function proposalResultCandidate(value) {
+  return {
+    candidateDigest: value.candidateDigest,
+    requestId: value.requestId,
+    proposalDigest: value.proposalDigest,
+    baseRevision: value.baseRevision,
+    baseRunDigest: value.baseRunDigest,
+    events: value.events,
+    query: value.query,
+    provenance: value.provenance,
+  };
 }
 
 async function verifyEvidence(root, manifest, totalBudget) {

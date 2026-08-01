@@ -9,8 +9,9 @@ agent knew at each point, which assertion was corrected, or whether the release
 order was valid.
 
 Covenant Timeline gives the agent a typed temporal state for those distinctions.
-The model proposes assertions and questions; a deterministic kernel checks what
-follows and returns evidence that another implementation can verify.
+A host admits assertions from trusted tools, structured records, or reviewed
+model proposals. A deterministic kernel checks what follows and returns
+evidence that another process can verify.
 
 ```text
 narrative, tools, sensors, and records
@@ -68,8 +69,8 @@ authority, and extraction correctness remain host responsibilities.
 
 ## The model boundary
 
-Models must reliably turn evidence into typed assertions and queries before a
-host can admit their proposals.
+Models may help turn evidence into typed assertions and queries, but their
+output remains an untrusted candidate until a separate host admits it.
 
 The model has two roles:
 
@@ -94,6 +95,13 @@ stateless full-context structured extraction reached 107/108 exact answers.
 Version 1 therefore does not support the claim that rolling Timeline state
 improves frontier-model answer accuracy over simpler structured extraction.
 
+The follow-on deployment-shaped proposal gate also returned `kill`. The model found
+all relevant evidence records but represented only 2 of 24 non-exact bounds
+correctly. Assertion F1 was 0.7692 and projected-state exactness was 76/108.
+This rules out free-form model proposals as the default durable-ingestion path
+for the current alpha. Models may preview candidates and checked conclusions;
+an isolated operator surface controls admission under an explicit policy.
+
 ## What success means
 
 For the current product, useful temporal reasoning means that a system can:
@@ -117,8 +125,9 @@ portability. They cannot change the v1 model decision.
 
 ## Research boundary
 
-Tool-integrated temporal reasoning is the current scope: a model reads and
-writes temporal state and calls a deterministic kernel during inference. This
+Tool-integrated temporal reasoning is the current scope: a model reads admitted
+temporal state, previews proposed changes, and calls a deterministic kernel
+during inference. This
 can work across model vendors without controlling their weights.
 
 Inference-integrated research may place the kernel inside constrained decoding
@@ -142,9 +151,9 @@ proof-carrying temporal state can preserve prior knowledge cuts across models,
 runtimes, restarts, and organizations. Its operational value and portability
 still require external use and an independent implementation.
 
-## Adoption scope
+## Initial use case
 
-Long-running agents are the first wedge because their evidence, revisions,
+Long-running agents are the initial focus because their evidence, revisions,
 dependencies, and effects can be inspected. High-stakes medical, scientific,
 and financial uses require independent domain owners, evidence authority,
 privacy review, and domain-specific evaluation. A temporal proof can show that

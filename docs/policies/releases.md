@@ -20,26 +20,32 @@ requires:
 - two distinct approvals;
 - rollback or yank instructions;
 - no unresolved critical security finding;
-- signed checksums, SPDX SBOMs, and provenance attestations.
+- SHA-256 checksums, SPDX SBOMs, and provenance attestations.
 
-The commit receiving a release tag must also update the repository README and
-getting-started guide to the package version that tag publishes. Candidate
-wording remains accurate before publication, but it must not be frozen into an
-immutable release tag. The core and MCP release checks enforce this transition
-independently so the core can publish before the MCP package it unlocks.
+The release-finalization commit must land on protected `main` before it receives
+a tag. That commit replaces the candidate changelog entry and updates the
+repository README and getting-started guide to the package version the tag will
+publish. Normal CI accepts either one candidate entry or one finalized entry;
+the tag check accepts only the finalized state. Candidate wording must not be
+frozen into an immutable release tag. The core and MCP release checks enforce
+this transition independently so the core can publish before the MCP package it
+unlocks.
 
 Single-maintainer bootstrap may publish `0.0.x` previews but cannot publish a
-stable release. Published tags and artifacts are not overwritten. Registry
-authentication must be short-lived. Alpha releases may use a
-protected-environment token fallback; beta and stable releases require OIDC
-trusted publishing.
+stable release. Published tags and npm versions are immutable. An idempotent
+workflow retry may replace same-named GitHub release assets generated from the
+same tag; the release record and public verifier bind their exact bytes.
+Registry authentication must be short-lived. Alpha releases may use a token
+fallback restricted to the protected environment; beta and stable releases
+require OIDC trusted publishing.
 
 Release provenance links source and build. It is not a security endorsement.
 
 The package workflow uses tags named `timeline-v<package-version>`, builds the
 tarball twice, compares the exact bytes, generates a SHA-256 checksum and SPDX
-SBOM, creates GitHub artifact attestations, and publishes from the protected
-`npm` environment. The workflow can use
+SBOM, creates GitHub artifact attestations, and retains the tarball, checksum,
+and SBOM as retry-safe GitHub release assets before publishing from the
+protected `npm` environment. The workflow can use
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) when it is
 configured or a short-lived token fallback when it is not.
 
@@ -56,6 +62,10 @@ trusted publisher linkage was not configured. The workflow produced npm
 provenance and GitHub build and SBOM attestations. After the run, the GitHub
 environment secret was removed, the token was revoked, and an authentication
 check confirmed it no longer works.
+
+The alpha.2 checksum sidecar records its archive with an Actions runner path.
+The verifier preserves that version-scoped historical format. New core and MCP
+releases write and require the portable archive filename instead.
 
 The
 [alpha.2 release record](../../releases/timeline-v0.0.0-alpha.2.json) binds the

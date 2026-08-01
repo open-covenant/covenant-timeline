@@ -1,11 +1,20 @@
+import { createRequire } from "node:module";
 import type {
   TemporalKernelLimitsV0Alpha3,
   TemporalModelProposalLimitsV1,
 } from "@covenant-org/timeline";
 
+const load = createRequire(import.meta.url);
+
 export const MCP_SERVER_NAME = "covenant-timeline";
-export const MCP_SERVER_VERSION = "0.0.0-alpha.1";
-export const TIMELINE_PACKAGE_VERSION = "0.0.0-alpha.3";
+export const MCP_SERVER_VERSION = packageVersion(
+  load("../package.json"),
+  "@covenant-org/timeline-mcp",
+);
+export const TIMELINE_PACKAGE_VERSION = packageVersion(
+  load("@covenant-org/timeline/package.json"),
+  "@covenant-org/timeline",
+);
 export const TIMELINE_REASONER = "covenant.timeline.stn.v0alpha1";
 
 export const DEFAULT_MAX_RUN_BYTES = 4 * 1024 * 1024;
@@ -51,16 +60,18 @@ export const MCP_KERNEL_LIMITS: Readonly<TemporalKernelLimitsV0Alpha3> =
     maxPoints: 512,
   });
 
-export const MCP_ADMISSION = Object.freeze({
-  mode: "structural-only" as const,
-  assertionAuthority: "unverified" as const,
-  evidencePayloads: "external" as const,
-});
-
-export const MCP_IMPLEMENTATION = Object.freeze({
+export const MCP_WRITER_IDENTITY = Object.freeze({
   timelinePackage: "@covenant-org/timeline" as const,
   timelineVersion: TIMELINE_PACKAGE_VERSION,
   reasoner: TIMELINE_REASONER,
   serverPackage: "@covenant-org/timeline-mcp" as const,
   serverVersion: MCP_SERVER_VERSION,
 });
+
+function packageVersion(manifest: unknown, name: string): string {
+  const version = (manifest as { version?: unknown })?.version;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error(`${name} package version is missing`);
+  }
+  return version;
+}

@@ -1,4 +1,4 @@
-# Production audit: post readiness
+# Production audit: publication readiness
 
 Date: 2026-08-01
 
@@ -26,9 +26,9 @@ extraction.
 
 | Gate                                 | Status  | Required evidence                                                                                                                                          |
 | ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Installable temporal kernel          | Blocked | A new core alpha containing the proposal compiler, verified from an empty directory                                                                        |
+| Installable proposal-aware core      | Blocked | A new core alpha containing the proposal compiler, verified from an empty directory                                                                        |
 | Installable MCP surface              | Blocked | Registry-only install against the released core, restart/correction/proposal smoke, and release evidence                                                   |
-| Production proposal boundary         | Blocked | Preregistered live frontier-model result over a frozen noisy corpus with explicit grounding scores                                                         |
+| Production proposal boundary         | Failed  | The preregistered v2 gate returned `kill`; free-form model proposals cannot be the default ingestion path                                                  |
 | Composed real workflow               | Blocked | One retained maintainer-operated artifact combining real evidence, model proposals, restart, correction, historical replay, and offline proof verification |
 | Independent operation                | Open    | A qualifying external operator owns evidence, admission, persistence, and workflow execution                                                               |
 | Cross-language temporal verification | Partial | A repository-maintained Python profile verifies consistency and bounds receipts; relation cases and independent maintenance remain open                    |
@@ -49,25 +49,39 @@ MCP package. Both packages must then pass clean registry installation and
 installed-artifact tests. npm publication is intentionally deferred; source
 readiness does not make the registry surface available.
 
-### The production model boundary has no live result
+### The production model boundary failed its live gate
 
-The proposal compiler, generated request-scoped schema, candidate verifier,
-formal runner, replay scorer, and frozen v2 suite are implemented and tested.
-The suite includes multiple records per cut, irrelevant and misleading
-records, constraints, revisions, retractions, context traps, interval
-relations, and explicit acceptable support spans. Its source, runtime,
-configuration, corpus, supports, prompt, repeat count, retry rule, and gate are
-bound in a retained attempt ledger.
+The first operationally valid v2 attempt completed 108 GPT-5.6 Sol
+observations against the frozen corpus and returned `kill`. Response schemas
+were valid on 108/108 observations, 107/108 proposals compiled and produced a
+projected result, and every resulting proof verified. The semantic boundary did
+not pass: assertion F1 was 0.7692, projected state and end-to-end results were
+exact on 76/108 observations, and answers were exact on 87/108.
 
-Those checked fixtures establish benchmark representability and scoring
-behavior, not live model reliability. The missing evidence is an operationally
-valid frontier-model run over the frozen v2 suite with its complete attempt
-ledger, results, score, gate, and checksums retained publicly.
+The failure is concentrated and consequential. The model selected every gold
+signal record and no distractor record, but represented only 2 of 24 non-exact
+bounds correctly. It repeatedly collapsed lower bounds, upper bounds, and
+ranges into exact coordinates. Revision mistakes then propagated into later
+record cuts. The model can operate the schema and select query intent; it
+cannot reliably author the temporal state the kernel is asked to preserve.
 
-Proof verification in this benchmark establishes that the deterministic kernel
-issued a valid receipt for the compiled state and query. It does not establish
-that the model selected the correct state. Extraction, projected-state, query,
-answer, and grounding metrics must be reported separately.
+The frozen acceptable-quote metric also exposed a benchmark defect. The prompt
+asked for the smallest supporting substring, while the oracle generally
+accepted one complete sentence. Seventy-five otherwise matching supports were
+rejected only for using a shorter valid substring. That makes the reported
+0.1958 support F1 unsuitable as a standalone grounding-quality estimate. It
+does not change the decision: the independently scored assertion, state, and
+answer thresholds all failed by wide margins.
+
+The complete ledger, configuration, corpus, raw results, score, gate, and
+checksums are retained in the
+[public result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01).
+The v2 interface will not be tuned or rerun against that corpus.
+
+Free-form model proposals must therefore be treated as untrusted candidates,
+not admitted memory. The default model-facing surface must be read-only with
+respect to durable state. A separate host or operator may preview, review, and
+admit an exact candidate under an explicit authority and policy record.
 
 ### The strongest demonstrations are still disjoint
 
@@ -127,7 +141,7 @@ These are not blockers for an honest engineering-alpha release:
 - independent adoption, provided the post reports it as an open goal rather
   than achieved evidence.
 
-## Posting threshold
+## Publication threshold
 
 An engineering-alpha post is supportable only when all of these are true:
 
@@ -135,12 +149,14 @@ An engineering-alpha post is supportable only when all of these are true:
    directory.
 2. The registry-installed path reproduces persistence, restart, correction,
    historical replay, and stored-receipt verification.
-3. A preregistered live result measures the production proposal boundary and
-   publishes complete raw artifacts and checksums.
-4. A public maintainer-operated run combines real evidence, model proposals,
-   separate process phases, delayed correction, and network-independent
-   verification.
-5. The post reports the negative comparative benchmark and does not claim a
+3. The model-facing MCP surface cannot persist a proposal without a separate
+   operator admission step bound to an exact candidate, authority, and policy.
+4. The failed proposal-boundary result remains public with complete raw
+   artifacts and checksums.
+5. A public maintainer-operated run combines real evidence, explicit host
+   admission, separate process phases, delayed correction, historical replay,
+   and network-independent verification.
+6. The post reports both negative model gates and does not claim a
    model-accuracy advantage, independent adoption, or independent
    cross-language conformance.
 

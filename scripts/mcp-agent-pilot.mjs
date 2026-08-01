@@ -44,6 +44,13 @@ const REQUIRED_TOOLS = new Set([
   "timeline_project_state",
   "timeline_reason",
 ]);
+const PILOT_ADMISSION = Object.freeze({
+  authorityId: "operator.mcp-agent-pilot",
+  policyRef: "policy:mcp-agent-pilot/v1",
+  policyDigest: sha256(
+    new TextEncoder().encode("covenant timeline mcp agent pilot admission v1"),
+  ),
+});
 
 export async function connectMcpClient(client, transport) {
   try {
@@ -145,6 +152,8 @@ export async function runMcpAgentPilot({ inputDirectory, outputDirectory }) {
         join(repositoryRoot, "packages/mcp-server/dist/cli.js"),
         "--data-dir",
         storeDirectory,
+        "--role",
+        "operator",
       ],
       stderr: "pipe",
     });
@@ -190,6 +199,7 @@ export async function runMcpAgentPilot({ inputDirectory, outputDirectory }) {
           runId: contract.id,
           expectedRunDigest: runDigest,
           event,
+          admission: PILOT_ADMISSION,
         });
         runDigest = appended.timeline.runDigest;
       }
@@ -214,6 +224,7 @@ export async function runMcpAgentPilot({ inputDirectory, outputDirectory }) {
           runId: contract.id,
           expectedRunDigest: runDigest,
           event,
+          admission: PILOT_ADMISSION,
         });
         runDigest = appended.timeline.runDigest;
       }
@@ -272,7 +283,7 @@ export async function runMcpAgentPilot({ inputDirectory, outputDirectory }) {
       calledTools.size !== REQUIRED_TOOLS.size ||
       [...REQUIRED_TOOLS].some((tool) => !calledTools.has(tool))
     ) {
-      throw new Error("pilot did not exercise the complete MCP tool surface");
+      throw new Error("pilot did not exercise its required MCP tool surface");
     }
 
     const transcriptText = serializeTranscript(transcript, timeline);
@@ -641,8 +652,8 @@ Operator: ${pilot.operator}
 
 Workflow: ${pilot.workflow}
 
-This artifact was produced by the source-first Covenant Timeline MCP pilot
-starter. It crossed two MCP server sessions, retained exact evidence bytes,
+This artifact was produced by the Covenant Timeline MCP restart-and-correction
+pilot. It crossed two MCP server sessions, retained exact evidence bytes,
 recorded a correction without rewriting the earlier knowledge cut, and was
 verified by a separate process.
 

@@ -4,10 +4,18 @@ import { parseDocument } from "yaml";
 const manifest = JSON.parse(
   await readFile("packages/mcp-server/package.json", "utf8"),
 );
+const coreManifest = JSON.parse(
+  await readFile("packages/prototype/package.json", "utf8"),
+);
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const workflow = await readFile(".github/workflows/release-mcp.yml", "utf8");
 const readme = await readFile("README.md", "utf8");
 const gettingStarted = await readFile("docs/getting-started.md", "utf8");
+const packageReadme = await readFile("packages/mcp-server/README.md", "utf8");
+const runtimeConstants = await readFile(
+  "packages/mcp-server/src/constants.ts",
+  "utf8",
+);
 const errors = [];
 const workflowConfig = parseWorkflow(workflow, errors);
 const jobs = record(workflowConfig.jobs);
@@ -44,28 +52,65 @@ const releaseHeading = new RegExp(
   `^## @covenant-org/timeline-mcp ${escapedVersion} - \\d{4}-\\d{2}-\\d{2}$`,
   "m",
 );
-if (tag && !releaseHeading.test(changelog)) {
-  errors.push(`CHANGELOG.md has no MCP ${manifest.version} release entry`);
+const candidateHeading = new RegExp(
+  `^### \`@covenant-org/timeline-mcp\` ${escapedVersion} candidate$`,
+  "m",
+);
+const hasCandidateHeading = candidateHeading.test(changelog);
+const hasReleaseHeading = releaseHeading.test(changelog);
+if (tag && (!hasReleaseHeading || hasCandidateHeading)) {
+  errors.push(
+    `CHANGELOG.md has no finalized MCP ${manifest.version} release entry`,
+  );
+}
+if (!tag && hasCandidateHeading === hasReleaseHeading) {
+  errors.push(
+    `CHANGELOG.md must contain either the MCP ${manifest.version} candidate entry or its finalized release entry, not both`,
+  );
 }
 if (tag && tag !== expectedTag) {
   errors.push(`tag ${tag} does not match ${expectedTag}`);
 }
-if (
-  tag &&
-  (!readme.includes(
-    `npm install --save-exact @covenant-org/timeline-mcp@${manifest.version}`,
-  ) ||
-    readme.includes(
-      "package is a source release candidate, not yet a published",
+if (tag) {
+  if (
+    !hasOnlyExactInstalls(
+      readme,
+      "@covenant-org/timeline-mcp",
+      manifest.version,
     ) ||
-    !gettingStarted.includes(
-      `npm install --save-exact @covenant-org/timeline-mcp@${manifest.version}`,
+    describesMcpAsUnpublished(readme) ||
+    readme.includes("## Connect an agent from a source checkout") ||
+    readme.includes("source-built MCP agent")
+  ) {
+    errors.push(
+      "tagged MCP release must update immutable onboarding copy in the root README",
+    );
+  }
+  if (
+    !hasOnlyExactInstalls(
+      gettingStarted,
+      "@covenant-org/timeline-mcp",
+      manifest.version,
     ) ||
-    gettingStarted.includes("not yet available from npm"))
-) {
-  errors.push(
-    "tagged MCP release must update immutable onboarding copy from candidate to published",
-  );
+    describesMcpAsUnpublished(gettingStarted) ||
+    gettingStarted.includes("## Connect a source-built MCP agent")
+  ) {
+    errors.push(
+      "tagged MCP release must update immutable onboarding copy in the getting-started guide",
+    );
+  }
+  if (
+    !hasOnlyExactInstalls(
+      packageReadme,
+      "@covenant-org/timeline-mcp",
+      manifest.version,
+    ) ||
+    describesMcpAsUnpublished(packageReadme)
+  ) {
+    errors.push(
+      "tagged MCP release must update immutable onboarding copy in the packed README",
+    );
+  }
 }
 for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
   const exact =
@@ -77,9 +122,25 @@ for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
 }
 if (
   manifest.dependencies?.["@covenant-org/timeline"] !==
-  "workspace:0.0.0-alpha.3"
+  `workspace:${coreManifest.version}`
 ) {
   errors.push("MCP package must pin the reviewed Timeline alpha");
+}
+if (
+  !/export const MCP_SERVER_VERSION = packageVersion\(\s*load\("\.\.\/package\.json"\)/u.test(
+    runtimeConstants,
+  )
+) {
+  errors.push("MCP runtime server version must load its package manifest");
+}
+if (
+  !/export const TIMELINE_PACKAGE_VERSION = packageVersion\(\s*load\("@covenant-org\/timeline\/package\.json"\)/u.test(
+    runtimeConstants,
+  )
+) {
+  errors.push(
+    "MCP runtime Timeline version must load the core package manifest",
+  );
 }
 await access("packages/mcp-server/LICENSE").catch(() => {
   errors.push("MCP package LICENSE is missing");
@@ -129,12 +190,27 @@ if (
   errors.push("MCP release workflow must require an annotated tag");
 }
 const retainStep = namedStep(publishSteps, "Retain release assets");
+const retainCommand = commandText(retainStep);
 if (
-  !commandText(retainStep).includes('gh release create "$GITHUB_REF_NAME"') ||
-  !commandText(retainStep).includes('gh release upload "$GITHUB_REF_NAME"') ||
-  !commandText(retainStep).includes("release_flags+=(--prerelease)")
+  !retainCommand.includes('gh release create "$GITHUB_REF_NAME"') ||
+  !retainCommand.includes('gh release upload "$GITHUB_REF_NAME"') ||
+  !retainCommand.includes("release_flags+=(--prerelease)") ||
+  occurrences(retainCommand, "scripts/check-github-release-state.mjs") !== 2 ||
+  !retainCommand.includes("--json isDraft,isPrerelease,tagName,assets") ||
+  !retainCommand.includes("allow-missing") ||
+  !retainCommand.includes("complete")
 ) {
   errors.push("MCP release workflow must create retry-safe GitHub assets");
+}
+const artifactStep = namedStep(publishSteps, "Build reproducible MCP package");
+const artifactCommand = commandText(artifactStep);
+if (
+  !artifactCommand.includes('sha256sum "$(basename "$archive")"') ||
+  artifactCommand.includes('sha256sum "$archive"')
+) {
+  errors.push(
+    "MCP release checksum sidecar must use a portable archive filename",
+  );
 }
 if (
   publishSteps.indexOf(retainStep) < 0 ||
@@ -269,4 +345,30 @@ function exactKeys(value, expected) {
 function exactRecord(value, expected) {
   if (!exactKeys(value, Object.keys(expected))) return false;
   return Object.entries(expected).every(([key, item]) => value[key] === item);
+}
+
+function hasOnlyExactInstalls(source, packageName, version) {
+  const pattern = new RegExp(
+    `npm install --save-exact ${escapePattern(packageName)}@([^\\s]+)`,
+    "g",
+  );
+  const versions = [...source.matchAll(pattern)].map((match) => match[1]);
+  return (
+    versions.length > 0 &&
+    versions.every((value) => value.replace(/[`.,;:]+$/u, "") === version)
+  );
+}
+
+function describesMcpAsUnpublished(source) {
+  return /(?:MCP package|@covenant-org\/timeline-mcp@[^\s`]+)[\s\S]{0,120}(?:source release candidate|(?:currently )?available from source|not yet (?:available from npm|published(?: to npm)?))/iu.test(
+    source,
+  );
+}
+
+function occurrences(source, value) {
+  return source.split(value).length - 1;
+}
+
+function escapePattern(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

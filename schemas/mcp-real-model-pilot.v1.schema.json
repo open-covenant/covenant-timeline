@@ -15,16 +15,24 @@
     "pilotInput",
     "run",
     "runDigest",
+    "audit",
+    "auditDigest",
+    "admissionPolicy",
+    "admissionPolicyDigest",
+    "attemptLedger",
+    "attemptLedgerDigest",
     "evidenceManifest",
     "modelConfig",
     "modelConfigDigest",
     "prompt",
     "promptDigest",
     "contentManifest",
+    "phaseResults",
     "expected",
     "modelCalls",
     "conclusions",
     "invocations",
+    "mcpInvocations",
     "source",
     "runtime",
     "runtimeDigest",
@@ -40,10 +48,21 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["modelExecution", "processRestart"],
+      "required": [
+        "modelExecution",
+        "processRestart",
+        "externalEvidenceAuthenticity",
+        "mcpProcessIdentity"
+      ],
       "properties": {
         "modelExecution": { "const": "maintainer-attested" },
-        "processRestart": { "const": "maintainer-attested" }
+        "processRestart": { "const": "maintainer-attested" },
+        "externalEvidenceAuthenticity": {
+          "const": "maintainer-attested"
+        },
+        "mcpProcessIdentity": {
+          "const": "driver-observed-maintainer-attested"
+        }
       }
     },
     "workflow": { "type": "string", "minLength": 1, "maxLength": 512 },
@@ -51,6 +70,16 @@
     "pilotInput": { "const": "pilot-input.json" },
     "run": { "const": "run.json" },
     "runDigest": { "$ref": "v0alpha3/common.schema.json#/$defs/digest" },
+    "audit": { "const": "audit.json" },
+    "auditDigest": { "$ref": "v0alpha3/common.schema.json#/$defs/digest" },
+    "admissionPolicy": { "const": "admission-policy.json" },
+    "admissionPolicyDigest": {
+      "$ref": "v0alpha3/common.schema.json#/$defs/digest"
+    },
+    "attemptLedger": { "const": "attempt-ledger.json" },
+    "attemptLedgerDigest": {
+      "$ref": "v0alpha3/common.schema.json#/$defs/digest"
+    },
     "evidenceManifest": { "const": "evidence-manifest.json" },
     "modelConfig": { "const": "model-config.json" },
     "modelConfigDigest": {
@@ -59,6 +88,38 @@
     "prompt": { "const": "prompt.md" },
     "promptDigest": { "$ref": "v0alpha3/common.schema.json#/$defs/digest" },
     "contentManifest": { "const": "content-manifest.json" },
+    "phaseResults": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["phase", "path", "digest"],
+          "properties": {
+            "phase": { "const": "initial" },
+            "path": { "const": "phase-results/initial.json" },
+            "digest": {
+              "$ref": "v0alpha3/common.schema.json#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["phase", "path", "digest"],
+          "properties": {
+            "phase": { "const": "correction" },
+            "path": { "const": "phase-results/correction.json" },
+            "digest": {
+              "$ref": "v0alpha3/common.schema.json#/$defs/digest"
+            }
+          }
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
     "expected": {
       "type": "object",
       "additionalProperties": false,
@@ -119,6 +180,39 @@
           "phase": { "enum": ["initial", "correction"] },
           "invocationId": { "type": "string", "format": "uuid" },
           "processId": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "mcpInvocations": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "phase",
+          "invocationId",
+          "processId",
+          "provenance",
+          "executableDigest",
+          "script",
+          "scriptDigest"
+        ],
+        "properties": {
+          "phase": { "enum": ["initial", "correction"] },
+          "invocationId": { "type": "string", "format": "uuid" },
+          "processId": { "type": "integer", "minimum": 1 },
+          "provenance": {
+            "const": "driver-observed-maintainer-attested"
+          },
+          "executableDigest": {
+            "$ref": "v0alpha3/common.schema.json#/$defs/digest"
+          },
+          "script": { "const": "packages/mcp-server/dist/cli.js" },
+          "scriptDigest": {
+            "$ref": "v0alpha3/common.schema.json#/$defs/digest"
+          }
         }
       }
     },

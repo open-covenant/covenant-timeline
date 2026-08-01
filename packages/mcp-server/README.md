@@ -1,23 +1,31 @@
 # Covenant Timeline MCP
 
-**Durable, verifiable temporal state for long-running agents.**
+**Replayable temporal state with verifiable proof receipts.**
 
-An agent can record plans and observations, stop, restart, absorb a correction,
-and ask the same temporal question at an earlier or later knowledge cut.
-Timeline returns a deterministic conclusion with a proof receipt that another
-process can verify.
+The server persists plans, observations, and corrections only after an operator
+admits them. Its model-facing role can inspect that state, reconstruct an
+earlier record cut, answer an exact temporal question, and return a proof receipt
+that another process can verify.
 
-## Connect
+The MCP server separates model work from operator authority. Its default role is
+read-only: a model can inspect admitted state, reason over it, and preview a
+typed proposal, but it cannot create or change a run. An operator starts a
+separate server role to admit exact records under an explicit authority and
+policy digest.
 
-Requires Node.js 22 or 24. Install the exact alpha version:
+## Build from source
+
+`@covenant-org/timeline-mcp@0.0.0-alpha.1` is not yet published. Use Node.js 22
+or 24 and build it from a source checkout:
 
 ```sh
-npm install --save-exact @covenant-org/timeline-mcp@0.0.0-alpha.1
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-Add the installed server to any MCP client that supports local stdio servers.
-Use the absolute Node path reported by `node -p process.execPath` and the
-absolute package path under the application's `node_modules` directory:
+Use absolute paths in your MCP client configuration. This starts the read-only
+model role:
 
 ```json
 {
@@ -25,7 +33,7 @@ absolute package path under the application's `node_modules` directory:
     "covenant-timeline": {
       "command": "/absolute/path/to/node",
       "args": [
-        "/absolute/path/to/application/node_modules/@covenant-org/timeline-mcp/dist/cli.js",
+        "/absolute/path/to/covenant-timeline/packages/mcp-server/dist/cli.js",
         "--data-dir",
         "/absolute/path/to/private/timeline-data"
       ]
@@ -34,148 +42,186 @@ absolute package path under the application's `node_modules` directory:
 }
 ```
 
-To evaluate unreleased source, clone the repository and build the workspace:
+Run the operator surface only in a host-controlled process:
 
 ```sh
-corepack enable
-pnpm install --frozen-lockfile
-pnpm build
+node packages/mcp-server/dist/cli.js \
+  --data-dir /absolute/path/to/private/timeline-data \
+  --role operator
 ```
 
-Use an absolute path on a dedicated local filesystem and restrict the directory
-to the account running the MCP client. Once started, the server exposes only
-stdio and makes no network requests.
+`--role` accepts only `model` or `operator`. There is no implicit write access.
+The server uses stdio and makes no network requests.
 
-## Agent workflow
+## Roles and tools
 
-The server provides six tools:
+The model role is the default and exposes four read-only tools:
 
-| Tool                            | Purpose                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `timeline_create_run`           | Create an append-only run from an exact v0alpha3 contract                       |
-| `timeline_list_runs`            | Page through run metadata and recover digests after a restart                   |
-| `timeline_append_event`         | Append one typed event under optimistic concurrency                             |
-| `timeline_apply_model_proposal` | Compile a model proposal and atomically append its complete candidate event set |
-| `timeline_project_state`        | Project admitted state at an explicit knowledge cut                             |
-| `timeline_reason`               | Answer an exact temporal query and return a verified conclusion receipt         |
+| Tool                              | Purpose                                                                 |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `timeline_list_runs`              | Page through run metadata and recover exact prefixes after a restart    |
+| `timeline_preview_model_proposal` | Compile a typed proposal and verify its conclusion without writing      |
+| `timeline_project_state`          | Project admitted state at an explicit knowledge cut                     |
+| `timeline_reason`                 | Answer an exact temporal query and return a verified conclusion receipt |
 
-Portable run documents are available through the advertised MCP resource
-template `timeline://run/{runId}`. Discover run IDs with
-`timeline_list_runs`, then read the corresponding resource. A verifier can
-check its conclusions with `verifyTemporalConclusionV0Alpha3` from
+The operator role also exposes three mutation tools:
+
+| Tool                            | Purpose                                                               |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `timeline_create_run`           | Create an empty run from an exact v0alpha3 contract                   |
+| `timeline_append_event`         | Append one typed event with an explicit admission decision            |
+| `timeline_admit_model_proposal` | Recompile and atomically admit the candidate identified by its digest |
+
+The MCP schemas define the accepted contract, event, query, concurrency,
+proposal, and admission fields. Event drafts omit `schema` and `sequence`; the
+server assigns both. Every new write binds the current run prefix by digest.
+
+## Preview and admission
+
+`timeline_preview_model_proposal` accepts semantic changes—coordinates,
+difference constraints, corrections, and retractions—plus one query intent.
+The caller supplies bounded catalogs mapping model-facing handles to declarations
+in an exact run prefix.
+
+Each proposed change cites an evidence handle and an exact quote. Timeline
+requires one exact occurrence, then returns content digests and UTF-8 byte
+ranges. Evidence text is used only during the call. It is not written to the
+Timeline data directory or returned in the response.
+
+Preview returns:
+
+- the exact candidate events, query, and provenance;
+- a digest of the complete canonical candidate;
+- a conclusion derived from the candidate run; and
+- a verified proof receipt.
+
+Every preview also returns `persistence: "not-admitted"`, so it cannot be
+mistaken for durable state.
+
+The preregistered GPT-5.6 Sol evaluation of this proposal shape failed its
+acceptance criteria: assertion F1 was 0.7692 and projected state was exact on
+76/108 observations. Preview is a review surface, not evidence that free-form
+model output is safe to admit automatically. The
+[complete result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
+is public.
+
+Preview never changes the run. To accept it, the operator sends proposal inputs
+that compile to the same candidate digest to
+`timeline_admit_model_proposal`, with:
+
+```json
+{
+  "authorityId": "release-operator",
+  "policyRef": "policy:software-delivery/v1",
+  "policyDigest": "sha256:<digest-of-the-exact-policy-bytes>"
+}
+```
+
+The server recompiles from the bound prefix and requires the resulting candidate
+digest to match the value supplied by the operator. Any change that alters the
+candidate fails admission. The server does not retain preview sessions, so the
+operator must obtain and retain that digest from a preview or an equivalent
+trusted compilation. The entire candidate batch and its admission record are
+then committed atomically. Direct event appends require the same admission
+fields and persist one admission record per event.
+
+Admission reports one closed status: `admitted` for a new atomic write,
+`already-admitted` for an exact idempotent retry, or `empty-candidate` when
+there are no events to persist. The output schema cross-validates that status
+against the returned events, admission record, and resulting revision.
+
+The exported file store has no raw compiled-batch admission path. The operator
+server passes it an immutable artifact carrying the candidate, computed
+candidate and proposal digests, exact event batch, and bound run prefix, plus a
+runtime-checked permit that is not exported from the package entry point. A
+missing or forged permit fails before input parsing or filesystem access. This
+keeps those fields bound inside the package; it does not authenticate an
+operating-system user or grant process authority.
+
+The admission decision belongs to the host. Timeline records and binds that
+decision; it does not infer authority or decide whether evidence is trustworthy.
+
+## Resources and verification
+
+Two bounded resource templates are advertised:
+
+- `timeline://run/{runId}` returns the canonical portable v0alpha3 run used to
+  verify conclusions.
+- `timeline://audit/{runId}` returns the stored envelope with every admission
+  record, its writer software profile, and its content binding. The envelope's
+  `lastWriter` records the software profile used for the most recent successful
+  persistence. On a non-empty run it must match the final admission's writer.
+  Neither field authenticates an operator or identifies a server instance.
+
+Discover run IDs with `timeline_list_runs`. The metadata `runDigest` covers the
+portable run. `auditDigest` covers the full stored envelope, including admission
+records. Verify reasoning receipts with `verifyTemporalConclusionV0Alpha3` from
 `@covenant-org/timeline`.
 
 Run discovery returns at most eight entries. Continue with `nextCursor` until it
-is `null`. Creating or deleting a run invalidates existing cursors; restart
-discovery from the first page after a stale-cursor error. The resource template
-does not publish a partial dynamic resource list: the custom list tool is the
-single complete discovery path.
+is `null`. Creating a run invalidates existing cursors; restart discovery after
+a stale-cursor error. Dynamic resources are not enumerated separately—the list
+tool is the complete discovery path.
 
 `recordedThrough` is always explicit. A non-negative integer selects that event
-prefix; `null` selects the empty prefix. The server does not substitute a
-mutable “latest” cut.
+and every earlier event. `null` selects the empty prefix.
 
-Tool discovery describes the contract, event, concurrency, and query fields
-needed to construct a valid call. In particular, event drafts omit `schema` and
-`sequence`, every new event carries the latest `runDigest`, and
-`difference.bounds` returns bounds for `toPointId - fromPointId`.
+## Trust boundary
 
-### Apply model output without model-authored ledger mechanics
+A verified receipt proves that a conclusion follows from the records admitted
+to the selected prefix. It does not prove that source evidence was true, that a
+model extracted it correctly, or that the named authority was entitled to act.
 
-`timeline_apply_model_proposal` accepts a small semantic proposal:
-coordinates, difference constraints, corrections, retractions, and one query
-intent. The caller supplies bounded catalogs that map proposal handles to
-declarations in the selected run prefix. Timeline derives contexts, assertion
-IDs, event IDs, sequences, evidence digests, and the final query.
+The host remains responsible for:
 
-Every proposed change cites an evidence handle and an exact quote. The quote
-must occur exactly once in current evidence text. The response identifies the
-evidence digest, quote digest, and UTF-8 byte range, but does not return the
-quote or evidence text. The canonical run retains only evidence digests.
+- authenticating evidence and operators;
+- defining and retaining exact admission-policy bytes;
+- reviewing model proposals before admission;
+- normalizing calendars, dates, and named time zones to contract coordinates;
+- retaining original evidence and sensitive source text outside Timeline; and
+- controlling filesystem and process access to the operator role.
 
-The quote check establishes a reproducible source location. It does not
-establish that the quote entails the assertion, that the evidence is authentic,
-or that its producer has authority. Catalogs and evidence supplied through MCP
-remain unauthenticated input, and the response retains the server's
-`structural-only` and `unverified` admission classification.
-
-Proposal writes bind both `expectedRevision` and `expectedRunDigest`. The
-complete candidate event set is validated and written in one atomic
-replacement. If a response is lost, resend the proposal, catalogs, evidence,
-revision, and digest. The server reconstructs that append-only prefix and
-recognizes an event-equivalent committed batch, even when later events have
-since been added.
-
-The returned query is fully formed and pins its record cut. Pass it unchanged
-to `timeline_reason` to receive a verified conclusion and proof receipt.
-
-The repository includes a
-[source-first pilot starter](../../examples/mcp-agent-pilot)
-that exercises creation, append, discovery, projection, and reasoning across a
-restart, then exports a complete artifact for offline verification.
-
-## Admission boundary
-
-Direct MCP writes are structurally validated and classified as unauthenticated.
-The server:
-
-- assigns event schema and sequence values;
-- validates the complete candidate run before committing it;
-- retains SHA-256 evidence references, not evidence payloads; and
-- reasons only over the typed records it has been given.
-
-It does not authenticate evidence, decide whether a model extracted a record
-correctly, parse civil time, perform semantic memory search, or grant authority.
-A verified receipt proves derivation from admitted records, not that those
-records describe reality.
-
-Normalize dates, calendars, and named time zones before admission under an
-explicit application policy. Keep the original source, extraction provenance,
-and evidence bytes outside this server. Model-proposal evidence text is used
-only while handling the tool call and is not written to the Timeline data
-directory or included in the response. MCP clients and transports may retain
-their own request logs; configure them for the sensitivity of the source data.
+MCP clients and transports may log requests containing evidence text. Configure
+them for the sensitivity of the source data.
 
 ## Persistence
 
-The reference store uses canonical JSON, whole-run digests, exclusive writer
-locks, optimistic concurrency, and same-directory atomic replacement. Limits
-are 256 runs, 2,000 events per run, 4 MiB per stored run, eight entries per
-discovery call, and 1 MiB per incoming MCP message. A model proposal may
-contain at most eight changes, eight supports per change, 32 evidence entries,
-128 reference handles, 128 assertion handles, and 32 prior-cut handles.
-Evidence text is limited to 64 KiB per entry and 256 KiB in total; quotes are
-limited to 4 KiB. The proposal itself is limited to 512 KiB, 2,048 JSON values,
-and 12 nesting levels. Text limits are enforced on UTF-8 bytes. Programmatic
-store options may lower the run and byte ceilings but cannot raise them.
+The local reference store uses canonical JSON, whole-run and whole-envelope
+digests, exclusive writer locks, optimistic concurrency, and same-directory
+atomic replacement. A persisted envelope contains the portable run and a
+complete, contiguous admission record for every event. Corrupt, missing,
+overlapping, or digest-invalid admission coverage is rejected on read.
 
-Each new event requires the current `runDigest`. If a response is lost, reload
-the run and retry the same event ID and content; exact retries are idempotent
-even when their supplied digest is stale. An `indeterminate` error means a
-write may have committed and must be checked before another event is proposed.
-Compiled batches additionally carry their base revision. If every candidate
-event already occupies the exact bound prefix, the write is a no-op, including
-when later events exist. An incomplete match, changed order, changed content,
-or identifier collision fails as a conflict rather than being repaired or
-merged.
+Each admission record stores the Timeline package, reasoner, and MCP package
+versions used for that write, and its `recordDigest` covers that software
+profile. Later writes retain the original profile on every existing admission.
+The envelope's `lastWriter` is current-write metadata, not operator identity,
+process identity, or historical provenance for the complete run.
 
-The store retains the candidate events, not the proposal, query, or source-span
-receipts. On a no-op, returned provenance describes the current compilation and
-must not be treated as historical admission provenance for the existing batch.
+Limits are 256 runs, 2,000 events per run, 4 MiB per stored envelope, eight
+entries per discovery call, and 1 MiB per incoming MCP message. A model proposal
+may contain at most eight changes, eight supports per change, 32 evidence
+entries, 128 reference handles, 128 assertion handles, and 32 prior-cut handles.
+Evidence is limited to 64 KiB per entry and 256 KiB in total; each quote is
+limited to 4 KiB. The proposal limit is 512 KiB, 2,048 JSON values, and 12
+nesting levels. Text limits are enforced on UTF-8 bytes.
 
-The store never removes a lock based on age. After an unclean exit, verify that
-no writer is active before removing a stale lock. The reference implementation
-is intended for a dedicated local filesystem, not a shared NFS or SMB volume.
-On Windows, protect the data directory with a user-private ACL.
+Exact direct-event and proposal-batch retries are idempotent only when their
+admission decision is also identical. A changed event, candidate, ordering,
+authority, policy reference, or policy digest fails as a conflict. An exact
+retry returns the original admission record, including its writer identity,
+without persisting or changing `lastWriter`. An `indeterminate` error means a
+write may have committed; reload the run and audit envelope before retrying.
 
-An unclean exit before replacement can leave a hidden `.tmp` file. After
-confirming that no server process is using the directory, operators may remove
-those temporary files; committed runs are the canonical `.json` files. Reads
-reject symbolic links, FIFOs, devices, and other non-regular entries.
+Use a dedicated local filesystem, not NFS or SMB. Restrict the data directory to
+the account running the server. The store never removes locks based on age. After
+an unclean exit, confirm no writer is active before removing a stale lock or a
+hidden `.tmp` file. Reads reject symbolic links and non-regular entries.
+
+Store schema `covenant.timeline.mcp-run.v0alpha2` is incompatible with earlier
+alpha store files. No automatic migration is provided.
 
 ## Programmatic use
-
-The alpha.1 package pins `@covenant-org/timeline@0.0.0-alpha.3`:
 
 ```ts
 import {
@@ -184,22 +230,24 @@ import {
 } from "@covenant-org/timeline-mcp";
 
 const store = new FileMcpRunStore("/path/to/private/timeline-data");
-const server = createTimelineMcpServer(store);
+const modelServer = createTimelineMcpServer(store);
 ```
 
-Connect the returned server with an MCP transport. The built `timeline-mcp`
-binary uses stdio.
+Connect the returned server to an MCP transport. In a separately controlled
+operator process, pass `{ role: "operator" }` to `createTimelineMcpServer`.
+The `timeline-mcp` executable uses stdio.
 
 ## Status
 
-The MCP server is an alpha reference integration for the Draft v0alpha3
-temporal contract. It is not a remote or multi-tenant service. Review the
+This is an alpha, single-host reference integration for the Draft v0alpha3
+temporal contract. It is not a remote or multi-tenant authorization service.
+Review the
 [operations guide](https://github.com/open-covenant/covenant-timeline/blob/main/docs/operations.md)
 and
 [threat model](https://github.com/open-covenant/covenant-timeline/blob/main/docs/threat-model.md)
-before production use.
+before operational use.
 
 Apache-2.0. See the
 [Covenant Timeline repository](https://github.com/open-covenant/covenant-timeline)
-for the temporal contract, correction-and-replay demo, conformance corpus, and
-independent verification API.
+for the contract, correction-and-replay example, conformance corpus, and proof
+verifier.

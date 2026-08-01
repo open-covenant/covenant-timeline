@@ -1,91 +1,90 @@
 # Covenant Timeline Program
 
-## Recorded result
+## Current scope
 
-Long-running agents need more than a transcript or summary to reason coherently
-about time. They need explicit events, intervals, uncertainty, corrections, and
-historical knowledge states that survive context compaction and process
-restarts.
+Covenant Timeline provides deterministic temporal reasoning over records that a
+host has admitted. It represents events, intervals, uncertainty, corrections,
+and historical knowledge cuts explicitly, then returns bounded conclusions,
+possible relations, schedules, or contradictions with a machine-checkable proof
+receipt.
 
-Covenant Timeline implements a portable interface for that job. A model can
-propose typed temporal assertions and questions. A deterministic kernel returns
-bounded conclusions, possible relations, schedules, or contradictions with
-independently checkable evidence.
+The current evidence supports that infrastructure claim. It does not show that
+Timeline makes a model understand time or improves model accuracy over a
+simpler structured pipeline. Model-generated records remain untrusted proposals
+until a host reviews and admits their exact candidate bytes.
 
-The preregistered model-interface evaluation found strong extraction and
-end-to-end accuracy, but rolling Timeline state did not outperform stateless
-full-context structured extraction on answer accuracy. The result rejects the
-current standalone model-memory claim. It does not change the kernel's
-deterministic properties.
-
-## What exists
+## Available surfaces
 
 - Draft [RFC 0009](./rfcs/0009-temporal-reasoning-substrate.md) defines the
-  experimental v0alpha3 temporal contract.
-- The npm alpha includes the v0alpha3 TypeScript reference implementation and
-  proof verifier.
-- The kernel supports explicit axes and scenario contexts, points and proper
-  intervals, bounded integer constraints, historical knowledge cuts, typed
-  queries, contradictions, and proof receipts.
-- v0alpha1 and v0alpha2 remain frozen compatibility formats for checkpoint
-  replay, evidence identity, decisions, and effect receipts.
+  v0alpha3 temporal contract.
+- Published `@covenant-org/timeline@0.0.0-alpha.2` includes the v0alpha3
+  TypeScript reference kernel and proof verifier.
+- Source candidate `@covenant-org/timeline@0.0.0-alpha.3` adds the bounded
+  model-proposal compiler.
+- Source candidate `@covenant-org/timeline-mcp@0.0.0-alpha.1` adds a local stdio
+  integration with separate model and operator roles.
+- v0alpha1 and v0alpha2 remain compatibility formats for checkpoint replay,
+  evidence identity, decisions, and effect receipts.
 
-The current kernel does not provide calendar arithmetic, time-zone conversion,
-recurrence, dense time, or cross-axis conversion. Those features should follow
-demonstrated use. Domain-specific authority remains a host or profile
-responsibility.
+The kernel supports explicit axes and scenario contexts, points and proper
+intervals, bounded integer constraints, historical knowledge cuts, typed
+queries, contradictions, and proof receipts. It does not yet provide calendar
+arithmetic, time-zone conversion, recurrence, dense time, or cross-axis
+conversion.
 
-## Evidence program
+## Evaluation evidence
 
-The [roadmap](./ROADMAP.md) records the completed model gate and the two
-remaining evidence tracks: operational value and protocol portability.
+The model-interface v1 evaluation completed 432 GPT-5.6 Sol requests across
+bounded narrative memory, stateless full-context structured extraction, and
+Timeline-backed state. Timeline returned 106/108 exact answers, compared with
+65/108 for narrative memory and 107/108 for structured extraction. It did not
+meet the preregistered requirement to beat both simpler baselines. The
+[complete v1 result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
+contains the configuration, raw responses, scores, diagnostics, decision, and
+checksums.
 
-The model-interface v1 suite includes a public development corpus and a
-preregistered public paraphrase corpus. Its 2026-07-31 GPT-5.6 Sol run completed
-all 432 observations and returned `kill`: Timeline beat bounded narrative
-memory but not stateless full-context structured extraction. The immutable
-[result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-eval-v1-gpt-5.6-sol-2026-07-31)
-contains the configuration, raw responses, scores, diagnostics, gate output,
-and checksums.
+The v2 proposal-interface evaluation completed 108 observations. Every response
+was schema-valid, but assertion F1 was 0.7692 and only 76 projected states were
+exact. The model selected the relevant evidence but frequently collapsed lower,
+upper, and range bounds into exact coordinates. That result does not support
+automatic admission of free-form model output. The
+[complete v2 result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
+is public.
 
 ## Product boundary
 
-The project owns:
+Timeline provides:
 
-- the language-neutral temporal contract, schemas, and canonicalization rules;
+- a language-neutral temporal contract, schemas, and canonicalization rules;
 - deterministic projection at an explicit knowledge cut;
-- the bounded temporal constraint kernel and proof verification;
-- model-facing JSON, CLI, and library interfaces;
+- a bounded temporal constraint kernel and proof verifier;
+- JSON, CLI, library, and source-built MCP interfaces;
 - conformance cases and compatibility tests; and
 - reference adapters for models, runtimes, and legacy checkpoints.
 
-It does not own:
+Timeline does not establish natural-language truth, evidence authority,
+causality, domain policy, medical judgment, financial authority, or safety
+approval. The kernel does not schedule workflows, run workers, manage a
+distributed database, or define ambient wall-clock, locale, calendar, and
+time-zone policy. The source MCP integration provides a single-host local store;
+it is not a distributed workflow-durability service.
 
-- natural-language truth, evidence authority, or a universal ontology;
-- workflow scheduling, queues, retries, workers, or durable storage;
-- ambient wall-clock, locale, calendar, or time-zone policy;
-- causal inference from temporal order;
-- domain policy, medical judgment, financial authority, or safety approval; or
-- model-native capability claims without training or architecture evidence.
+Agent and workflow runtimes can integrate Timeline through adapters. Covenant
+is an intended host integration, not a required service.
 
-Existing agent and workflow runtimes should host Timeline through adapters.
-Covenant is the first reference adopter, not a required service.
+## Current priorities
 
-## What continues
+- publish and independently verify the exact core and MCP package artifacts;
+- retain one public restart-and-correction run over real evidence;
+- support an external operator running Timeline in its own workflow;
+- support a separately maintained implementation through the conformance
+  corpus; and
+- let observed integration needs determine any calendar, storage, or protocol
+  expansion.
 
-Standalone model-memory expansion has stopped under the predeclared rule.
-Remaining work is limited to deterministic kernel maintenance, integration
-inside Covenant or systems that need audit and replay, independently operated
-pilots, and interoperability evidence. A new model-side product claim requires
-a separate preregistration; v1 is a fixed negative result.
-
-New protocol breadth remains secondary to:
-
-- reproducibility across knowledge cuts, restarts, and package versions;
-- semantic agreement across implementations; and
-- time and effort required for an external operator to adopt the system.
-
-Pause kernel expansion if pinned inputs produce different semantic results,
-later corrections leak into earlier knowledge cuts, proofs cannot be checked
-from their bound inputs, or model-generated assertions lose evidence
-references.
+A future model-efficacy claim requires a new preregistration and held-out
+evaluation. The existing v1 and v2 results remain fixed negative evidence for
+their tested claims. Kernel changes must preserve identical semantic results
+for pinned inputs, prevent later corrections from leaking into earlier
+knowledge cuts, keep proof receipts verifiable from their bound inputs, and
+retain evidence references on model-generated proposals.

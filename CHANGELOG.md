@@ -2,18 +2,9 @@
 
 ## Unreleased
 
-## @covenant-org/timeline-mcp 0.0.0-alpha.1 - 2026-08-01
+### `@covenant-org/timeline` 0.0.0-alpha.3 candidate
 
-### Added
-
-- Add the installable local stdio server with restart-safe persistence,
-  correction replay, atomic evidence-backed model proposals, and verified
-  temporal conclusions. The package pins `@covenant-org/timeline` alpha.3 and
-  validates that registry dependency in an isolated release-candidate install.
-
-## 0.0.0-alpha.3 - 2026-08-01
-
-### Added
+#### Added
 
 - Add a checked correction-and-replay example with before, inconsistent
   transition, and after knowledge cuts; content-bound evidence documents; exact
@@ -52,15 +43,6 @@
   Sigstore verification to GitHub CLI, binds provenance and SBOM statements to
   the recorded release, and runs npm signature checks plus a clean
   installed-package temporal proof.
-- Add a local stdio MCP server with six bounded temporal-state tools, including
-  atomic prefix-bound model-proposal compilation and persistence; a portable
-  run resource template; explicit knowledge cuts; structural-only admission
-  labels; optimistic concurrency; canonical append-only persistence; restart
-  recovery; and a separate reproducible release workflow.
-- Add a source-first MCP pilot starter that crosses a server restart, hashes
-  retained evidence, chains append digests, exports the complete pilot artifact
-  and tool transcript, and verifies historical and corrected conclusions in a
-  separate offline process.
 - Add a credential-free local Ollama benchmark adapter with preflight
   installed-model checks, post-inference loaded-model digest verification,
   fixed generation settings, structured output, bounded provider handling,
@@ -68,8 +50,14 @@
 - Verify the proposal compiler, complete candidate verifier, source-span
   provenance, and temporal proof from the installed core tarball.
 
-### Changed
+#### Changed
 
+- Preserve the first deployment-shaped proposal-boundary attempt as a public
+  `kill` result after it reached 0.7692 assertion F1 and 76/108 exact projected
+  states.
+- Keep candidate notes undated until a release tag exists, verify onboarding
+  copy in the packed README, retain release assets before registry publication,
+  and reject unexpected or oversized package members.
 - Publish the preregistered GPT-5.6 Sol model-interface result and record its
   `kill` decision after Timeline failed to beat stateless full-context
   structured extraction on answer accuracy. Stop standalone model-memory
@@ -94,10 +82,6 @@
   parameter instead of claiming a sampling setting the selected model rejects.
 - Move artifact upload to its Node.js 24 action and consolidate SBOM
   attestation on the supported GitHub attestation action.
-- Describe MCP input semantics in tool discovery, cap each catalog page at
-  eight runs, bind cursors to a catalog generation, cap reference-store
-  configuration at its advertised ceilings, and make the source checkout a
-  complete agent-integration path.
 - Bound every model-controlled response collection and free-form string, and
   make exact coordinates, difference direction, current-evidence support,
   independent corroboration, references, sequences, and duplicate checks
@@ -106,16 +90,48 @@
   the host admission path without renumbering, deduplicating, or repairing model
   output.
 
-### Security
+#### Security
+
+- Stop strict JSON diagnostics at the first parse issue to prevent adversarial
+  error amplification.
+- Distinguish local-model output-token exhaustion from other provider failures
+  without retaining partial model output.
+
+### `@covenant-org/timeline-mcp` 0.0.0-alpha.1 candidate
+
+#### Added
+
+- Add the local stdio server with restart-safe persistence, correction replay,
+  read-only model proposal previews, explicit operator admission, and verified
+  temporal conclusions. The package pins `@covenant-org/timeline` alpha.3 and
+  validates that registry dependency in an isolated release-candidate install.
+- Add seven bounded temporal-state tools, portable run and admission-audit
+  resources, explicit knowledge cuts, optimistic concurrency, canonical
+  append-only persistence, restart recovery, and a separate reproducible
+  release workflow.
+- Add a local MCP restart-and-correction pilot that hashes
+  retained evidence, chains append digests, exports the complete pilot artifact
+  and tool transcript, and verifies historical and corrected conclusions in a
+  separate offline process.
+
+#### Changed
+
+- Split the MCP model and operator roles, replace direct model-proposal writes
+  with read-only candidate previews and explicit operator admission, and bind
+  every persisted event to an auditable authority, policy, and writer identity.
+- Load MCP and Timeline runtime version identities from their installed package
+  manifests so admission provenance cannot drift from shipped package metadata.
+- Describe MCP input semantics in tool discovery, cap each catalog page at
+  eight runs, bind cursors to a catalog generation, cap reference-store
+  configuration at its advertised ceilings, and make the source checkout a
+  complete agent-integration path.
+
+#### Security
 
 - Exit the stdio server with a failure status after malformed or oversized
   protocol input while retaining one sanitized diagnostic.
-- Stop strict JSON diagnostics at the first parse issue to prevent adversarial
-  error amplification.
 - Refuse symlinked and non-regular MCP run files without blocking on special
   filesystem entries.
-- Distinguish local-model output-token exhaustion from other provider failures
-  without retaining partial model output.
 
 ## 0.0.0-alpha.2 - 2026-07-27
 

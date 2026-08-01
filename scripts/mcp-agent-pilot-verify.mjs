@@ -16,10 +16,12 @@ import {
   sourceIdentity,
 } from "./mcp-agent-pilot-lib.mjs";
 
-const MCP_ADMISSION = Object.freeze({
-  mode: "structural-only",
-  assertionAuthority: "unverified",
-  evidencePayloads: "external",
+const PILOT_ADMISSION = Object.freeze({
+  authorityId: "operator.mcp-agent-pilot",
+  policyRef: "policy:mcp-agent-pilot/v1",
+  policyDigest: sha256(
+    new TextEncoder().encode("covenant timeline mcp agent pilot admission v1"),
+  ),
 });
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -77,7 +79,8 @@ export async function verifyMcpAgentPilot(directory) {
     "environment",
     MCP_AGENT_PILOT_LIMITS.maxEnvironmentBytes,
   );
-  const source = verifyEnvironment(environment);
+  const environmentIdentity = verifyEnvironment(environment);
+  const source = environmentIdentity.source;
   const transcript = await readTranscript(
     root,
     resolveInside(root, artifact.transcript, "transcript path"),
@@ -130,7 +133,13 @@ export async function verifyMcpAgentPilot(directory) {
   }
 
   verifyCorrectionScenario(run, verifiedConclusions, timeline);
-  verifyTranscriptBinding(transcript, run, verifiedConclusions, timeline);
+  verifyTranscriptBinding(
+    transcript,
+    run,
+    verifiedConclusions,
+    timeline,
+    environmentIdentity.implementation,
+  );
   const verifierSource = sourceIdentity();
 
   const conclusions = verifiedConclusions.map(
@@ -384,7 +393,16 @@ function verifyEnvironment(value) {
     "@covenant-org/timeline-mcp",
     "MCP package",
   );
-  return source;
+  return {
+    source,
+    implementation: {
+      timelinePackage: "@covenant-org/timeline",
+      timelineVersion: environment.timelinePackage.version,
+      reasoner: "covenant.timeline.stn.v0alpha1",
+      serverPackage: "@covenant-org/timeline-mcp",
+      serverVersion: environment.mcpPackage.version,
+    },
+  };
 }
 
 function verifyPackageIdentity(value, expectedName, label) {
@@ -526,7 +544,7 @@ function hasTargetingCorrection(run, query, timeline) {
   });
 }
 
-function verifyTranscriptBinding(entries, run, records, timeline) {
+function verifyTranscriptBinding(entries, run, records, timeline, writer) {
   let callIndex = 0;
   let eventIndex = 0;
   const create = requireCall(entries, callIndex++, "timeline_create_run", 1);
@@ -541,14 +559,13 @@ function verifyTranscriptBinding(entries, run, records, timeline) {
     create.result,
     {
       created: true,
-      timeline: timelineMetadata(run, 0, timeline),
-      admission: MCP_ADMISSION,
+      timeline: timelineMetadata(run, 0, timeline, writer),
     },
     "create result does not match the empty exported run",
   );
 
   while (entries[callIndex]?.session === 1) {
-    verifyAppendCall(entries[callIndex], run, eventIndex, 1, timeline);
+    verifyAppendCall(entries[callIndex], run, eventIndex, 1, timeline, writer);
     callIndex += 1;
     eventIndex += 1;
   }
@@ -569,19 +586,24 @@ function verifyTranscriptBinding(entries, run, records, timeline) {
     timeline,
     listed.result,
     {
-      timelines: [timelineMetadata(run, eventIndex, timeline)],
+      timelines: [timelineMetadata(run, eventIndex, timeline, writer)],
       nextCursor: null,
     },
     "list result does not recover the pre-restart run",
   );
 
   while (eventIndex < run.events.length) {
-    verifyAppendCall(entries[callIndex], run, eventIndex, 2, timeline);
+    verifyAppendCall(entries[callIndex], run, eventIndex, 2, timeline, writer);
     callIndex += 1;
     eventIndex += 1;
   }
 
-  const finalTimeline = timelineMetadata(run, run.events.length, timeline);
+  const finalTimeline = timelineMetadata(
+    run,
+    run.events.length,
+    timeline,
+    writer,
+  );
   for (const { query, conclusion } of records) {
     const projected = requireCall(
       entries,
@@ -641,14 +663,20 @@ function verifyTranscriptBinding(entries, run, records, timeline) {
   }
 }
 
-function verifyAppendCall(entry, run, eventIndex, session, timeline) {
+function verifyAppendCall(entry, run, eventIndex, session, timeline, writer) {
   const call = requireEntry(entry, "timeline_append_event", session);
   const event = run.events[eventIndex];
   if (!event) {
     throw new Error("tool transcript contains too many append calls");
   }
-  const before = timelineMetadata(run, eventIndex, timeline);
-  const after = timelineMetadata(run, eventIndex + 1, timeline);
+  const before = timelineMetadata(run, eventIndex, timeline, writer);
+  const after = timelineMetadata(run, eventIndex + 1, timeline, writer);
+  const admissionRecord = directAdmissionRecord(
+    run,
+    eventIndex,
+    timeline,
+    writer,
+  );
   const draft = structuredClone(event);
   delete draft.schema;
   delete draft.sequence;
@@ -659,6 +687,7 @@ function verifyAppendCall(entry, run, eventIndex, session, timeline) {
       runId: run.contract.id,
       expectedRunDigest: before.runDigest,
       event: draft,
+      admission: PILOT_ADMISSION,
     },
     `append call ${eventIndex} does not match the exported event or digest chain`,
   );
@@ -669,7 +698,7 @@ function verifyAppendCall(entry, run, eventIndex, session, timeline) {
       appended: true,
       event,
       timeline: after,
-      admission: MCP_ADMISSION,
+      admissionRecord,
     },
     `append result ${eventIndex} does not match the exported run`,
   );
@@ -688,20 +717,58 @@ function requireEntry(entry, tool, session) {
   return entry;
 }
 
-function timelineMetadata(run, eventCount, timeline) {
+function timelineMetadata(run, eventCount, timeline, writer) {
   const prefix = {
     schema: run.schema,
     contract: run.contract,
     events: run.events.slice(0, eventCount),
   };
+  const admissions = run.events
+    .slice(0, eventCount)
+    .map((_, index) => directAdmissionRecord(run, index, timeline, writer));
+  const envelope = {
+    schema: "covenant.timeline.mcp-run.v0alpha2",
+    runId: run.contract.id,
+    revision: eventCount,
+    runDigest: timeline.contentDigest(prefix),
+    admissions,
+    lastWriter: writer,
+    run: prefix,
+  };
   return {
     runId: run.contract.id,
     revision: eventCount,
+    auditDigest: timeline.contentDigest(envelope),
     subject: run.contract.subject,
     contexts: run.contract.contexts,
     eventCount,
+    admissionCount: admissions.length,
     latestRecordedThrough: eventCount === 0 ? null : eventCount - 1,
     runDigest: timeline.contentDigest(prefix),
+  };
+}
+
+function directAdmissionRecord(run, eventIndex, timeline, writer) {
+  const event = run.events[eventIndex];
+  if (!event) throw new Error("admission event index is invalid");
+  const prefix = {
+    schema: run.schema,
+    contract: run.contract,
+    events: run.events.slice(0, eventIndex),
+  };
+  const record = {
+    schema: "covenant.timeline.mcp-admission.v0alpha1",
+    kind: "direct-event",
+    decision: "admitted",
+    ...PILOT_ADMISSION,
+    baseRevision: eventIndex,
+    baseRunDigest: timeline.contentDigest(prefix),
+    eventIds: [event.id],
+    writer,
+  };
+  return {
+    ...record,
+    recordDigest: timeline.contentDigest(record),
   };
 }
 

@@ -15,10 +15,17 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { validateReleaseEvidenceFile } from "./check-release-evidence.mjs";
 import {
+  assertCoreArchiveEntries,
+  coreArchiveFilesForVersion,
+  parseCoreTarListings,
+} from "./core-package-contents.mjs";
+import {
   assertMcpArchiveEntries,
+  mcpArchiveFilesForVersion,
   parseMcpTarListings,
 } from "./mcp-package-contents.mjs";
 import {
+  coreReleaseEvidenceProfile,
   mcpReleaseEvidenceProfile,
   releaseEvidenceProfile,
 } from "./release-evidence-profiles.mjs";
@@ -334,8 +341,13 @@ export function verifyChecksumSidecar(record, text) {
   const [digest, path, extra] = text.trim().split(/\s+/);
   assertEqual(digest, record.artifact.sha256, "checksum sidecar digest");
   assert(!extra, "checksum sidecar must contain one entry");
+  const subject =
+    record.schema === coreReleaseEvidenceProfile.schema &&
+    record.release.version === "0.0.0-alpha.2"
+      ? basename(path)
+      : path;
   assertEqual(
-    basename(path),
+    subject,
     requiredAsset(record, "tarball").name,
     "checksum sidecar subject",
   );
@@ -1201,10 +1213,10 @@ async function verifyCleanInstall(record, tarball) {
   const profile = releaseEvidenceProfile(record);
   return profile.smoke === "mcp"
     ? verifyCleanMcpInstall(record, tarball)
-    : verifyCleanCoreInstall(record);
+    : verifyCleanCoreInstall(record, tarball);
 }
 
-async function verifyCleanCoreInstall(record) {
+async function verifyCleanCoreInstall(record, tarball) {
   const base = await mkdtemp(join(tmpdir(), "timeline-release-verify-"));
   const directory = join(base, "workspace with spaces");
   try {
@@ -1232,6 +1244,13 @@ async function verifyCleanCoreInstall(record) {
       NPM_CONFIG_CACHE: join(base, "npm-cache"),
       NPM_CONFIG_REGISTRY: "https://registry.npmjs.org/",
     });
+    const archive = join(base, requiredAsset(record, "tarball").name);
+    await writeFile(archive, tarball);
+    inspectCoreArchive(
+      archive,
+      record.release.version,
+      record.registry.unpackedSize,
+    );
     runCommand(
       npmExecutable(),
       [
@@ -1322,7 +1341,11 @@ async function verifyCleanMcpInstall(record, tarball) {
     });
     const archive = join(base, requiredAsset(record, "tarball").name);
     await writeFile(archive, tarball);
-    inspectMcpArchive(archive, record.registry.unpackedSize);
+    inspectMcpArchive(
+      archive,
+      record.release.version,
+      record.registry.unpackedSize,
+    );
     const clientVersion =
       record.integration.runtimePins["@modelcontextprotocol/server"];
     runCommand(
@@ -1412,6 +1435,21 @@ async function verifyCleanMcpInstall(record, tarball) {
       "installed MCP event count",
     );
     assertEqual(smoke.proofs, true, "installed MCP proof verification");
+    assertEqual(
+      smoke.proposal?.previewReadOnly,
+      true,
+      "installed MCP model proposal preview isolation",
+    );
+    assertEqual(
+      smoke.proposal?.auditBound,
+      true,
+      "installed MCP admission audit binding",
+    );
+    assertEqual(
+      smoke.proposal?.proof,
+      true,
+      "installed MCP proposal proof verification",
+    );
     assertEqual(smoke.stderr, "", "installed MCP stderr");
 
     runCommand(
@@ -1425,13 +1463,29 @@ async function verifyCleanMcpInstall(record, tarball) {
   }
 }
 
-function inspectMcpArchive(path, expectedUnpackedSize) {
+function inspectMcpArchive(path, version, expectedUnpackedSize) {
   assertMcpArchiveEntries(
     parseMcpTarListings(
       runCommand("tar", ["-tzf", path], { env: tarEnvironment() }),
       runCommand("tar", ["-tvzf", path], { env: tarEnvironment() }),
     ),
-    { expectedUnpackedSize },
+    {
+      expectedFiles: mcpArchiveFilesForVersion(version),
+      expectedUnpackedSize,
+    },
+  );
+}
+
+function inspectCoreArchive(path, version, expectedUnpackedSize) {
+  assertCoreArchiveEntries(
+    parseCoreTarListings(
+      runCommand("tar", ["-tzf", path], { env: tarEnvironment() }),
+      runCommand("tar", ["-tvzf", path], { env: tarEnvironment() }),
+    ),
+    {
+      expectedFiles: coreArchiveFilesForVersion(version),
+      expectedUnpackedSize,
+    },
   );
 }
 

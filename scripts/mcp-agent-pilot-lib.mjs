@@ -82,7 +82,7 @@ export function sourceIdentity() {
   const revisionResult = spawnSync(
     "git",
     ["-C", repositoryRoot, "rev-parse", "HEAD"],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: credentialFreeEnvironment() },
   );
   const revision = revisionResult.stdout.trim();
   if (revisionResult.status !== 0 || !/^[0-9a-f]{40}$/.test(revision)) {
@@ -91,7 +91,7 @@ export function sourceIdentity() {
   const status = spawnSync(
     "git",
     ["-C", repositoryRoot, "status", "--porcelain"],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: credentialFreeEnvironment() },
   );
   if (status.status !== 0) throw new Error("source status is unavailable");
   return {
@@ -163,7 +163,11 @@ export async function readBoundedArtifactFile(
   label,
   reserve,
 ) {
-  return readBoundedFile(root, path, maxBytes, label, "the artifact", reserve);
+  return readBoundedExactFile(path, maxBytes, label, {
+    root,
+    scope: "the artifact",
+    reserve,
+  });
 }
 
 export async function readBoundedInputFile(
@@ -173,43 +177,62 @@ export async function readBoundedInputFile(
   label,
   reserve,
 ) {
-  return readBoundedFile(root, path, maxBytes, label, "the input", reserve);
+  return readBoundedExactFile(path, maxBytes, label, {
+    root,
+    scope: "the input",
+    reserve,
+  });
 }
 
-async function readBoundedFile(root, path, maxBytes, label, scope, reserve) {
+export async function readBoundedExactFile(
+  path,
+  maxBytes,
+  label,
+  {
+    root,
+    scope = "its containing directory",
+    reserve,
+    validate,
+    sync = false,
+  } = {},
+) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new TypeError("maxBytes must be a non-negative safe integer");
   }
-  const absolute = assertContainedPath(root, path, label, scope);
-  const [link, canonical] = await Promise.all([
-    lstat(absolute),
-    realpath(absolute),
-  ]);
-  if (!link.isFile() || canonical !== absolute) {
+  const absolute = root
+    ? assertContainedPath(root, path, label, scope)
+    : resolve(path);
+  const link = await lstat(absolute, { bigint: true });
+  if (!link.isFile()) {
     throw new Error(`${label} must be a real file inside ${scope}`);
   }
 
   const flags =
     process.platform === "win32"
       ? "r"
-      : fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0);
+      : fsConstants.O_RDONLY |
+        (fsConstants.O_NOFOLLOW ?? 0) |
+        (fsConstants.O_NONBLOCK ?? 0) |
+        (fsConstants.O_CLOEXEC ?? 0);
   const handle = await open(absolute, flags);
   try {
-    const stat = await handle.stat();
+    const before = await handle.stat({ bigint: true });
     if (
-      !stat.isFile() ||
-      stat.dev !== link.dev ||
-      stat.ino !== link.ino ||
-      !Number.isSafeInteger(stat.size) ||
-      stat.size > maxBytes
+      !before.isFile() ||
+      before.dev !== link.dev ||
+      before.ino !== link.ino ||
+      before.size < 0n ||
+      before.size > BigInt(maxBytes) ||
+      before.size > BigInt(Number.MAX_SAFE_INTEGER)
     ) {
       throw new Error(
         `${label} exceeds its byte limit or changed while opening`,
       );
     }
-    if (reserve !== undefined) reserve(stat.size);
+    const expectedSize = Number(before.size);
+    if (reserve !== undefined) reserve(expectedSize);
 
-    const bytes = Buffer.alloc(stat.size + 1);
+    const bytes = Buffer.alloc(expectedSize + 1);
     let offset = 0;
     while (offset < bytes.byteLength) {
       const { bytesRead } = await handle.read(
@@ -221,15 +244,81 @@ async function readBoundedFile(root, path, maxBytes, label, scope, reserve) {
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
-    if (offset !== stat.size) {
+    const [after, current] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(absolute, { bigint: true }),
+    ]);
+    if (
+      offset !== expectedSize ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
+      after.size !== before.size ||
+      after.mtimeNs !== before.mtimeNs ||
+      after.ctimeNs !== before.ctimeNs ||
+      !current.isFile() ||
+      current.dev !== before.dev ||
+      current.ino !== before.ino
+    ) {
       throw new Error(
         `${label} exceeds its byte limit or changed while reading`,
       );
     }
-    return bytes.subarray(0, offset);
+    const exact = bytes.subarray(0, offset);
+    if (validate !== undefined) await validate(exact);
+    const [validated, validatedPath] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(absolute, { bigint: true }),
+    ]);
+    if (
+      validated.dev !== before.dev ||
+      validated.ino !== before.ino ||
+      validated.size !== before.size ||
+      validated.mtimeNs !== before.mtimeNs ||
+      validated.ctimeNs !== before.ctimeNs ||
+      !validatedPath.isFile() ||
+      validatedPath.dev !== before.dev ||
+      validatedPath.ino !== before.ino
+    ) {
+      throw new Error(`${label} changed while being validated`);
+    }
+    if (sync) {
+      await handle.sync();
+      const syncedPath = await lstat(absolute, { bigint: true });
+      if (
+        !syncedPath.isFile() ||
+        syncedPath.dev !== before.dev ||
+        syncedPath.ino !== before.ino
+      ) {
+        throw new Error(`${label} changed while being synchronized`);
+      }
+    }
+    return exact;
   } finally {
     await handle.close();
   }
+}
+
+export function credentialFreeEnvironment(source = process.env) {
+  const environment = {};
+  for (const name of [
+    "PATH",
+    "SystemRoot",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "LANG",
+    "LC_ALL",
+  ]) {
+    if (source[name] !== undefined) environment[name] = source[name];
+  }
+  environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_CONFIG_GLOBAL =
+    process.platform === "win32" ? "NUL" : "/dev/null";
+  environment.GIT_OPTIONAL_LOCKS = "0";
+  return environment;
 }
 
 async function canonicalDirectory(directory, label) {

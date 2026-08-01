@@ -1185,7 +1185,7 @@ export async function readSourceState() {
         await Promise.all(
           paths.map(async (path) => ({
             path,
-            digest: await digestFile(join(root, path)),
+            digest: await digestWorkingTreePath(join(root, path)),
           })),
         ),
       ),
@@ -1197,6 +1197,15 @@ export async function readSourceState() {
       status: null,
       stateDigest: null,
     };
+  }
+}
+
+async function digestWorkingTreePath(path) {
+  try {
+    return await digestFile(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
   }
 }
 

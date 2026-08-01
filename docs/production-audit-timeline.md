@@ -40,8 +40,10 @@ maintained in this repository. The external project represented by the public
 archive did not adopt Timeline. The alpha.2 package includes the Draft v0alpha3
 temporal reference implementation alongside v0alpha1 and v0alpha2 checkpoint
 compatibility APIs. External operation, an independently maintained temporal
-implementation, a public composed restart-and-correction pilot, and RFC
-completion remain blockers to a production protocol claim. Both preregistered
+implementation, and RFC completion remain blockers to a production protocol
+claim. The retained maintainer-operated pilot demonstrates composed restart,
+correction, and offline verification, but it is not evidence of independent
+operation or a live delayed-evidence workflow. Both preregistered
 frontier-model gates returned `kill`: the lower-level state comparison did not
 beat structured extraction, and the deployment-shaped proposal interface failed its
 semantic assertion and end-to-end thresholds. Neither result supports a

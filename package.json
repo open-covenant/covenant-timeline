@@ -19,7 +19,7 @@
     "reducer:cross-check": "python3 scripts/check-python-reducer.py",
     "temporal:cross-check": "python3 scripts/check-python-v0alpha3-verifier.py",
     "replay:benchmark": "pnpm build && node scripts/benchmark-replay.mjs",
-    "coverage:check": "pnpm -r --if-present coverage",
+    "coverage:check": "pnpm -r --workspace-concurrency=1 --if-present coverage",
     "demo": "pnpm build && node packages/prototype/dist/cli.js verify conformance/v0alpha1/runs/successful.json",
     "examples:test": "pnpm build && node --test scripts/correction-replay.test.mjs scripts/mcp-agent-pilot.test.mjs scripts/mcp-real-model-pilot.test.mjs",
     "format": "prettier --write .",

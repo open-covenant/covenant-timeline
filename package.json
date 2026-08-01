@@ -21,7 +21,7 @@
     "replay:benchmark": "pnpm build && node scripts/benchmark-replay.mjs",
     "coverage:check": "pnpm -r --workspace-concurrency=1 --if-present coverage",
     "demo": "pnpm build && node packages/prototype/dist/cli.js verify conformance/v0alpha1/runs/successful.json",
-    "examples:test": "pnpm build && node --test scripts/correction-replay.test.mjs scripts/mcp-agent-pilot.test.mjs scripts/mcp-real-model-pilot.test.mjs",
+    "examples:test": "pnpm build && node --test scripts/correction-replay.test.mjs scripts/formal-attempt-ledger.v2.test.mjs scripts/mcp-agent-pilot.test.mjs scripts/mcp-real-model-pilot-failure-artifact.test.mjs scripts/mcp-real-model-pilot.test.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "github-profile:check": "pnpm build && node scripts/check-github-profile.mjs",

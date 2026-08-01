@@ -4,6 +4,7 @@ import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { decodeUtf8, readBoundedExactFile } from "./mcp-agent-pilot-lib.mjs";
 
 export const pilotRepositoryRoot = resolve(
@@ -34,11 +35,18 @@ const fixedFiles = [
   "scripts/mcp-agent-pilot.mjs",
   "scripts/formal-attempt-ledger.mjs",
   "scripts/mcp-real-model-pilot-bootstrap.mjs",
+  "scripts/mcp-real-model-pilot-failure-artifact.mjs",
+  "scripts/mcp-real-model-pilot-failure-export.mjs",
+  "scripts/mcp-real-model-pilot-failure-verify.mjs",
+  "scripts/mcp-real-model-pilot-failure.mjs",
   "scripts/mcp-real-model-pilot-lib.mjs",
+  "scripts/mcp-real-model-pilot-phase-decision.mjs",
+  "scripts/mcp-real-model-pilot-recovery.mjs",
   "scripts/mcp-real-model-pilot-runtime.mjs",
   "scripts/mcp-real-model-pilot-verify-bootstrap.mjs",
   "scripts/mcp-real-model-pilot-verify.mjs",
   "scripts/mcp-real-model-pilot.mjs",
+  "scripts/model-eval-output-schema.mjs",
   "scripts/openai-responses-model-eval-adapter.mjs",
   "scripts/openai-responses-model-eval-schema.mjs",
   "scripts/strict-json.mjs",
@@ -51,6 +59,7 @@ const applicationDependencies = [
   "ajv-formats",
   "canonicalize",
   "jsonc-parser",
+  "typescript",
   "zod",
 ];
 export async function capturePilotRuntime({
@@ -87,6 +96,7 @@ export async function capturePilotRuntime({
   ) {
     throw new Error("real-model pilot runtime file set is invalid");
   }
+  await assertRelativeImportClosure(root, paths);
   const files = await Promise.all(
     paths.map(async (path) => ({
       path,
@@ -115,6 +125,334 @@ export async function capturePilotRuntime({
     resolutions: closure.resolutions,
   };
   return { identity, digest: contentDigest(identity) };
+}
+
+async function assertRelativeImportClosure(root, paths) {
+  const included = new Set(paths);
+  const sources = new Map();
+  for (const path of paths) {
+    if (!/\.(?:js|mjs)$/u.test(path)) continue;
+    const bytes = await readBoundedExactFile(
+      join(root, path),
+      limits.fileBytes,
+      `runtime source ${path}`,
+    );
+    sources.set(path, decodeUtf8(bytes, `runtime source ${path}`));
+  }
+  for (const [path, specifiers] of runtimeModuleSpecifiers(sources)) {
+    for (const specifier of specifiers) {
+      if (!isRelativeSpecifier(specifier)) continue;
+      const target = relative(
+        root,
+        resolve(dirname(join(root, path)), specifier),
+      )
+        .split(sep)
+        .join("/");
+      if (
+        target === "" ||
+        target === ".." ||
+        target.startsWith("../") ||
+        !included.has(target)
+      ) {
+        throw new Error(
+          `runtime file ${path} imports unbound local module ${specifier}`,
+        );
+      }
+    }
+  }
+}
+
+function runtimeModuleSpecifiers(sources) {
+  const options = {
+    allowJs: true,
+    checkJs: false,
+    module: ts.ModuleKind.ESNext,
+    moduleDetection: ts.ModuleDetectionKind.Force,
+    noLib: true,
+    noResolve: true,
+    target: ts.ScriptTarget.ESNext,
+  };
+  const host = {
+    fileExists: (path) => sources.has(path),
+    getCanonicalFileName: (path) => path,
+    getCurrentDirectory: () => "",
+    getDefaultLibFileName: () => "",
+    getNewLine: () => "\n",
+    getSourceFile(path, languageVersion) {
+      const source = sources.get(path);
+      if (source === undefined) return undefined;
+      return ts.createSourceFile(
+        path,
+        source,
+        languageVersion,
+        true,
+        ts.getScriptKindFromFileName(path),
+      );
+    },
+    readFile: (path) => sources.get(path),
+    useCaseSensitiveFileNames: () => true,
+    writeFile() {},
+  };
+  const program = ts.createProgram([...sources.keys()], options, host);
+  const checker = program.getTypeChecker();
+  const result = new Map();
+
+  for (const path of sources.keys()) {
+    const sourceFile = program.getSourceFile(path);
+    if (!sourceFile) {
+      throw new Error(`runtime source ${path} could not be parsed`);
+    }
+    const diagnostics = program.getSyntacticDiagnostics(sourceFile);
+    if (diagnostics.length > 0) {
+      const detail = ts
+        .flattenDiagnosticMessageText(diagnostics[0].messageText, " ")
+        .replace(/\s+/gu, " ");
+      throw new Error(
+        `runtime source ${path} is not valid JavaScript: ${detail}`,
+      );
+    }
+    result.set(path, moduleSpecifiersForSource(sourceFile, checker));
+  }
+  return result;
+}
+
+function moduleSpecifiersForSource(sourceFile, checker) {
+  const specifiers = new Set();
+  const createRequireBindings = importedBindings(
+    sourceFile,
+    checker,
+    "node:module",
+    "createRequire",
+  );
+  const pathToFileUrlBindings = importedBindings(
+    sourceFile,
+    checker,
+    "node:url",
+    "pathToFileURL",
+  );
+  const loaderBindings = new Set();
+  const loaderDeclarations = new Set();
+  const createRequireInitializers = new Set();
+
+  visit(sourceFile, (node) => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !node.initializer ||
+      !ts.isCallExpression(node.initializer) ||
+      !isImportedCall(node.initializer, createRequireBindings, checker)
+    ) {
+      return;
+    }
+    if (!ts.isIdentifier(node.name) || !isConstDeclaration(node)) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} uses an unsupported createRequire binding`,
+      );
+    }
+    const symbol = checker.getSymbolAtLocation(node.name);
+    if (!symbol) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} has an unresolved createRequire binding`,
+      );
+    }
+    loaderBindings.add(symbol);
+    loaderDeclarations.add(node.name);
+    createRequireInitializers.add(node.initializer);
+  });
+
+  const resolvedPackages = new Map();
+  visit(sourceFile, (node) => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !ts.isIdentifier(node.name) ||
+      !isConstDeclaration(node) ||
+      !node.initializer ||
+      !ts.isCallExpression(node.initializer) ||
+      !isLoaderResolveCall(node.initializer, loaderBindings, checker)
+    ) {
+      return;
+    }
+    const specifier = soleLiteralArgument(node.initializer);
+    if (!specifier || isRelativeSpecifier(specifier)) return;
+    const symbol = checker.getSymbolAtLocation(node.name);
+    if (symbol) resolvedPackages.set(symbol, specifier);
+  });
+
+  visit(sourceFile, (node) => {
+    if (
+      ts.isImportDeclaration(node) ||
+      (ts.isExportDeclaration(node) && node.moduleSpecifier)
+    ) {
+      const specifier = literalText(node.moduleSpecifier);
+      if (specifier === undefined) {
+        throw new Error(
+          `runtime source ${sourceFile.fileName} contains a non-literal module declaration`,
+        );
+      }
+      specifiers.add(specifier);
+      return;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
+    ) {
+      const specifier = soleLiteralArgument(node);
+      if (specifier !== undefined) {
+        specifiers.add(specifier);
+        return;
+      }
+      if (
+        node.arguments.length === 1 &&
+        isResolvedPackageUrl(
+          node.arguments[0],
+          pathToFileUrlBindings,
+          resolvedPackages,
+          checker,
+        )
+      ) {
+        return;
+      }
+      throw new Error(
+        `runtime source ${sourceFile.fileName} contains an unsupported computed dynamic import`,
+      );
+    }
+    if (
+      ts.isCallExpression(node) &&
+      isImportedCall(node, createRequireBindings, checker) &&
+      !createRequireInitializers.has(node)
+    ) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} uses createRequire outside a const binding`,
+      );
+    }
+    if (!ts.isCallExpression(node)) return;
+    const loader = checker.getSymbolAtLocation(node.expression);
+    if (loaderBindings.has(loader)) {
+      const specifier = soleLiteralArgument(node);
+      if (specifier === undefined) {
+        throw new Error(
+          `runtime source ${sourceFile.fileName} contains a computed CommonJS require`,
+        );
+      }
+      specifiers.add(specifier);
+      return;
+    }
+    if (
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "require"
+    ) {
+      throw new Error(
+        `runtime source ${sourceFile.fileName} contains an unbound CommonJS require`,
+      );
+    }
+  });
+
+  visit(sourceFile, (node) => {
+    if (!ts.isIdentifier(node)) return;
+    const symbol = checker.getSymbolAtLocation(node);
+    if (!loaderBindings.has(symbol) || loaderDeclarations.has(node)) return;
+    const parent = node.parent;
+    if (ts.isCallExpression(parent) && parent.expression === node) return;
+    if (
+      ts.isPropertyAccessExpression(parent) &&
+      parent.expression === node &&
+      parent.name.text === "resolve" &&
+      ts.isCallExpression(parent.parent) &&
+      parent.parent.expression === parent
+    ) {
+      return;
+    }
+    throw new Error(
+      `runtime source ${sourceFile.fileName} passes or aliases a CommonJS loader`,
+    );
+  });
+
+  return specifiers;
+}
+
+function importedBindings(sourceFile, checker, moduleName, importedName) {
+  const bindings = new Set();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      literalText(statement.moduleSpecifier) !== moduleName ||
+      !statement.importClause?.namedBindings ||
+      !ts.isNamedImports(statement.importClause.namedBindings)
+    ) {
+      continue;
+    }
+    for (const element of statement.importClause.namedBindings.elements) {
+      if ((element.propertyName ?? element.name).text !== importedName)
+        continue;
+      const symbol = checker.getSymbolAtLocation(element.name);
+      if (symbol) bindings.add(symbol);
+    }
+  }
+  return bindings;
+}
+
+function isImportedCall(call, bindings, checker) {
+  return (
+    ts.isIdentifier(call.expression) &&
+    bindings.has(checker.getSymbolAtLocation(call.expression))
+  );
+}
+
+function isLoaderResolveCall(call, bindings, checker) {
+  return (
+    ts.isPropertyAccessExpression(call.expression) &&
+    call.expression.name.text === "resolve" &&
+    bindings.has(checker.getSymbolAtLocation(call.expression.expression))
+  );
+}
+
+function isResolvedPackageUrl(
+  expression,
+  pathToFileUrlBindings,
+  resolvedPackages,
+  checker,
+) {
+  if (
+    !ts.isPropertyAccessExpression(expression) ||
+    expression.name.text !== "href" ||
+    !ts.isCallExpression(expression.expression) ||
+    !isImportedCall(expression.expression, pathToFileUrlBindings, checker) ||
+    expression.expression.arguments.length !== 1
+  ) {
+    return false;
+  }
+  const [argument] = expression.expression.arguments;
+  return (
+    ts.isIdentifier(argument) &&
+    resolvedPackages.has(checker.getSymbolAtLocation(argument))
+  );
+}
+
+function soleLiteralArgument(call) {
+  if (call.arguments.length !== 1) return undefined;
+  return literalText(call.arguments[0]);
+}
+
+function literalText(node) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  return undefined;
+}
+
+function isConstDeclaration(declaration) {
+  return (
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+  );
+}
+
+function isRelativeSpecifier(specifier) {
+  return specifier.startsWith("./") || specifier.startsWith("../");
+}
+
+function visit(node, callback) {
+  callback(node);
+  node.forEachChild((child) => visit(child, callback));
 }
 
 export async function pilotRuntimeMatches(expected, options = {}) {
@@ -299,6 +637,9 @@ async function resolvedPackageClosure(root, dependencies) {
 }
 
 async function resolveApplicationPackage(specifier, root) {
+  if (specifier === "typescript") {
+    return resolvePackage(specifier, import.meta.url);
+  }
   const importers = [
     join(root, "package.json"),
     join(root, "packages/mcp-server/package.json"),
@@ -333,10 +674,11 @@ async function resolvePackageFrom(specifier, importer) {
     if (parent === directory) break;
     directory = parent;
   }
-  return resolvePackage(specifier, createRequire(importer));
+  return resolvePackage(specifier, importer);
 }
 
-async function resolvePackage(specifier, resolver) {
+async function resolvePackage(specifier, importer) {
+  const resolver = createRequire(importer);
   let entry;
   try {
     entry = resolver.resolve(`${specifier}/package.json`);

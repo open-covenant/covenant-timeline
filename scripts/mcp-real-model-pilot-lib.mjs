@@ -53,6 +53,10 @@ export const REAL_MODEL_PILOT_LIMITS = Object.freeze({
   runtimeFileBytes: 16 * 1024 * 1024,
   runtimeFiles: 256,
 });
+export const REAL_MODEL_PILOT_PROPOSAL_LIMITS = Object.freeze({
+  maxChanges: 4,
+  maxSupportsPerChange: 1,
+});
 
 const MCP_SERVER_VERSION_PATTERN =
   /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/u;
@@ -416,7 +420,7 @@ export function createProposalScope({ phase, input, run, initialAssertionId }) {
 export function createAdapterRequest({ input, scope, config }) {
   const outputSchema = input.timeline.createTemporalModelProposalOutputSchemaV1(
     scope.host,
-    { maxChanges: 4, maxSupportsPerChange: 2 },
+    REAL_MODEL_PILOT_PROPOSAL_LIMITS,
   );
   return {
     outputSchema,
@@ -438,28 +442,154 @@ export function createAdapterRequest({ input, scope, config }) {
 export function invokeAdapter(command, args, request, timeline) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
-    encoding: "utf8",
-    input: `${timeline.canonicalJson(request)}\n`,
+    input: Buffer.from(`${timeline.canonicalJson(request)}\n`),
     timeout: 120_000,
-    maxBuffer: REAL_MODEL_PILOT_LIMITS.adapterBytes,
+    maxBuffer: REAL_MODEL_PILOT_LIMITS.adapterBytes * 2,
     env: adapterEnvironment(process.env),
   });
-  if (result.status !== 0 || result.signal) {
-    throw new Error(
-      `model adapter failed: ${(result.stderr || result.error?.message || "unknown failure").trim()}`,
-    );
+
+  return {
+    status: Number.isSafeInteger(result.status) ? result.status : null,
+    signal: typeof result.signal === "string" ? result.signal : null,
+    error:
+      result.error instanceof Error
+        ? {
+            code: adapterErrorCode(result.error),
+          }
+        : null,
+    stdout: rawAdapterStream(result.stdout),
+    stderr: rawAdapterStream(result.stderr),
+  };
+}
+
+export function parseAdapterExecution(execution, timeline) {
+  validateAdapterExecution(execution);
+  if (
+    execution.error?.code === "enobufs" ||
+    execution.stdout.truncated ||
+    execution.stderr.truncated
+  ) {
+    throw adapterFailure("adapter-output", "adapter.output-limit");
   }
-  const lines = result.stdout.trimEnd().split("\n");
+  if (execution.error || execution.status !== 0 || execution.signal) {
+    throw adapterFailure("adapter-execution", "adapter.nonzero-exit");
+  }
+
+  let stdout;
+  try {
+    stdout = decodeUtf8(
+      decodeAdapterStream(execution.stdout),
+      "model adapter stdout",
+    );
+  } catch {
+    throw adapterFailure("adapter-output", "adapter.invalid-utf8");
+  }
+  const lines = stdout.trimEnd().split("\n");
   if (lines.length !== 1 || lines[0].length === 0) {
-    throw new Error("model adapter returned an invalid response stream");
+    throw adapterFailure("adapter-output", "adapter.invalid-framing");
   }
-  const response = timeline.parseJson(lines[0]);
-  if (response.schema === "covenant.timeline.model-eval.adapter-error.v1") {
-    throw new Error(
-      `model adapter rejected the request: ${response.error?.code ?? "unknown"}`,
-    );
+  let response;
+  try {
+    response = timeline.parseJson(lines[0]);
+  } catch {
+    throw adapterFailure("adapter-output", "adapter.invalid-json");
+  }
+  if (response?.schema === "covenant.timeline.model-eval.adapter-error.v1") {
+    throw adapterFailure("adapter-output", "adapter.error-envelope");
   }
   return { response, responseText: lines[0] };
+}
+
+export function validateAdapterExecution(execution) {
+  if (
+    execution === null ||
+    typeof execution !== "object" ||
+    Array.isArray(execution) ||
+    Object.keys(execution).sort().join(",") !==
+      "error,signal,status,stderr,stdout" ||
+    (execution.status !== null &&
+      (!Number.isSafeInteger(execution.status) || execution.status < 0)) ||
+    (execution.signal !== null &&
+      (typeof execution.signal !== "string" ||
+        execution.signal.length === 0 ||
+        execution.signal.length > 32)) ||
+    (execution.error !== null &&
+      (typeof execution.error !== "object" ||
+        Array.isArray(execution.error) ||
+        Object.keys(execution.error).join(",") !== "code" ||
+        typeof execution.error.code !== "string" ||
+        !["eacces", "enobufs", "enoent", "etimedout", "spawn-error"].includes(
+          execution.error.code,
+        )))
+  ) {
+    throw new Error("adapter execution record is invalid");
+  }
+  decodeAdapterStream(execution.stdout);
+  decodeAdapterStream(execution.stderr);
+  return execution;
+}
+
+export function isAdapterFailure(error) {
+  return error instanceof Error && error.name === "TimelinePilotAdapterFailure";
+}
+
+function rawAdapterStream(value) {
+  const source = Buffer.isBuffer(value) ? value : Buffer.alloc(0);
+  const truncated = source.byteLength > REAL_MODEL_PILOT_LIMITS.adapterBytes;
+  const bytes = truncated
+    ? source.subarray(0, REAL_MODEL_PILOT_LIMITS.adapterBytes)
+    : source;
+  return {
+    byteLength: bytes.byteLength,
+    digest: sha256(bytes),
+    base64: bytes.toString("base64"),
+    truncated,
+  };
+}
+
+function decodeAdapterStream(value) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !==
+      "base64,byteLength,digest,truncated" ||
+    typeof value.base64 !== "string" ||
+    !Number.isSafeInteger(value.byteLength) ||
+    value.byteLength < 0 ||
+    value.byteLength > REAL_MODEL_PILOT_LIMITS.adapterBytes ||
+    typeof value.digest !== "string" ||
+    typeof value.truncated !== "boolean" ||
+    (value.truncated &&
+      value.byteLength !== REAL_MODEL_PILOT_LIMITS.adapterBytes) ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.digest)
+  ) {
+    throw new Error("adapter execution stream is invalid");
+  }
+  const bytes = Buffer.from(value.base64, "base64");
+  if (
+    bytes.byteLength !== value.byteLength ||
+    bytes.toString("base64") !== value.base64 ||
+    sha256(bytes) !== value.digest
+  ) {
+    throw new Error("adapter execution stream digest changed");
+  }
+  return bytes;
+}
+
+function adapterFailure(stage, code) {
+  const error = new Error(`model phase failed at ${stage} (${code})`);
+  error.name = "TimelinePilotAdapterFailure";
+  error.stage = stage;
+  error.code = code;
+  return error;
+}
+
+function adapterErrorCode(error) {
+  const code = String(error.code ?? "spawn-error").toLowerCase();
+  return ["eacces", "enobufs", "enoent", "etimedout"].includes(code)
+    ? code
+    : "spawn-error";
 }
 
 function adapterEnvironment(source) {
@@ -525,14 +655,15 @@ export function validateProposalSemantics(phase, proposal, expected) {
         "model proposal coordinate does not match normalized evidence",
       );
     }
-    if (
-      change.supports.length !== 1 ||
-      change.supports[0].evidenceId !== semantic[1] ||
-      !change.supports[0].quote.includes(String(semantic[0])) ||
-      !change.supports[0].quote.includes(expected.tagCommit)
-    ) {
+    if (change.supports.length !== 1) {
+      throw new Error("model proposal change must contain exactly one support");
+    }
+    if (change.supports[0].evidenceId !== semantic[1]) {
+      throw new Error("model proposal support uses unexpected evidence");
+    }
+    if (!change.supports[0].quote.includes(String(semantic[0]))) {
       throw new Error(
-        "model proposal support does not bind the expected evidence",
+        "model proposal support quote does not contain the expected coordinate",
       );
     }
     if (

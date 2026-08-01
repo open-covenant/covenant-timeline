@@ -22,6 +22,7 @@ import {
 } from "./mcp-agent-pilot-lib.mjs";
 import {
   REAL_MODEL_PILOT_LIMITS,
+  REAL_MODEL_PILOT_PROPOSAL_LIMITS,
   REAL_MODEL_PILOT_SCHEMA,
   createRealModelPilotAdmissionPolicy,
   createAdapterRequest,
@@ -927,17 +928,14 @@ function verifyModelCall({
   const candidate = timeline.compileTemporalModelProposalV1(
     call.proposal,
     scope.host,
-    {
-      maxChanges: 4,
-      maxSupportsPerChange: 2,
-    },
+    REAL_MODEL_PILOT_PROPOSAL_LIMITS,
   );
   if (
     !timeline.verifyTemporalModelProposalCandidateV1(
       candidate,
       call.proposal,
       scope.host,
-      { maxChanges: 4, maxSupportsPerChange: 2 },
+      REAL_MODEL_PILOT_PROPOSAL_LIMITS,
     )
   ) {
     throw new Error("model proposal candidate did not verify");

@@ -38,30 +38,49 @@ SHA-256 evidence references and source-span receipts, not evidence text. The
 export keeps the public evidence in a separate directory and redacts it from
 the recorded model request.
 
-## Retained attempt
+## Published successful attempt 1
 
-The first formal attempt completed on 2026-08-01 and is retained in the
+Published successful attempt 1 completed on 2026-08-01 and is retained in the
 [GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01).
 
-| Field                    | Result                                                             |
-| ------------------------ | ------------------------------------------------------------------ |
-| Source                   | `3fb0ce3249a028e52a5ae7fa25fd9ebbad229c8c`                         |
-| Model                    | GPT-5.6 Sol through the OpenAI Responses API                       |
-| Reservations and bundles | 2 provider reservations, 2 synchronized phase-result bundles       |
-| Admission                | 4 content-bound admission records                                  |
-| Results                  | 513,698 ms historical; 360,698 ms corrected                        |
-| Verification             | 3 receipts verified; recorded runtime matched exactly              |
-| Archive SHA-256          | `cb246e732553dc069e17d614fbbd7352dc77bcd5693b7d6cd8ba902bf55c0b2e` |
+| Field                        | Result                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| Source                       | `3fb0ce3249a028e52a5ae7fa25fd9ebbad229c8c`                                  |
+| Recorded model configuration | GPT-5.6 Sol through the OpenAI Responses API; execution maintainer-attested |
+| Reservations and bundles     | 2 provider reservations, 2 synchronized phase-result bundles                |
+| Admission                    | 4 content-bound admission records                                           |
+| Results                      | 513,698 ms historical; 360,698 ms corrected                                 |
+| Retained verification        | `verified: true`; 3 receipts; exact operator runtime matched                |
+| Archive SHA-256              | `cb246e732553dc069e17d614fbbd7352dc77bcd5693b7d6cd8ba902bf55c0b2e`          |
 
-The release archive was downloaded after publication, compared byte for byte
-with the verified local archive, checksum-checked, extracted into a fresh
-directory, and verified again without provider credentials. The artifact scan
-found no API-key bytes, credential patterns, personal identifiers, or absolute
-home paths.
+The published archive matches its SHA-256 sidecar and GitHub asset digest. A
+fresh extraction verified successfully without credentials from a clean
+checkout at the recorded source revision. That rebuilt checkout reported
+`runtimeMatched: false`, while the retained operator verification reports
+`runtimeMatched: true`; portable receipt verification does not require exact
+operator-runtime reproduction.
+
+The maintainer's prepublication scan reported no exact API-key bytes,
+credential patterns, personal identifiers, or absolute home paths.
 
 This attempt demonstrates the composed source-built workflow. It remains a
 maintainer-attested historical staged replay, not independent adoption or a live
 observation of evidence arriving over time.
+
+## Subsequent replication
+
+A later maintainer replication completed its initial phase but terminated
+during correction after the provider invocation. It was not retried and was not
+exported as a successful artifact. The v1 terminal failure entry retained the
+invocation and request binding, but not the rejected adapter output or a
+content-bound rejection record. The retained state therefore cannot establish
+from its own bytes why the correction failed.
+
+This later failure does not invalidate published successful attempt 1. It does
+mean that the published artifact demonstrates one completed workflow, not
+repeatability or reliable model proposal generation. The current v2
+failure-retention contract cannot retroactively repair the missing evidence in
+that earlier state.
 
 ## Formal run
 
@@ -112,15 +131,66 @@ require those bytes and resolution edges to remain unchanged.
 Each phase writes and synchronizes an exclusive attempt-ledger entry before it
 invokes the model adapter. A provider response that later fails validation is a
 failed formal attempt, not a retry opportunity. A handled failure adds a
-terminal failure entry. Every ledger sequence has one exclusive filesystem slot,
-so a recovering process that completes a phase and the original process's
-failure path cannot record contradictory outcomes. A crash leaves the provider
-reservation in place.
-If the validated phase-result bundle was already synchronized, `resume`
-revalidates it and records the missing completion without invoking the provider
-again. Without that complete bundle, the phase cannot continue and a later run
-must use a new state directory. Preserve every failed or interrupted state
-directory as part of the attempt record.
+terminal failure entry. Before parsing or validation, the driver stores the
+adapter exit status, signal, and bounded raw stdout and stderr as base64 with
+byte counts and SHA-256 digests. Spawn errors are reduced to a closed code; host
+and adapter error messages are not persisted as diagnostic fields. After a
+proposal passes semantic validation and non-mutating preview, the driver writes
+a proposal-ready receipt before admission can begin. A rejected phase stores a
+private, canonical failure bundle that binds the capture, optional
+proposal-ready receipt, exact verified or observed MCP state, and a closed
+failure stage and code. The v2 terminal entry binds both the capture and
+failure-bundle digests. Successful attempt ledgers and their verifier remain on
+the published v1 surface.
+
+Every ledger sequence has one exclusive filesystem slot. Before model admission,
+the driver also installs an immutable phase decision bound to the captured
+proposal. Recovery first observes MCP state through the read-only model role.
+If admission already won, it completes post-admission verification without
+another provider or admission call. If the base state remains unchanged,
+recovery appends a deterministic fence event with an exact run-digest compare
+and swap. The fence and model admission cannot both win: a successful fence
+closes the phase as interrupted, while a successful candidate admission is
+recovered from its exact state. Unexpected valid state is quarantined as
+divergent.
+
+If a synchronized result, failure bundle, or raw adapter capture already exists,
+`resume` validates those bytes and completes the missing ledger entry without
+invoking the provider or admitting another model proposal. Deterministic
+post-admission verification failures become terminal evidence bound to the
+admitted state. Failed attempts cannot produce a successful artifact. Their raw
+adapter output remains only in the private state directory; command output
+reports the stage and code, not raw diagnostic text. Preserve every failed or
+interrupted state directory as part of the attempt record.
+
+Export a self-contained redacted failed-attempt receipt, then verify it without
+credentials or network access. The export path must not exist. Publication uses
+an adjacent recoverable claim, reserves the destination with exclusive
+directory creation, and never replaces an existing directory or link. An
+incomplete marker makes a partial install unverifiable and lets a later process
+recover recognized stale publication state without deleting unknown files.
+
+The formal driver supports controlled interruption and clean process restart on
+one host. It does not guarantee recovery after host or power loss, or after a
+crash while the local store lock is held. Publication claims coordinate
+cooperative writers; they are not a portable atomic no-replace primitive
+against adversarial directory races or a distributed-filesystem protocol.
+
+```sh
+node scripts/mcp-real-model-pilot-failure-export.mjs \
+  /tmp/timeline-real-model-state \
+  /tmp/timeline-real-model-failed-attempt
+
+node scripts/mcp-real-model-pilot-failure-verify.mjs \
+  /tmp/timeline-real-model-failed-attempt
+```
+
+The portable receipt includes the mixed v1-prefix/v2-terminal ledger, redacted
+request, runtime and policy bindings, MCP state, and raw-stream lengths and
+digests. It omits raw stdout and stderr. The verifier therefore proves the
+receipt structure, trajectory, and commitments, but does not replay parse
+failures from undisclosed bytes. Full byte-level diagnosis requires the private
+state directory.
 
 `resume` exports the artifact and starts a third process. The credential-free
 verifier performs no network requests. It reconstructs both complete model
@@ -130,11 +200,11 @@ preview/admit equality and MCP append prefixes, validates every admission
 record in the exported v0alpha2 audit envelope, reproduces every conclusion,
 and verifies every proof receipt. It also validates the recorded runtime
 manifest and reports whether the verifier's local runtime is an exact match.
-Artifact publication uses an exclusive attempt-bound claim and an atomically
-installed staging tree. If the process exits after installation but before the
-parent directory is synchronized, a later `resume` accepts the existing output
-only after the credential-free verifier proves that it belongs to the same
-completed attempt.
+Artifact publication uses an exclusive attempt-bound claim and installs a
+staging tree for cooperative single-host writers. If the process exits after
+installation but before the parent directory is synchronized, a later `resume`
+accepts the existing output only after the credential-free verifier proves that
+it belongs to the same completed attempt.
 
 Re-run it directly:
 

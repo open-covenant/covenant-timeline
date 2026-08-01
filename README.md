@@ -211,17 +211,17 @@ evidence, portable run, queries, conclusions, environment, and an exact call
 transcript containing the admission records and audit digests, then verifies
 the artifact in a separate offline process.
 
-[One retained maintainer-operated run](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
-applied that path to staged public release evidence with GPT-5.6 Sol. The
-artifact records two provider reservations, separate host and MCP processes,
-four admission records, and three verified receipts. The correction changed the
-readiness-minus-publication result from a provisional 513,698 ms to 360,698 ms
-while the original result remained reproducible at its historical record cut.
-A credential-free verifier reproduced the artifact and matched the recorded
-runtime exactly.
+[A retained real-model pilot](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+applied that path to staged public release evidence. Across separate host and
+MCP processes, it preserved the original 513,698 ms result at its historical
+record cut, admitted a correction, and verified the corrected 360,698 ms result
+without provider credentials.
 
-The run is a historical staged replay, not an independent deployment, a live
-observation of delayed evidence, or evidence of a model-accuracy advantage.
+This is one maintainer-operated staged replay, not evidence of independent
+adoption, live delayed-evidence handling, model accuracy, or repeatability. A
+later replication failed during correction. The
+[pilot record](./docs/real-model-pilot.md) documents both attempts, their
+verification limits, and the current failed-attempt retention contract.
 
 ## Use the temporal API
 

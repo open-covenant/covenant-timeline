@@ -101,10 +101,11 @@
 
 #### Added
 
-- Add the local stdio server with restart-safe persistence, correction replay,
-  read-only model proposal previews, explicit operator admission, and verified
-  temporal conclusions. The package pins `@covenant-org/timeline` alpha.3 and
-  validates that registry dependency in an isolated release-candidate install.
+- Add the local stdio server with persistent local storage, clean-process
+  restart recovery, correction replay, read-only model proposal previews,
+  explicit operator admission, and verified temporal conclusions. The package
+  pins `@covenant-org/timeline` alpha.3 and validates that registry dependency in
+  an isolated release-candidate install.
 - Add seven bounded temporal-state tools, portable run and admission-audit
   resources, explicit knowledge cuts, optimistic concurrency, canonical
   append-only persistence, restart recovery, and a separate reproducible
@@ -114,8 +115,16 @@
   and tool transcript, and verifies historical and corrected conclusions in a
   separate offline process.
 - Add a formal two-phase real-model pilot with at-most-once provider
-  reservations, crash-recoverable phase bundles, exact runtime binding,
-  credential-free verification, and atomic artifact publication.
+  reservations, resume-capable phase bundles for controlled interruption and
+  clean process restarts, exact runtime binding, credential-free verification,
+  and cooperative claim-based artifact publication.
+- Retain bounded adapter stdout and stderr before parsing, classify failures
+  under a closed taxonomy, bind phase decisions and recovery observations into
+  mixed-version terminal ledgers, and export credential-safe failed-attempt
+  receipts whose raw streams remain committed but undisclosed.
+- Fence pre-admission recovery with an MCP-state compare-and-swap so recovery
+  and candidate admission cannot both win. Failed attempts cannot produce a
+  successful artifact or invoke the provider again.
 
 #### Changed
 
@@ -124,9 +133,12 @@
   every persisted event to an auditable authority, policy, and writer identity.
 - Load MCP and Timeline runtime version identities from their installed package
   manifests so admission provenance cannot drift from shipped package metadata.
-- Retain the first maintainer-operated composed pilot as a public prerelease
+- Retain published successful attempt 1 as a maintainer-operated composed pilot
   artifact with two provider reservations, four admission records, a preserved
   historical cut, and three verified receipts.
+- Record separately that a later maintainer replication terminated during
+  correction. Its v1 terminal entry did not retain the rejected adapter output,
+  so it is not a successful artifact or evidence of repeatability.
 - Describe MCP input semantics in tool discovery, cap each catalog page at
   eight runs, bind cursors to a catalog generation, cap reference-store
   configuration at its advertised ceilings, and make the source checkout a

@@ -29,6 +29,8 @@ const textExtensions = new Set([
   ".yaml",
   ".yml",
 ]);
+const canonicalMailmap =
+  "Mizuki <kamiyo-ai@users.noreply.github.com> <covenant@users.noreply.github.com>\n";
 
 const failures = [];
 const generatedSegments = new Set([
@@ -47,6 +49,13 @@ for (const file of files) {
     file.endsWith(".tsbuildinfo")
   ) {
     failures.push(`${file}: generated artifact must not be tracked`);
+    continue;
+  }
+
+  if (file === ".mailmap") {
+    if (readFileSync(file, "utf8") !== canonicalMailmap) {
+      failures.push(`${file}: maintainer identity mapping is not canonical`);
+    }
     continue;
   }
 

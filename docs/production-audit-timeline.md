@@ -244,8 +244,7 @@ published lower-level result does not establish a general model benefit.
     affect the independently failed assertion, state, or answer thresholds.
 - `pnpm audit` and `pnpm audit --prod` reported no known findings on
   2026-07-30. The MCP integration uses the split Model Context Protocol v2
-  packages at exact `2.0.0-beta.5` versions; beta API stability remains an
-  explicit upgrade risk.
+  client and server packages at exact stable `2.0.0` versions.
 
 ## Critical Issues (P0 - Block Release)
 
@@ -375,10 +374,10 @@ published lower-level result does not establish a general model benefit.
       and require `npm` environment reviewers. This is preferred supply-chain
       hardening for beta and stable releases; the short-lived token path remains
       acceptable for alpha releases.
-- [ ] **Stabilize the MCP SDK dependency.** The server pins the split v2 SDK
-      exactly and its current dependency graph audits cleanly, but the selected
-      SDK release is still a beta. Re-evaluate the pin when a compatible stable
-      v2 release is available.
+- [x] **Stabilize the MCP SDK dependency.** The server and test client pin the
+      split v2 SDK at stable `2.0.0`. The MCP unit, stdio, integration,
+      release-candidate, and dependency-audit paths pass against that exact
+      graph.
 
 ## Low Priority (P3 - Technical Debt)
 

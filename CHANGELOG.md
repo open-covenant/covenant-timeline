@@ -52,6 +52,8 @@
 
 #### Changed
 
+- Upgrade the MCP client and server SDK from the v2 beta to the stable 2.0.0
+  release.
 - Preserve the first deployment-shaped proposal-boundary attempt as a public
   `kill` result after it reached 0.7692 assertion F1 and 76/108 exact projected
   states.
@@ -92,8 +94,8 @@
 
 #### Security
 
-- Keep the maintainer mailmap on the neutral Covenant alias and fail repository
-  verification if that canonical mapping changes.
+- Keep the maintainer mailmap on Covenant's public `mizuki0x` identity and fail
+  repository verification if that canonical mapping changes.
 - Stop strict JSON diagnostics at the first parse issue to prevent adversarial
   error amplification.
 - Distinguish local-model output-token exhaustion from other provider failures

@@ -43,9 +43,9 @@ equivalence, not model extraction quality.
 
 The
 [model-proposal boundary benchmark](./benchmarks/model-proposal-boundary/v2/README.md)
-runs the production-shaped proposal interface as a rolling evaluation,
-preserves every failure, and independently scores extraction, state, query,
-answer, and proof outcomes. Its checked oracle proves benchmark
+runs the production-shaped proposal interface as a rolling evaluation, retains
+every handled benchmark-observation failure, and independently scores
+extraction, state, query, answer, and proof outcomes. Its checked oracle proves benchmark
 representability; it is not a model result.
 
 ## Evidence gates
@@ -109,16 +109,25 @@ not authenticate evidence, operators, or policy bytes; deployments must isolate
 the operator surface and enforce those controls externally. The server does not
 provide semantic memory search, civil-time normalization, or remote hosting.
 
-[The first maintainer-operated real-model attempt](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+[Published successful attempt 1](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
 is retained publicly. It crossed separate host and MCP processes, admitted an
 initial proposal and a staged correction under an exact policy digest,
 preserved the historical result, and verified three receipts without provider
-credentials. This closes the composed source-workflow gate. It does not count
-as independent operation or live delayed-evidence observation.
+credentials. This closes the one-artifact composition gate. It does not count
+as independent operation, live delayed-evidence observation, or evidence of
+repeatability.
 
-Registry publication remains open for the alpha.1 MCP release candidate. It is
-a distribution milestone; it does not block source pilots, model evaluation,
-or independent implementation work.
+A later maintainer replication terminated during correction after the provider
+invocation and was not retried. Its v1 terminal record did not retain the
+rejected adapter output. Unreleased source implements and tests bounded raw
+adapter-stream retention, closed failure classifications, phase-decision
+binding, compare-and-swap recovery fencing, and redacted portable receipts. No
+public formal failure has exercised that contract, and no later contract can
+retroactively repair the earlier state.
+
+Registry publication remains open for the alpha.1 MCP release candidate. It
+does not block source pilots, model evaluation, or independent implementation
+work, but registry installation and verification remain launch-post gates.
 
 ### 3. Independent temporal pilot
 
@@ -165,6 +174,8 @@ will not be retuned or reinterpreted.
 
 Follow-on work is driven by observed needs:
 
+- the next failed formal attempt must exercise and publish the v2 failure
+  receipt without retry;
 - Covenant and adopter integrations determine kernel ergonomics;
 - integration friction determines MCP ergonomics and storage limits;
 - pilot evidence determines calendar, civil-time, and operational features;

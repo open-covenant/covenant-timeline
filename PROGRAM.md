@@ -51,13 +51,22 @@ automatic admission of free-form model output. The
 [complete v2 result bundle](https://github.com/open-covenant/covenant-timeline/releases/tag/model-proposal-v2-attempt-1-2026-08-01)
 is public.
 
-[The first composed real-model pilot](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+[Published successful attempt 1](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
 then exercised the source-built MCP path across separate host and MCP processes.
-It retained two model-call reservations, four explicit admission records, the
+It retained two provider reservations, four explicit admission records, the
 historical and corrected conclusions, and three receipts that reproduced in a
 credential-free verifier. The run stages public historical evidence and is
-maintainer-operated; it is not independent adoption or a live delayed-evidence
-observation.
+maintainer-operated; model execution is maintainer-attested. It is not
+independent adoption, a live delayed-evidence observation, or evidence of
+repeatability.
+
+A later maintainer replication terminated during correction after the provider
+invocation and was not retried. Its v1 terminal entry did not retain the rejected
+adapter output, so the failure reason is not independently auditable from that
+state. Future failure retention cannot retroactively repair the missing
+evidence. Unreleased source implements and tests bounded adapter-output
+retention, a closed failure classification, recovery-state binding, and a
+redacted portable receipt. No public formal failure has exercised that contract.
 
 ## Product boundary
 
@@ -82,6 +91,8 @@ is an intended host integration, not a required service.
 
 ## Current priorities
 
+- exercise the v2 failure-evidence path on the next failed formal attempt,
+  without retry;
 - publish and independently verify the exact core and MCP package artifacts;
 - support an external operator running Timeline in its own workflow;
 - support a separately maintained implementation through the conformance

@@ -31,7 +31,7 @@ import {
   completeAttemptPhase,
   completedAttemptLedger,
   createAttemptLedger,
-  failAttemptPhase,
+  failAttemptPhaseV2,
   loadAttemptLedger,
 } from "./formal-attempt-ledger.mjs";
 import {
@@ -54,11 +54,44 @@ import {
   invokeAdapter,
   loadModelConfig,
   loadPilotInput,
+  parseAdapterExecution,
   redactedModelCall,
   validateMcpWriterTrajectory,
   validateProposalSemantics,
   validateProviderProposal,
 } from "./mcp-real-model-pilot-lib.mjs";
+import {
+  createPhaseFailureDocumentV2,
+  createProposalReadyDocumentV2,
+  createRecoveryObservationDocumentV2,
+  expectedRecoveryFailureV2,
+  phaseFailureRecordV2,
+  readAdapterExecutionBundleV2,
+  readPhaseFailureBundleV2,
+  readProposalReadyBundleV2,
+  readRecoveryObservationBundleV2,
+  recoveryDispositionV2,
+  recoveryFenceDraftV2,
+  terminalPhaseFailureV2,
+  writeAdapterExecutionBundleV2,
+  writePhaseFailureBundleV2,
+  writeProposalReadyBundleV2,
+  writeRecoveryObservationBundleV2,
+} from "./mcp-real-model-pilot-failure.mjs";
+import {
+  assertPhaseDecisionBindingV2,
+  claimPhaseDecisionV2,
+  createPhaseDecisionV2,
+  readPhaseDecisionV2,
+} from "./mcp-real-model-pilot-phase-decision.mjs";
+import {
+  createAdapterExecutionDocument,
+  replayLocalFailure,
+  validateAdapterCaptureBinding,
+  validateProposalReadyBinding,
+  validateRecoveredFailure,
+  verifyProposalPreview,
+} from "./mcp-real-model-pilot-recovery.mjs";
 
 const DECLARATIONS = [
   {
@@ -110,6 +143,10 @@ export async function runStart(options) {
   let providerClaimed = false;
   let phaseCompleted = false;
   let requestDigest;
+  let adapterBundle;
+  let proposalReadyBundle;
+  let failureContext;
+  let failureStage = "adapter-execution";
   const session = await connectServer(join(state, "mcp"), "initial", runtime);
   try {
     const created = await session.call("timeline_create_run", {
@@ -130,6 +167,11 @@ export async function runStart(options) {
       input.contract.id,
       input.timeline,
     );
+    const baseAudit = await readAudit(
+      session.client,
+      input.contract.id,
+      input.timeline,
+    );
     const scope = createProposalScope({ phase: "initial", input, run });
     const { request, outputSchema } = createAdapterRequest({
       input,
@@ -146,26 +188,106 @@ export async function runStart(options) {
       baseRunDigest: runDigest,
     });
     providerClaimed = true;
-    const adapter = invokeAdapter(
+    failureContext = {
+      phase: "initial",
+      state,
+      input,
+      binding,
+      runtime: runtime.identity,
+      admissionPolicy: policy.document,
+      invocation,
+      mcpInvocation: session.invocation,
+      request,
+      scope,
+      baseRun: run,
+      baseAudit,
+      session,
+      options,
+    };
+    const execution = invokeAdapter(
       options.adapter.command,
       options.adapter.args,
       request,
       input.timeline,
     );
+    adapterBundle = await writeAdapterExecutionBundle(
+      state,
+      createAdapterExecutionDocument({ ...failureContext, execution }),
+      input.timeline,
+      options,
+    );
+    await pauseForTest(options, "after-initial-adapter-capture");
+    failureStage = "adapter-output";
+    const adapter = parseAdapterExecution(execution, input.timeline);
+    failureStage = "proposal-schema";
     const { proposal, usage } = validateProviderProposal(
       adapter.response,
       outputSchema,
     );
-    const { preview, admit } = await previewAndAdmitProposal({
+    failureStage = "proposal-semantics";
+    validateProposalSemantics("initial", proposal, input.pilot.expected);
+    failureStage = "proposal-preview";
+    const previewed = await previewProposal({
       session,
-      phase: "initial",
       input,
       scope,
       run,
       runDigest,
       proposal,
-      policy,
     });
+    await pauseForTest(options, "after-initial-proposal-preview");
+    injectFailure(options, "after-initial-proposal-preview");
+    proposalReadyBundle = await writeProposalReadyBundle(
+      state,
+      createProposalReadyDocumentV2({
+        phase: "initial",
+        adapterExecutionDigest: adapterBundle.digest,
+        requestDigest,
+        baseRun: run,
+        proposal,
+        usage,
+        proposalInput: previewed.proposalInput,
+        preview: previewed.preview,
+        admissionPolicyDigest: policy.digest,
+        timeline: input.timeline,
+      }),
+      input.timeline,
+      options,
+    );
+    failureStage = "proposal-admission";
+    const phaseDecision = await claimPhaseDecision({
+      state,
+      phase: "initial",
+      decision: "admission-authorized",
+      adapterBundle,
+      proposalReadyBundle,
+      invocation,
+      requestDigest,
+      input,
+      options,
+    });
+    if (phaseDecision.document.decision !== "admission-authorized") {
+      throw recoverableDurabilityError(
+        new Error("initial recovery already owns the terminal outcome"),
+      );
+    }
+    await pauseForTest(options, "before-initial-admission");
+    injectFailure(options, "before-initial-admission");
+    const admit = await admitProposal({
+      session,
+      input,
+      policy,
+      preview: previewed.preview,
+      proposalInput: previewed.proposalInput,
+    });
+    injectResponseLoss(options, "after-initial-admission-response-lost");
+    injectFailure(options, "after-initial-admission");
+    const preview = previewed.preview;
+    failureStage = "post-admission-verification";
+    injectPostAdmissionVerificationFailure(
+      options,
+      "during-initial-post-admission-verification",
+    );
     if (admit.events.length !== 2) {
       throw new Error("initial model proposal did not append two assertions");
     }
@@ -242,12 +364,21 @@ export async function runStart(options) {
       recordedThrough: admit.query.recordedThrough,
     };
   } catch (error) {
-    if (providerClaimed && !phaseCompleted && !isInjectedCrash(error)) {
-      await failAttemptPhase(ledger, {
-        phase: "initial",
-        invocation,
-        requestDigest,
-      }).catch(() => undefined);
+    if (
+      providerClaimed &&
+      !phaseCompleted &&
+      !isInjectedCrash(error) &&
+      adapterBundle &&
+      failureContext
+    ) {
+      throw await recordPhaseFailure({
+        ...failureContext,
+        ledger,
+        adapterBundle,
+        proposalReadyBundle,
+        error,
+        failureStage,
+      });
     }
     throw error;
   } finally {
@@ -273,6 +404,25 @@ export async function runResume(options) {
   const ledger = await loadAttemptLedger(state, input.timeline, {
     allowFailureInjection: options.allowDirty,
   });
+  const currentRuntime = await phaseRuntime(options, input.timeline);
+  const binding = attemptBinding({
+    input,
+    modelConfig,
+    policy,
+    runtime: currentRuntime,
+  });
+  assertAttemptLedgerBinding(ledger, binding);
+  await recoverFailedPhase({
+    state,
+    phase: "initial",
+    ledger,
+    binding,
+    input,
+    modelConfig,
+    runtime: currentRuntime,
+    policy,
+    options,
+  });
   const initialBundle = await readPhaseResultBundle(
     state,
     "initial",
@@ -286,8 +436,13 @@ export async function runResume(options) {
     input.timeline,
   );
   await assertBootstrapRuntime(options, runtime, input.timeline);
-  const binding = attemptBinding({ input, modelConfig, policy, runtime });
-  assertAttemptLedgerBinding(ledger, binding);
+  if (
+    binding.runtimeDigest !== runtime.digest ||
+    input.timeline.canonicalJson(currentRuntime.identity) !==
+      input.timeline.canonicalJson(runtime.identity)
+  ) {
+    throw new Error("retained initial runtime does not match this execution");
+  }
   const initialStarted = ledger.document.entries[1];
   let initialCompleted = ledger.document.entries[2];
   validatePhaseResultBundle({
@@ -326,6 +481,18 @@ export async function runResume(options) {
     throw new Error("initial phase result is not durably completed");
   }
 
+  await recoverFailedPhase({
+    state,
+    phase: "correction",
+    ledger,
+    binding,
+    input,
+    modelConfig,
+    runtime,
+    policy,
+    initialBundle,
+    options,
+  });
   if (ledger.document.entries.length !== 3) {
     const correctionBundle = await completedCorrectionBundle({
       state,
@@ -353,12 +520,15 @@ export async function runResume(options) {
     throw new Error("resume must use a separate host process");
   }
   const initialCall = initialBundle.document.modelCall;
-  const initialConclusion = initialBundle.document.conclusion;
   const invocation = invocationRecord("correction");
   let providerClaimed = false;
   let phaseCompleted = false;
   let requestDigest;
   let correctionBundle;
+  let adapterBundle;
+  let proposalReadyBundle;
+  let failureContext;
+  let failureStage = "adapter-execution";
   const session = await connectServer(
     join(state, "mcp"),
     "correction",
@@ -432,26 +602,106 @@ export async function runResume(options) {
       baseRunDigest: recovered.runDigest,
     });
     providerClaimed = true;
-    const adapter = invokeAdapter(
+    failureContext = {
+      phase: "correction",
+      state,
+      input,
+      binding,
+      runtime: runtime.identity,
+      admissionPolicy: policy.document,
+      invocation,
+      mcpInvocation: session.invocation,
+      request,
+      scope,
+      baseRun: run,
+      baseAudit: recoveredAudit,
+      session,
+      options,
+    };
+    const execution = invokeAdapter(
       options.adapter.command,
       options.adapter.args,
       request,
       input.timeline,
     );
+    adapterBundle = await writeAdapterExecutionBundle(
+      state,
+      createAdapterExecutionDocument({ ...failureContext, execution }),
+      input.timeline,
+      options,
+    );
+    await pauseForTest(options, "after-correction-adapter-capture");
+    failureStage = "adapter-output";
+    const adapter = parseAdapterExecution(execution, input.timeline);
+    failureStage = "proposal-schema";
     const { proposal, usage } = validateProviderProposal(
       adapter.response,
       outputSchema,
     );
-    const { preview, admit } = await previewAndAdmitProposal({
+    failureStage = "proposal-semantics";
+    validateProposalSemantics("correction", proposal, input.pilot.expected);
+    failureStage = "proposal-preview";
+    const previewed = await previewProposal({
       session,
-      phase: "correction",
       input,
       scope,
       run,
       runDigest: recovered.runDigest,
       proposal,
-      policy,
     });
+    await pauseForTest(options, "after-correction-proposal-preview");
+    injectFailure(options, "after-correction-proposal-preview");
+    proposalReadyBundle = await writeProposalReadyBundle(
+      state,
+      createProposalReadyDocumentV2({
+        phase: "correction",
+        adapterExecutionDigest: adapterBundle.digest,
+        requestDigest,
+        baseRun: run,
+        proposal,
+        usage,
+        proposalInput: previewed.proposalInput,
+        preview: previewed.preview,
+        admissionPolicyDigest: policy.digest,
+        timeline: input.timeline,
+      }),
+      input.timeline,
+      options,
+    );
+    failureStage = "proposal-admission";
+    const phaseDecision = await claimPhaseDecision({
+      state,
+      phase: "correction",
+      decision: "admission-authorized",
+      adapterBundle,
+      proposalReadyBundle,
+      invocation,
+      requestDigest,
+      input,
+      options,
+    });
+    if (phaseDecision.document.decision !== "admission-authorized") {
+      throw recoverableDurabilityError(
+        new Error("correction recovery already owns the terminal outcome"),
+      );
+    }
+    await pauseForTest(options, "before-correction-admission");
+    injectFailure(options, "before-correction-admission");
+    const admit = await admitProposal({
+      session,
+      input,
+      policy,
+      preview: previewed.preview,
+      proposalInput: previewed.proposalInput,
+    });
+    injectResponseLoss(options, "after-correction-admission-response-lost");
+    injectFailure(options, "after-correction-admission");
+    const preview = previewed.preview;
+    failureStage = "post-admission-verification";
+    injectPostAdmissionVerificationFailure(
+      options,
+      "during-correction-post-admission-verification",
+    );
     if (admit.events.length !== 1) {
       throw new Error("correction model proposal did not append one assertion");
     }
@@ -538,12 +788,21 @@ export async function runResume(options) {
     phaseCompleted = true;
     injectFailure(options, "after-correction-phase-completion");
   } catch (error) {
-    if (providerClaimed && !phaseCompleted && !isInjectedCrash(error)) {
-      await failAttemptPhase(ledger, {
-        phase: "correction",
-        invocation,
-        requestDigest,
-      }).catch(() => undefined);
+    if (
+      providerClaimed &&
+      !phaseCompleted &&
+      !isInjectedCrash(error) &&
+      adapterBundle &&
+      failureContext
+    ) {
+      throw await recordPhaseFailure({
+        ...failureContext,
+        ledger,
+        adapterBundle,
+        proposalReadyBundle,
+        error,
+        failureStage,
+      });
     }
     throw error;
   } finally {
@@ -560,6 +819,834 @@ export async function runResume(options) {
     correctionBundle,
     options,
   });
+}
+
+async function recoverFailedPhase({
+  state,
+  phase,
+  ledger,
+  binding,
+  input,
+  modelConfig,
+  runtime,
+  policy,
+  initialBundle,
+  options,
+}) {
+  const startedIndex = phase === "initial" ? 1 : 3;
+  const outcomeIndex = startedIndex + 1;
+  const started = ledger.document.entries[startedIndex];
+  if (
+    started?.kind !== "provider-invocation-reserved" ||
+    started.phase !== phase
+  ) {
+    return;
+  }
+  const outcome = ledger.document.entries[outcomeIndex];
+  const failurePath = join(state, `${phase}-failure.json`);
+  const hasFailureBundle = await pathExists(failurePath);
+  const hasResultBundle = await pathExists(join(state, `${phase}-result.json`));
+  if (outcome?.kind === "phase-completed") {
+    if (hasFailureBundle) {
+      throw new Error(`${phase} phase has conflicting terminal outcomes`);
+    }
+    return;
+  }
+  if (hasResultBundle) {
+    if (hasFailureBundle || outcome?.kind === "phase-failed") {
+      throw new Error(`${phase} phase has conflicting terminal outcomes`);
+    }
+    return;
+  }
+  const capturePath = join(state, `${phase}-adapter-execution.json`);
+  const hasAdapterCapture = await pathExists(capturePath);
+  const readyPath = join(state, `${phase}-proposal-ready.json`);
+  const hasProposalReady = await pathExists(readyPath);
+  if (
+    !hasFailureBundle &&
+    !hasAdapterCapture &&
+    outcome?.kind !== "phase-failed"
+  ) {
+    return;
+  }
+  if (!hasAdapterCapture) {
+    throw new Error(`${phase} failed phase has no v2 adapter evidence`);
+  }
+
+  const adapterBundle = await readAdapterExecutionBundle(
+    state,
+    phase,
+    input.timeline,
+    { sync: true },
+  );
+  const captureBinding = validateAdapterCaptureBinding({
+    adapterBundle,
+    started,
+    binding,
+    input,
+    modelConfig,
+    runtime,
+    policy,
+  });
+  const retainedFailureBundle = hasFailureBundle
+    ? await readPhaseFailureBundle(state, phase, input.timeline, { sync: true })
+    : null;
+  const shouldLoadProposalReady = retainedFailureBundle
+    ? retainedFailureBundle.document.proposalReadyDigest !== null
+    : hasProposalReady;
+  let proposalReadyBundle = shouldLoadProposalReady
+    ? await readProposalReadyBundle(state, phase, input.timeline, {
+        sync: true,
+      })
+    : null;
+  if (proposalReadyBundle) {
+    validateProposalReadyBinding({
+      proposalReadyBundle,
+      adapterBundle,
+      captureBinding,
+      input,
+      policy,
+    });
+  }
+
+  let phaseDecision = null;
+  if (proposalReadyBundle) {
+    const decisionPath = join(state, `${phase}-decision.json`);
+    phaseDecision = (await pathExists(decisionPath))
+      ? await readPhaseDecisionV2({
+          state,
+          phase,
+          timeline: input.timeline,
+          sync: true,
+        })
+      : null;
+    if (!phaseDecision && !hasFailureBundle) {
+      phaseDecision = await claimPhaseDecision({
+        state,
+        phase,
+        decision: "recovery-terminal",
+        adapterBundle,
+        proposalReadyBundle,
+        invocation: started.invocation,
+        requestDigest: started.requestDigest,
+        input,
+        options,
+      });
+    }
+    if (phaseDecision) {
+      validatePhaseDecisionBinding({
+        phaseDecision,
+        adapterBundle,
+        proposalReadyBundle,
+        started,
+        timeline: input.timeline,
+      });
+    }
+  }
+
+  if (!hasFailureBundle) {
+    const replayedFailure = proposalReadyBundle
+      ? null
+      : replayLocalFailure({
+          adapter: adapterBundle.document,
+          input,
+          outputSchema: captureBinding.outputSchema,
+        });
+    if (!proposalReadyBundle && replayedFailure === null) {
+      const beforePreview = await readRecoveryState({
+        state,
+        phase,
+        runtime,
+        input,
+        adapterBundle,
+        proposalReadyBundle: null,
+        options,
+      });
+      if (beforePreview.document.disposition === "exact-base") {
+        await pauseForTest(options, `before-${phase}-proposal-reconstruction`);
+        if (await pathExists(readyPath)) {
+          proposalReadyBundle = await readProposalReadyBundle(
+            state,
+            phase,
+            input.timeline,
+            { sync: true },
+          );
+        } else {
+          let document;
+          try {
+            document = await reconstructProposalReadyDocument({
+              state,
+              phase,
+              runtime,
+              input,
+              policy,
+              adapterBundle,
+              captureBinding,
+              options,
+            });
+          } catch (error) {
+            if (isInjectedCrash(error)) throw error;
+            throw recoverableDurabilityError(error);
+          }
+          await pauseForTest(options, `after-${phase}-proposal-reconstruction`);
+          proposalReadyBundle = await writeProposalReadyBundle(
+            state,
+            document,
+            input.timeline,
+            options,
+          );
+        }
+        validateProposalReadyBinding({
+          proposalReadyBundle,
+          adapterBundle,
+          captureBinding,
+          input,
+          policy,
+        });
+        phaseDecision = await claimPhaseDecision({
+          state,
+          phase,
+          decision: "recovery-terminal",
+          adapterBundle,
+          proposalReadyBundle,
+          invocation: started.invocation,
+          requestDigest: started.requestDigest,
+          input,
+          options,
+        });
+        validatePhaseDecisionBinding({
+          phaseDecision,
+          adapterBundle,
+          proposalReadyBundle,
+          started,
+          timeline: input.timeline,
+        });
+      }
+    }
+    let observed = await readRecoveryState({
+      state,
+      phase,
+      runtime,
+      input,
+      adapterBundle,
+      proposalReadyBundle,
+      options,
+    });
+    if (
+      observed.document.disposition === "exact-base" &&
+      (proposalReadyBundle || replayedFailure === null)
+    ) {
+      observed = await fenceRecoveryState({
+        state,
+        phase,
+        runtime,
+        input,
+        policy,
+        adapterBundle,
+        proposalReadyBundle,
+        options,
+      });
+    }
+    if (
+      proposalReadyBundle === null &&
+      replayedFailure === null &&
+      (await pathExists(readyPath))
+    ) {
+      const lateReady = await readProposalReadyBundle(
+        state,
+        phase,
+        input.timeline,
+        { sync: true },
+      );
+      validateProposalReadyBinding({
+        proposalReadyBundle: lateReady,
+        adapterBundle,
+        captureBinding,
+        input,
+        policy,
+      });
+      const lateDisposition = recoveryDispositionV2({
+        adapter: adapterBundle.document,
+        ready: lateReady.document,
+        mcpRun: observed.document.mcpRun,
+        mcpAudit: observed.document.mcpAudit,
+        timeline: input.timeline,
+      });
+      const lateDecisionPath = join(state, `${phase}-decision.json`);
+      let lateDecision = (await pathExists(lateDecisionPath))
+        ? await readPhaseDecisionV2({
+            state,
+            phase,
+            timeline: input.timeline,
+            sync: true,
+          })
+        : null;
+      if (!lateDecision) {
+        if (lateDisposition === "exact-admission") {
+          throw new Error(
+            `${phase} admitted state has no durable admission decision`,
+          );
+        }
+        lateDecision = await claimPhaseDecision({
+          state,
+          phase,
+          decision: "recovery-terminal",
+          adapterBundle,
+          proposalReadyBundle: lateReady,
+          invocation: started.invocation,
+          requestDigest: started.requestDigest,
+          input,
+          options,
+        });
+      }
+      validatePhaseDecisionBinding({
+        phaseDecision: lateDecision,
+        adapterBundle,
+        proposalReadyBundle: lateReady,
+        started,
+        timeline: input.timeline,
+      });
+      proposalReadyBundle = lateReady;
+      phaseDecision = lateDecision;
+      observed = {
+        ...observed,
+        document: createRecoveryObservationDocumentV2({
+          phase,
+          adapterExecutionDigest: adapterBundle.digest,
+          proposalReadyDigest: lateReady.digest,
+          invocation: observed.document.invocation,
+          disposition: lateDisposition,
+          mcpRun: observed.document.mcpRun,
+          mcpAudit: observed.document.mcpAudit,
+          timeline: input.timeline,
+        }),
+      };
+    }
+    const observation = await persistRecoveryState({
+      state,
+      observed,
+      timeline: input.timeline,
+      options,
+    });
+    if (observation.document.disposition === "exact-admission") {
+      if (phaseDecision?.document.decision !== "admission-authorized") {
+        throw new Error(
+          `${phase} admitted state conflicts with terminal recovery ownership`,
+        );
+      }
+      try {
+        await recoverAdmittedPhase({
+          state,
+          phase,
+          ledger,
+          started,
+          binding,
+          input,
+          modelConfig,
+          runtime,
+          policy,
+          initialBundle,
+          adapterBundle,
+          proposalReadyBundle,
+          captureBinding,
+          observation,
+          options,
+        });
+        return;
+      } catch (error) {
+        if (!isPostAdmissionVerificationFailure(error)) throw error;
+        const failure = phaseFailureRecordV2(
+          error,
+          "post-admission-verification",
+        );
+        const document = createPhaseFailureDocumentV2({
+          phase,
+          adapterExecutionDigest: adapterBundle.digest,
+          proposalReadyDigest: proposalReadyBundle.digest,
+          phaseDecisionDigest: phaseDecision.digest,
+          recoveryObservationDigest: observation.digest,
+          failure,
+          mcpObservation: "recovery-observed",
+          observerInvocation: observation.document.invocation,
+          mcpRun: observation.document.mcpRun,
+          mcpAudit: observation.document.mcpAudit,
+          timeline: input.timeline,
+        });
+        await installFailureBundle({
+          state,
+          document,
+          timeline: input.timeline,
+          options,
+        });
+      }
+    }
+    if (!(await pathExists(failurePath))) {
+      const failure = expectedRecoveryFailureV2({
+        observation: observation.document,
+        hasProposalReady: proposalReadyBundle !== null,
+        replayedFailure,
+      });
+      const document = createPhaseFailureDocumentV2({
+        phase,
+        adapterExecutionDigest: adapterBundle.digest,
+        proposalReadyDigest: proposalReadyBundle?.digest ?? null,
+        phaseDecisionDigest: phaseDecision?.digest ?? null,
+        recoveryObservationDigest: observation.digest,
+        failure,
+        mcpObservation: "recovery-observed",
+        observerInvocation: observation.document.invocation,
+        mcpRun: observation.document.mcpRun,
+        mcpAudit: observation.document.mcpAudit,
+        timeline: input.timeline,
+      });
+      await installFailureBundle({
+        state,
+        document,
+        timeline: input.timeline,
+        options,
+      });
+    }
+  }
+
+  const failureBundle =
+    retainedFailureBundle ??
+    (await readPhaseFailureBundle(state, phase, input.timeline, {
+      sync: true,
+    }));
+  const recoveryObservationBundle = failureBundle.document
+    .recoveryObservationDigest
+    ? await readRecoveryObservationBundle(state, phase, input.timeline, {
+        sync: true,
+      })
+    : null;
+  await syncDirectory(state);
+  validateRecoveredFailure({
+    adapterBundle,
+    failureBundle,
+    started,
+    binding,
+    input,
+    modelConfig,
+    runtime,
+    policy,
+    proposalReadyBundle,
+    phaseDecisionBundle: phaseDecision,
+    recoveryObservationBundle,
+  });
+
+  let terminal = outcome;
+  if (!terminal) {
+    try {
+      terminal = await failAttemptPhaseV2(ledger, {
+        phase,
+        invocation: adapterBundle.document.invocation,
+        requestDigest: started.requestDigest,
+        adapterExecutionDigest: adapterBundle.digest,
+        failureBundleDigest: failureBundle.digest,
+        failureStage: failureBundle.document.failure.stage,
+        failureCode: failureBundle.document.failure.code,
+      });
+    } catch (error) {
+      const recovered = await loadAttemptLedger(state, input.timeline, {
+        allowFailureInjection: options.allowDirty,
+      });
+      terminal = recovered.document.entries[outcomeIndex];
+      if (!terminal) throw error;
+    }
+  }
+  if (
+    terminal?.kind !== "phase-failed" ||
+    terminal.phase !== phase ||
+    terminal.requestDigest !== started.requestDigest ||
+    terminal.adapterExecutionDigest !== adapterBundle.digest ||
+    terminal.failureBundleDigest !== failureBundle.digest ||
+    terminal.failureStage !== failureBundle.document.failure.stage ||
+    terminal.failureCode !== failureBundle.document.failure.code
+  ) {
+    throw new Error(`${phase} failed phase ledger binding changed`);
+  }
+  throw terminalPhaseFailureV2(failureBundle.document.failure);
+}
+
+async function reconstructProposalReadyDocument({
+  state,
+  phase,
+  runtime,
+  input,
+  policy,
+  adapterBundle,
+  captureBinding,
+  options,
+}) {
+  const adapter = adapterBundle.document;
+  const parsed = parseAdapterExecution(adapter.execution, input.timeline);
+  const { proposal, usage } = validateProviderProposal(
+    parsed.response,
+    captureBinding.outputSchema,
+  );
+  validateProposalSemantics(phase, proposal, input.pilot.expected);
+  injectProposalReconstructionError(options, phase);
+  const session = await connectServer(
+    join(state, "mcp"),
+    phase,
+    runtime,
+    "model",
+  );
+  try {
+    const previewed = await previewProposal({
+      session,
+      input,
+      scope: captureBinding.scope,
+      run: adapter.baseRun,
+      runDigest: adapter.baseAudit.runDigest,
+      proposal,
+    });
+    return createProposalReadyDocumentV2({
+      phase,
+      adapterExecutionDigest: adapterBundle.digest,
+      requestDigest: adapter.requestDigest,
+      baseRun: adapter.baseRun,
+      proposal,
+      usage,
+      proposalInput: previewed.proposalInput,
+      preview: previewed.preview,
+      admissionPolicyDigest: policy.digest,
+      timeline: input.timeline,
+    });
+  } finally {
+    await session.client.close();
+  }
+}
+
+async function readRecoveryState({
+  state,
+  phase,
+  runtime,
+  input,
+  adapterBundle,
+  proposalReadyBundle,
+}) {
+  const session = await connectServer(
+    join(state, "mcp"),
+    phase,
+    runtime,
+    "model",
+  );
+  try {
+    const [mcpRun, mcpAudit, listed] = await Promise.all([
+      readRun(session.client, input.contract.id, input.timeline),
+      readAudit(session.client, input.contract.id, input.timeline),
+      session.call("timeline_list_runs", {}),
+    ]);
+    const metadata = listed.timelines.find(
+      ({ runId }) => runId === input.contract.id,
+    );
+    if (
+      !metadata ||
+      metadata.runDigest !== input.timeline.contentDigest(mcpRun) ||
+      metadata.auditDigest !== input.timeline.contentDigest(mcpAudit)
+    ) {
+      throw new Error("recovery MCP metadata is inconsistent");
+    }
+    const disposition = recoveryDispositionV2({
+      adapter: adapterBundle.document,
+      ready: proposalReadyBundle?.document ?? null,
+      mcpRun,
+      mcpAudit,
+      timeline: input.timeline,
+    });
+    const document = createRecoveryObservationDocumentV2({
+      phase,
+      adapterExecutionDigest: adapterBundle.digest,
+      proposalReadyDigest: proposalReadyBundle?.digest ?? null,
+      invocation: { ...session.invocation, role: "model" },
+      disposition,
+      mcpRun,
+      mcpAudit,
+      timeline: input.timeline,
+    });
+    return { document, metadata };
+  } finally {
+    await session.client.close();
+  }
+}
+
+async function persistRecoveryState({ state, observed, timeline, options }) {
+  const bundle = await installRecoveryObservation({
+    state,
+    document: observed.document,
+    timeline,
+    options,
+  });
+  return { ...bundle, metadata: observed.metadata };
+}
+
+async function fenceRecoveryState({
+  state,
+  phase,
+  runtime,
+  input,
+  policy,
+  adapterBundle,
+  proposalReadyBundle,
+  options,
+}) {
+  await pauseForTest(options, `before-${phase}-recovery-fence`);
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const session = await connectServer(
+      join(state, "mcp"),
+      phase,
+      runtime,
+      "operator",
+    );
+    try {
+      await session.call("timeline_append_event", {
+        runId: input.contract.id,
+        expectedRunDigest: adapterBundle.document.baseAudit.runDigest,
+        event: recoveryFenceDraftV2(phase),
+        admission: policy.decision,
+      });
+      lastError = null;
+    } catch (error) {
+      lastError = error;
+    } finally {
+      await session.client.close();
+    }
+
+    const observed = await readRecoveryState({
+      state,
+      phase,
+      runtime,
+      input,
+      adapterBundle,
+      proposalReadyBundle,
+      options,
+    });
+    if (observed.document.disposition !== "exact-base") return observed;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+  }
+  throw recoverableDurabilityError(
+    lastError ?? new Error(`${phase} recovery fence did not commit`),
+  );
+}
+
+async function installRecoveryObservation({
+  state,
+  document,
+  timeline,
+  options,
+}) {
+  try {
+    return await writeRecoveryObservationBundle(
+      state,
+      document,
+      timeline,
+      options,
+    );
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await readRecoveryObservationBundle(
+      state,
+      document.phase,
+      timeline,
+      { sync: true },
+    );
+    if (
+      existing.document.adapterExecutionDigest !==
+        document.adapterExecutionDigest ||
+      existing.document.proposalReadyDigest !== document.proposalReadyDigest ||
+      existing.document.disposition !== document.disposition ||
+      timeline.canonicalJson(existing.document.mcpRun) !==
+        timeline.canonicalJson(document.mcpRun) ||
+      timeline.canonicalJson(existing.document.mcpAudit) !==
+        timeline.canonicalJson(document.mcpAudit)
+    ) {
+      throw new Error("recovery observation changed under concurrency");
+    }
+    return existing;
+  }
+}
+
+async function installFailureBundle({ state, document, timeline, options }) {
+  try {
+    return await writePhaseFailureBundle(state, document, timeline, options);
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await readPhaseFailureBundle(
+      state,
+      document.phase,
+      timeline,
+      { sync: true },
+    );
+    if (
+      timeline.canonicalJson(existing.document) !==
+      timeline.canonicalJson(document)
+    ) {
+      throw new Error("phase failure evidence changed under concurrency");
+    }
+    return existing;
+  }
+}
+
+async function recoverAdmittedPhase({
+  state,
+  phase,
+  ledger,
+  started,
+  binding,
+  input,
+  modelConfig,
+  runtime,
+  policy,
+  initialBundle,
+  adapterBundle,
+  proposalReadyBundle,
+  captureBinding,
+  observation,
+  options,
+}) {
+  const adapter = adapterBundle.document;
+  const ready = proposalReadyBundle.document;
+  const parsed = parseAdapterExecution(adapter.execution, input.timeline);
+  const { proposal, usage } = validateProviderProposal(
+    parsed.response,
+    captureBinding.outputSchema,
+  );
+  const admissionRecord = observation.document.mcpAudit.admissions.at(-1);
+  const admit = {
+    ...proposalResultCandidate(ready.preview),
+    admissionStatus: "admitted",
+    timeline: observation.metadata,
+    admissionRecord,
+  };
+  verifyProposalAdmission({ preview: ready.preview, admit, policy, input });
+  const session = await connectServer(
+    join(state, "mcp"),
+    phase,
+    runtime,
+    "model",
+  );
+  try {
+    if (phase === "initial") {
+      injectPostAdmissionVerificationFailure(
+        options,
+        "during-initial-post-admission-verification",
+      );
+      const conclusion = await session.call("timeline_reason", {
+        runId: input.contract.id,
+        query: omitSchema(admit.query),
+      });
+      assertDifference(
+        conclusion.conclusion,
+        input.pilot.expected.initialDifference,
+        "initial",
+      );
+      const modelCall = redactedModelCall({
+        phase,
+        input,
+        modelConfig,
+        request: captureBinding.request,
+        responseText: parsed.responseText,
+        proposal,
+        usage,
+        scope: captureBinding.scope,
+        preview: ready.preview,
+        admit,
+      });
+      const result = await writePhaseResultBundle(
+        state,
+        {
+          schema: "covenant.timeline.real-model-pilot.phase-result.v1",
+          phase,
+          binding,
+          invocation: adapter.invocation,
+          mcpInvocation: adapter.mcpInvocation,
+          runtime: runtime.identity,
+          resultRevision: admit.timeline.revision,
+          resultRunDigest: admit.timeline.runDigest,
+          recordedThrough: admit.query.recordedThrough,
+          modelCall,
+          baseRun: adapter.baseRun,
+          run: observation.document.mcpRun,
+          audit: observation.document.mcpAudit,
+          conclusion,
+        },
+        input.timeline,
+        options,
+      );
+      await completeAttemptPhase(ledger, completionFromBundle(result, started));
+      return;
+    }
+
+    injectPostAdmissionVerificationFailure(
+      options,
+      "during-correction-post-admission-verification",
+    );
+    const historicalQuery = {
+      ...omitSchema(admit.query),
+      id: "query-readiness-minus-publication-before-correction",
+      recordedThrough:
+        initialBundle.document.modelCall.admit.query.recordedThrough,
+    };
+    const [historical, current] = await Promise.all([
+      session.call("timeline_reason", {
+        runId: input.contract.id,
+        query: historicalQuery,
+      }),
+      session.call("timeline_reason", {
+        runId: input.contract.id,
+        query: omitSchema(admit.query),
+      }),
+    ]);
+    assertDifference(
+      historical.conclusion,
+      input.pilot.expected.initialDifference,
+      "historical",
+    );
+    assertDifference(
+      current.conclusion,
+      input.pilot.expected.correctedDifference,
+      "corrected",
+    );
+    const modelCall = redactedModelCall({
+      phase,
+      input,
+      modelConfig,
+      request: captureBinding.request,
+      responseText: parsed.responseText,
+      proposal,
+      usage,
+      scope: captureBinding.scope,
+      preview: ready.preview,
+      admit,
+    });
+    const result = await writePhaseResultBundle(
+      state,
+      {
+        schema: "covenant.timeline.real-model-pilot.phase-result.v1",
+        phase,
+        binding,
+        invocation: adapter.invocation,
+        mcpInvocation: adapter.mcpInvocation,
+        runtime: runtime.identity,
+        resultRevision: admit.timeline.revision,
+        resultRunDigest: admit.timeline.runDigest,
+        recordedThrough: admit.query.recordedThrough,
+        modelCall,
+        baseRun: adapter.baseRun,
+        historical,
+        current,
+        run: observation.document.mcpRun,
+        audit: observation.document.mcpAudit,
+      },
+      input.timeline,
+      options,
+    );
+    await completeAttemptPhase(ledger, completionFromBundle(result, started));
+  } finally {
+    await session.client.close();
+  }
 }
 
 async function completedCorrectionBundle({
@@ -937,14 +2024,32 @@ async function writePhaseResultBundle(state, document, timeline, options) {
   } finally {
     await file.close();
   }
+  let installed = false;
   try {
     await link(temporary, path);
+    installed = true;
     injectFailure(options, `after-${document.phase}-result-install`);
     try {
       await syncDirectory(state);
     } catch (error) {
       throw recoverableDurabilityError(error);
     }
+  } catch (error) {
+    if (installed || error?.code !== "EEXIST") throw error;
+    const existing = await readPhaseResultBundle(
+      state,
+      document.phase,
+      timeline,
+      { sync: true },
+    );
+    if (
+      timeline.canonicalJson(existing.document) !==
+      timeline.canonicalJson(document)
+    ) {
+      throw new Error("phase result changed under concurrency");
+    }
+    await syncDirectory(state);
+    return existing;
   } finally {
     await unlink(temporary).catch((error) => {
       if (error?.code !== "ENOENT") throw recoverableDurabilityError(error);
@@ -956,6 +2061,275 @@ async function writePhaseResultBundle(state, document, timeline, options) {
   return { document, digest: timeline.contentDigest(document) };
 }
 
+async function writeAdapterExecutionBundle(state, document, timeline, options) {
+  return writeAdapterExecutionBundleV2({
+    state,
+    document,
+    timeline,
+    staging: join(state, PHASE_RESULT_STAGING),
+    injectFailure: (point) => injectFailure(options, point),
+    syncDirectory,
+  });
+}
+
+async function readAdapterExecutionBundle(state, phase, timeline, options) {
+  return readAdapterExecutionBundleV2({
+    state,
+    phase,
+    timeline,
+    sync: options?.sync === true,
+  });
+}
+
+async function writeProposalReadyBundle(state, document, timeline, options) {
+  try {
+    return await writeProposalReadyBundleV2({
+      state,
+      document,
+      timeline,
+      staging: join(state, PHASE_RESULT_STAGING),
+      injectFailure: (point) => injectFailure(options, point),
+      syncDirectory,
+    });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await readProposalReadyBundle(
+      state,
+      document.phase,
+      timeline,
+      { sync: true },
+    );
+    if (
+      timeline.canonicalJson(existing.document) !==
+      timeline.canonicalJson(document)
+    ) {
+      throw new Error("proposal-ready receipt changed under concurrency");
+    }
+    return existing;
+  }
+}
+
+async function readProposalReadyBundle(state, phase, timeline, options) {
+  return readProposalReadyBundleV2({
+    state,
+    phase,
+    timeline,
+    sync: options?.sync === true,
+  });
+}
+
+async function claimPhaseDecision({
+  state,
+  phase,
+  decision,
+  adapterBundle,
+  proposalReadyBundle,
+  invocation,
+  requestDigest,
+  input,
+  options,
+}) {
+  const document = createPhaseDecisionV2({
+    phase,
+    decision,
+    adapterExecutionDigest: adapterBundle.digest,
+    proposalReadyDigest: proposalReadyBundle.digest,
+    requestDigest,
+    invocationId: invocation.invocationId,
+    candidateDigest: proposalReadyBundle.document.preview.candidateDigest,
+  });
+  return claimPhaseDecisionV2({
+    state,
+    document,
+    timeline: input.timeline,
+    staging: join(state, PHASE_RESULT_STAGING),
+    injectFailure: (point) => injectFailure(options, point),
+    syncDirectory,
+  });
+}
+
+function validatePhaseDecisionBinding({
+  phaseDecision,
+  adapterBundle,
+  proposalReadyBundle,
+  started,
+  timeline,
+}) {
+  if (phaseDecision.document.phase !== adapterBundle.document.phase) {
+    throw new Error("phase decision does not match the adapter phase");
+  }
+  assertPhaseDecisionBindingV2({
+    decision: phaseDecision.document,
+    adapterExecutionDigest: adapterBundle.digest,
+    proposalReadyDigest: proposalReadyBundle.digest,
+    requestDigest: started.requestDigest,
+    invocationId: started.invocation.invocationId,
+    candidateDigest: proposalReadyBundle.document.preview.candidateDigest,
+    timeline,
+  });
+  return phaseDecision;
+}
+
+async function writeRecoveryObservationBundle(
+  state,
+  document,
+  timeline,
+  options,
+) {
+  return writeRecoveryObservationBundleV2({
+    state,
+    document,
+    timeline,
+    staging: join(state, PHASE_RESULT_STAGING),
+    injectFailure: (point) => injectFailure(options, point),
+    syncDirectory,
+  });
+}
+
+async function readRecoveryObservationBundle(state, phase, timeline, options) {
+  return readRecoveryObservationBundleV2({
+    state,
+    phase,
+    timeline,
+    sync: options?.sync === true,
+  });
+}
+
+async function recordPhaseFailure({
+  phase,
+  state,
+  input,
+  ledger,
+  adapterBundle,
+  proposalReadyBundle,
+  error,
+  failureStage,
+  invocation,
+  session,
+  baseRun,
+  baseAudit,
+  options,
+}) {
+  const failure = phaseFailureRecordV2(error, failureStage);
+  let phaseDecision = null;
+  if (proposalReadyBundle) {
+    try {
+      phaseDecision = await readPhaseDecisionV2({
+        state,
+        phase,
+        timeline: input.timeline,
+        sync: true,
+      });
+    } catch (decisionError) {
+      throw recoverableDurabilityError(decisionError);
+    }
+    validatePhaseDecisionBinding({
+      phaseDecision,
+      adapterBundle,
+      proposalReadyBundle,
+      started: {
+        invocation,
+        requestDigest: adapterBundle.document.requestDigest,
+      },
+      timeline: input.timeline,
+    });
+  }
+  let mcpRun = baseRun;
+  let mcpAudit = baseAudit;
+  let mcpObservation = "base-verified";
+  let observerInvocation = null;
+  try {
+    [mcpRun, mcpAudit] = await Promise.all([
+      readRun(session.client, input.contract.id, input.timeline),
+      readAudit(session.client, input.contract.id, input.timeline),
+    ]);
+    mcpObservation = "observed-after-failure";
+    observerInvocation = { ...session.invocation, role: "operator" };
+  } catch (observationError) {
+    if (
+      [
+        "proposal-preview",
+        "proposal-admission",
+        "post-admission-verification",
+      ].includes(failureStage)
+    ) {
+      throw recoverableDurabilityError(observationError);
+    }
+  }
+  const disposition = recoveryDispositionV2({
+    adapter: adapterBundle.document,
+    ready: proposalReadyBundle?.document ?? null,
+    mcpRun,
+    mcpAudit,
+    timeline: input.timeline,
+  });
+  if (
+    disposition === "exact-admission" &&
+    !(
+      failureStage === "post-admission-verification" &&
+      isPostAdmissionVerificationFailure(error)
+    )
+  ) {
+    throw recoverableDurabilityError(
+      new Error("MCP admission completed without a verified response"),
+    );
+  }
+  if (disposition === "exact-recovery-fence") {
+    throw recoverableDurabilityError(
+      new Error("MCP recovery fenced the pending admission"),
+    );
+  }
+  const document = createPhaseFailureDocumentV2({
+    phase,
+    adapterExecutionDigest: adapterBundle.digest,
+    proposalReadyDigest: proposalReadyBundle?.digest ?? null,
+    phaseDecisionDigest: phaseDecision?.digest ?? null,
+    failure,
+    mcpObservation,
+    observerInvocation,
+    mcpRun,
+    mcpAudit,
+    timeline: input.timeline,
+  });
+  const failureBundle = await writePhaseFailureBundle(
+    state,
+    document,
+    input.timeline,
+    options,
+  );
+  injectFailure(options, `before-${phase}-failure-completion`);
+  await failAttemptPhaseV2(ledger, {
+    phase,
+    invocation,
+    requestDigest: adapterBundle.document.requestDigest,
+    adapterExecutionDigest: adapterBundle.digest,
+    failureBundleDigest: failureBundle.digest,
+    failureStage: failure.stage,
+    failureCode: failure.code,
+  });
+  return terminalPhaseFailureV2(failure);
+}
+
+async function writePhaseFailureBundle(state, document, timeline, options) {
+  return writePhaseFailureBundleV2({
+    state,
+    document,
+    timeline,
+    staging: join(state, PHASE_RESULT_STAGING),
+    injectFailure: (point) => injectFailure(options, point),
+    syncDirectory,
+  });
+}
+
+async function readPhaseFailureBundle(state, phase, timeline, options) {
+  return readPhaseFailureBundleV2({
+    state,
+    phase,
+    timeline,
+    sync: options?.sync === true,
+  });
+}
+
 async function readPhaseResultBundle(
   state,
   phase,
@@ -964,7 +2338,7 @@ async function readPhaseResultBundle(
 ) {
   const path = join(state, `${phase}-result.json`);
   let document;
-  const bytes = await readBoundedExactFile(
+  await readBoundedExactFile(
     path,
     PHASE_RESULT_BYTES,
     `${phase} phase result bundle`,
@@ -1490,6 +2864,47 @@ function injectFailure(options, point) {
   }
 }
 
+function injectResponseLoss(options, point) {
+  if (options.allowDirty && process.env.TIMELINE_PILOT_TEST_FAILURE === point) {
+    throw new Error("injected MCP response loss");
+  }
+}
+
+function injectPostAdmissionVerificationFailure(options, point) {
+  if (options.allowDirty && process.env.TIMELINE_PILOT_TEST_FAILURE === point) {
+    const error = new Error(`injected post-admission failure: ${point}`);
+    error.name = "TimelinePilotPostAdmissionVerificationFailure";
+    throw error;
+  }
+}
+
+function injectProposalReconstructionError(options, phase) {
+  const point = `during-${phase}-proposal-reconstruction`;
+  if (options.allowDirty && process.env.TIMELINE_PILOT_TEST_FAILURE === point) {
+    throw new Error(`injected proposal reconstruction failure: ${point}`);
+  }
+}
+
+async function pauseForTest(options, point) {
+  const marker = process.env.TIMELINE_PILOT_TEST_BARRIER;
+  if (
+    !options.allowDirty ||
+    process.env.TIMELINE_PILOT_TEST_PAUSE !== point ||
+    !marker
+  ) {
+    return;
+  }
+  await writeFile(`${marker}.ready`, `${point}\n`, {
+    flag: "wx",
+    mode: 0o600,
+  });
+  for (let attempt = 0; attempt < 12_000; attempt += 1) {
+    if (await pathExists(`${marker}.release`)) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  }
+  throw new Error(`test barrier timed out at ${point}`);
+}
+
 function isInjectedCrash(error) {
   return (
     error instanceof Error &&
@@ -1506,7 +2921,10 @@ function recoverableDurabilityError(error) {
   return failure;
 }
 
-async function connectServer(dataDirectory, phase, runtime) {
+async function connectServer(dataDirectory, phase, runtime, role = "operator") {
+  if (role !== "model" && role !== "operator") {
+    throw new Error("MCP role is invalid");
+  }
   const { Client, StdioClientTransport } = await loadMcpClient();
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -1515,7 +2933,7 @@ async function connectServer(dataDirectory, phase, runtime) {
       "--data-dir",
       dataDirectory,
       "--role",
-      "operator",
+      role,
     ],
     env: credentialFreeEnvironment(),
     stderr: "pipe",
@@ -1584,15 +3002,13 @@ async function readAudit(client, runId, timeline) {
   return timeline.parseJson(content.text);
 }
 
-async function previewAndAdmitProposal({
+async function previewProposal({
   session,
-  phase,
   input,
   scope,
   run,
   runDigest,
   proposal,
-  policy,
 }) {
   const proposalInput = {
     runId: input.contract.id,
@@ -1622,60 +3038,23 @@ async function previewAndAdmitProposal({
   ) {
     throw new Error("model proposal preview mutated the run");
   }
+  return { preview, proposalInput };
+}
 
-  validateProposalSemantics(phase, proposal, input.pilot.expected);
+async function admitProposal({
+  session,
+  input,
+  policy,
+  preview,
+  proposalInput,
+}) {
   const admit = await session.call("timeline_admit_model_proposal", {
     ...proposalInput,
     candidateDigest: preview.candidateDigest,
     admission: policy.decision,
   });
   verifyProposalAdmission({ preview, admit, policy, input });
-  return { preview, admit };
-}
-
-function verifyProposalPreview({
-  preview,
-  proposal,
-  scope,
-  run,
-  input,
-  runDigest,
-}) {
-  const timeline = input.timeline;
-  const candidate = timeline.compileTemporalModelProposalV1(
-    proposal,
-    scope.host,
-    { maxChanges: 4, maxSupportsPerChange: 2 },
-  );
-  const returnedCandidate = {
-    ...candidate,
-    candidateEvents: preview.events,
-    candidateQuery: preview.query,
-    provenance: preview.provenance,
-  };
-  const candidateRun = timeline.parseRunDocumentV0Alpha3({
-    ...run,
-    events: [...run.events, ...preview.events],
-  });
-  if (
-    preview.verified !== true ||
-    preview.persistence !== "not-admitted" ||
-    preview.candidateDigest !== timeline.contentDigest(candidate) ||
-    preview.proposalDigest !== timeline.contentDigest(proposal) ||
-    preview.baseRevision !== run.events.length ||
-    preview.baseRunDigest !== runDigest ||
-    preview.timeline?.revision !== run.events.length ||
-    preview.timeline?.runDigest !== runDigest ||
-    timeline.canonicalJson(candidate) !==
-      timeline.canonicalJson(returnedCandidate) ||
-    !timeline.verifyTemporalConclusionV0Alpha3(
-      candidateRun,
-      preview.query,
-      preview.conclusion,
-    )
-  ) {
-    throw new Error("model proposal preview did not verify");
-  }
+  return admit;
 }
 
 function verifyProposalAdmission({ preview, admit, policy, input }) {
@@ -1719,10 +3098,19 @@ function assertDifference(conclusion, value, label) {
     result.minimum !== value ||
     result.maximum !== value
   ) {
-    throw new Error(
+    const error = new Error(
       `${label} conclusion does not match the expected difference`,
     );
+    error.name = "TimelinePilotPostAdmissionVerificationFailure";
+    throw error;
   }
+}
+
+function isPostAdmissionVerificationFailure(error) {
+  return (
+    error instanceof Error &&
+    error.name === "TimelinePilotPostAdmissionVerificationFailure"
+  );
 }
 
 function omitSchema({ schema: _schema, ...value }) {
@@ -1775,8 +3163,10 @@ async function validatePhaseResultStaging(state) {
   for await (const entry of handle) {
     if (
       !entry.isFile() ||
-      !/^(?:initial|correction)-[0-9a-f-]{36}\.json$/u.test(entry.name) ||
-      count >= 4
+      !/^(?:initial|correction)-(?:[0-9a-f-]{36}|(?:adapter-execution|decision|failure|proposal-ready|recovery-observation)-[0-9a-f-]{36})\.json$/u.test(
+        entry.name,
+      ) ||
+      count >= 14
     ) {
       throw new Error("phase result staging directory is invalid");
     }
@@ -1817,9 +3207,9 @@ The artifact retains allowlisted public evidence, redacted model requests, exact
 
 The admission policy file contains the exact canonical policy bytes whose digest is recorded on every declaration and proposal admission. The audit envelope binds those admission records to the complete event order, proposal and candidate digests, authority, policy, and run prefixes.
 
-The attempt ledger reserves each provider invocation durably before it can begin. It binds the source, model configuration, runtime, host invocation, driver-observed MCP child identity, requests, responses, admitted candidates, synchronized phase-result bundles, and resulting run prefixes. Each sequence has one exclusive filesystem slot, so recovery and the original process cannot record contradictory outcomes. A validated bundle can complete after a crash without another provider call. An incomplete phase without that bundle, or a failed phase, cannot invoke the provider again from the same state directory. MCP child PIDs and launch identities are driver-observed and maintainer-attested, not cryptographic process attestation.
+The attempt ledger reserves each provider invocation durably before it can begin. It binds the source, model configuration, runtime, host invocation, driver-observed MCP child identity, requests, responses, admitted candidates, synchronized phase-result bundles, and resulting run prefixes. Each sequence has one exclusive filesystem slot, so recovery and the original process cannot record contradictory outcomes. After a controlled interruption or clean process exit, a synchronized validated bundle can complete without another provider call. An incomplete phase without that bundle, or a failed phase, cannot invoke the provider again from the same state directory. MCP child PIDs and launch identities are driver-observed and maintainer-attested, not cryptographic process attestation.
 
-Artifact publication uses an exclusive attempt-bound claim and an atomically installed staging tree. Recovery accepts an already installed output only when the credential-free verifier proves that it belongs to this completed attempt.
+Artifact publication uses an exclusive attempt-bound claim and a staged tree for cooperative writers on one local filesystem. Recovery accepts an already installed output only when the credential-free verifier proves that it belongs to this completed attempt.
 
 The recorded runtime identity binds the Node executable, compiled core and MCP server, pilot and adapter scripts, resolved workspace targets, and transitive runtime package bytes used by the formal path. Stable logical package IDs keep local checkout and package-store paths out of the artifact. The content manifest covers every primary artifact file. It excludes itself and the derived verification report to avoid a checksum cycle; the verifier rejects every other unlisted file.
 

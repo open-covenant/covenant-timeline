@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, open, opendir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { readBoundedExactFile } from "./mcp-agent-pilot-lib.mjs";
+import { validatePhaseFailureRecordV2 } from "./mcp-real-model-pilot-failure.mjs";
 
-const LEDGER_SCHEMA = "covenant.timeline.formal-attempt-ledger.v1";
-const ENTRY_SCHEMA = "covenant.timeline.formal-attempt-ledger.entry.v1";
+const LEDGER_SCHEMA_V1 = "covenant.timeline.formal-attempt-ledger.v1";
+const LEDGER_SCHEMA_V2 = "covenant.timeline.formal-attempt-ledger.v2";
+const ENTRY_SCHEMA_V1 = "covenant.timeline.formal-attempt-ledger.entry.v1";
+const ENTRY_SCHEMA_V2 = "covenant.timeline.formal-attempt-ledger.entry.v2";
 const LEDGER_DIRECTORY = "attempt-ledger";
 const LEDGER_STAGING_DIRECTORY = ".attempt-ledger-staging";
 const ENTRY_BYTES = 64 * 1024;
@@ -31,7 +34,7 @@ export async function createAttemptLedger(
     timeline,
     allowFailureInjection,
     document: {
-      schema: LEDGER_SCHEMA,
+      schema: LEDGER_SCHEMA_V1,
       attemptId: randomUUID(),
       entries: [],
     },
@@ -99,7 +102,7 @@ export async function loadAttemptLedger(
     timeline,
     allowFailureInjection,
     document: {
-      schema: LEDGER_SCHEMA,
+      schema: ledgerSchema(entries),
       attemptId: entries[0].attemptId,
       entries,
     },
@@ -117,7 +120,14 @@ export function assertAttemptLedgerBinding(ledger, expected) {
     ledger.timeline.canonicalJson(actual) !==
     ledger.timeline.canonicalJson(expected)
   ) {
-    throw new Error("attempt ledger binding does not match this execution");
+    const changed = Object.keys(expected).filter(
+      (key) =>
+        ledger.timeline.canonicalJson(actual[key]) !==
+        ledger.timeline.canonicalJson(expected[key]),
+    );
+    throw new Error(
+      `attempt ledger binding does not match this execution: ${changed.join(", ")}`,
+    );
   }
 }
 
@@ -206,10 +216,44 @@ export async function failAttemptPhase(
   });
 }
 
+export async function failAttemptPhaseV2(
+  ledger,
+  {
+    phase,
+    invocation,
+    requestDigest,
+    adapterExecutionDigest,
+    failureBundleDigest,
+    failureStage,
+    failureCode,
+  },
+) {
+  assertStarted(ledger.document.entries, phase, invocation, requestDigest);
+  validateDigest(adapterExecutionDigest, "attempt adapter execution digest");
+  validateDigest(failureBundleDigest, "attempt failure bundle digest");
+  validatePhaseFailureRecordV2({ stage: failureStage, code: failureCode });
+  return appendEntry(
+    ledger,
+    {
+      kind: "phase-failed",
+      phase,
+      invocationId: invocation.invocationId,
+      requestDigest,
+      adapterExecutionDigest,
+      failureBundleDigest,
+      failureStage,
+      failureCode,
+      failure: "phase-failed-after-provider-invocation",
+    },
+    ENTRY_SCHEMA_V2,
+  );
+}
+
 export function completedAttemptLedger(ledger) {
   validateTrajectory(ledger.document.entries);
   const entries = ledger.document.entries;
   if (
+    ledger.document.schema !== LEDGER_SCHEMA_V1 ||
     entries.length !== 5 ||
     entries[2].kind !== "phase-completed" ||
     entries[4].kind !== "phase-completed"
@@ -225,18 +269,27 @@ export function completedAttemptLedger(ledger) {
 
 export function attemptLedgerSnapshot(ledger) {
   validateTrajectory(ledger.document.entries);
-  const document = structuredClone(ledger.document);
+  const document = {
+    ...structuredClone(ledger.document),
+    schema: ledgerSchema(ledger.document.entries),
+  };
   return {
     document,
     digest: ledger.timeline.contentDigest(document),
   };
 }
 
+export function failedAttemptLedgerSnapshotV2(ledger) {
+  const snapshot = attemptLedgerSnapshot(ledger);
+  validateFailedAttemptLedgerDocumentV2(snapshot.document, ledger.timeline);
+  return snapshot;
+}
+
 export function validateAttemptLedgerDocument(document, timeline) {
   if (
     !record(document) ||
     keys(document) !== "attemptId,entries,schema" ||
-    document.schema !== LEDGER_SCHEMA ||
+    document.schema !== LEDGER_SCHEMA_V1 ||
     !uuid(document.attemptId) ||
     !Array.isArray(document.entries)
   ) {
@@ -244,7 +297,7 @@ export function validateAttemptLedgerDocument(document, timeline) {
   }
   const entries = [];
   for (const entry of document.entries) {
-    validateEntry(entry, entries, timeline);
+    validateEntry(entry, entries, timeline, { allowV2Failure: false });
     entries.push(entry);
   }
   validateTrajectory(entries);
@@ -259,11 +312,40 @@ export function validateAttemptLedgerDocument(document, timeline) {
   return document;
 }
 
-async function appendEntry(ledger, fields) {
+export function validateFailedAttemptLedgerDocumentV2(document, timeline) {
+  if (
+    !record(document) ||
+    keys(document) !== "attemptId,entries,schema" ||
+    document.schema !== LEDGER_SCHEMA_V2 ||
+    !uuid(document.attemptId) ||
+    !Array.isArray(document.entries)
+  ) {
+    throw new Error("failed attempt ledger document is invalid");
+  }
+  const entries = [];
+  for (const entry of document.entries) {
+    validateEntry(entry, entries, timeline);
+    entries.push(entry);
+  }
+  validateTrajectory(entries);
+  const terminal = entries.at(-1);
+  if (
+    ![3, 5].includes(entries.length) ||
+    entries[0].attemptId !== document.attemptId ||
+    entries.slice(0, -1).some((entry) => entry.schema !== ENTRY_SCHEMA_V1) ||
+    terminal?.kind !== "phase-failed" ||
+    terminal.schema !== ENTRY_SCHEMA_V2
+  ) {
+    throw new Error("failed attempt ledger document is incomplete");
+  }
+  return document;
+}
+
+async function appendEntry(ledger, fields, entrySchema = ENTRY_SCHEMA_V1) {
   const entries = ledger.document.entries;
   const sequence = entries.length;
   const unsigned = {
-    schema: ENTRY_SCHEMA,
+    schema: entrySchema,
     attemptId: ledger.document.attemptId,
     sequence,
     previousEntryDigest:
@@ -296,7 +378,17 @@ async function appendEntry(ledger, fields) {
     await syncDirectory(ledger.directory);
   } catch (error) {
     if (installed) throw durabilityUncertain(error);
-    throw error;
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await readBoundedExactFile(
+      destination,
+      ENTRY_BYTES,
+      "attempt ledger entry",
+      { root: ledger.directory, scope: "the attempt ledger", sync: true },
+    );
+    if (!existing.equals(bytes)) {
+      throw new Error("attempt ledger entry changed under concurrency");
+    }
+    await syncDirectory(ledger.directory);
   } finally {
     await unlink(temporary).catch((error) => {
       if (error?.code !== "ENOENT") {
@@ -308,6 +400,7 @@ async function appendEntry(ledger, fields) {
     });
   }
   entries.push(entry);
+  ledger.document.schema = ledgerSchema(entries);
   return entry;
 }
 
@@ -332,10 +425,16 @@ function durabilityUncertain(error) {
   return failure;
 }
 
-function validateEntry(entry, previous, timeline) {
+function validateEntry(
+  entry,
+  previous,
+  timeline,
+  { allowV2Failure = true } = {},
+) {
   if (
     !record(entry) ||
-    entry.schema !== ENTRY_SCHEMA ||
+    (entry.schema !== ENTRY_SCHEMA_V1 &&
+      !(allowV2Failure && entry.schema === ENTRY_SCHEMA_V2)) ||
     !uuid(entry.attemptId) ||
     !Number.isSafeInteger(entry.sequence) ||
     entry.sequence < 0 ||
@@ -354,8 +453,9 @@ function validateEntry(entry, previous, timeline) {
   }
   if (entry.kind === "attempt-opened") {
     if (
+      entry.schema !== ENTRY_SCHEMA_V1 ||
       keys(entry) !==
-      "attemptId,binding,kind,previousEntryDigest,recordDigest,schema,sequence"
+        "attemptId,binding,kind,previousEntryDigest,recordDigest,schema,sequence"
     ) {
       throw new Error("attempt-opened ledger entry has unexpected fields");
     }
@@ -367,8 +467,9 @@ function validateEntry(entry, previous, timeline) {
   }
   if (entry.kind === "provider-invocation-reserved") {
     if (
+      entry.schema !== ENTRY_SCHEMA_V1 ||
       keys(entry) !==
-      "attemptId,baseRevision,baseRunDigest,invocation,kind,mcpInvocation,phase,previousEntryDigest,recordDigest,requestDigest,schema,sequence"
+        "attemptId,baseRevision,baseRunDigest,invocation,kind,mcpInvocation,phase,previousEntryDigest,recordDigest,requestDigest,schema,sequence"
     ) {
       throw new Error("provider invocation ledger entry has unexpected fields");
     }
@@ -379,12 +480,14 @@ function validateEntry(entry, previous, timeline) {
     if (!Number.isSafeInteger(entry.baseRevision) || entry.baseRevision < 0) {
       throw new Error("attempt base revision is invalid");
     }
+    validateCorrectionBaseContinuity(entry, previous);
     return;
   }
   if (entry.kind === "phase-completed") {
     if (
+      entry.schema !== ENTRY_SCHEMA_V1 ||
       keys(entry) !==
-      "attemptId,candidateDigest,invocationId,kind,phase,previousEntryDigest,proposalDigest,recordDigest,requestDigest,responseDigest,resultBundleDigest,resultRevision,resultRunDigest,schema,sequence"
+        "attemptId,candidateDigest,invocationId,kind,phase,previousEntryDigest,proposalDigest,recordDigest,requestDigest,responseDigest,resultBundleDigest,resultRevision,resultRunDigest,schema,sequence"
     ) {
       throw new Error("completed phase ledger entry has unexpected fields");
     }
@@ -409,16 +512,54 @@ function validateEntry(entry, previous, timeline) {
     }
     return;
   }
+  if (entry.kind !== "phase-failed") {
+    throw new Error("failed phase ledger entry is invalid");
+  }
+  if (entry.schema === ENTRY_SCHEMA_V1) {
+    if (
+      keys(entry) !==
+        "attemptId,failure,invocationId,kind,phase,previousEntryDigest,recordDigest,requestDigest,schema,sequence" ||
+      entry.failure !== "phase-failed-after-provider-invocation" ||
+      !uuid(entry.invocationId)
+    ) {
+      throw new Error("failed phase ledger entry is invalid");
+    }
+    validateDigest(entry.requestDigest, "failed phase request digest");
+    return;
+  }
   if (
-    entry.kind !== "phase-failed" ||
     keys(entry) !==
-      "attemptId,failure,invocationId,kind,phase,previousEntryDigest,recordDigest,requestDigest,schema,sequence" ||
+      "adapterExecutionDigest,attemptId,failure,failureBundleDigest,failureCode,failureStage,invocationId,kind,phase,previousEntryDigest,recordDigest,requestDigest,schema,sequence" ||
     entry.failure !== "phase-failed-after-provider-invocation" ||
     !uuid(entry.invocationId)
   ) {
     throw new Error("failed phase ledger entry is invalid");
   }
   validateDigest(entry.requestDigest, "failed phase request digest");
+  validateDigest(
+    entry.adapterExecutionDigest,
+    "failed phase adapter execution digest",
+  );
+  validateDigest(entry.failureBundleDigest, "failed phase bundle digest");
+  validatePhaseFailureRecordV2({
+    stage: entry.failureStage,
+    code: entry.failureCode,
+  });
+}
+
+function validateCorrectionBaseContinuity(entry, previous) {
+  if (entry.phase !== "correction") return;
+  const initial = previous.at(-1);
+  if (
+    initial?.kind !== "phase-completed" ||
+    initial.phase !== "initial" ||
+    entry.baseRevision !== initial.resultRevision ||
+    entry.baseRunDigest !== initial.resultRunDigest
+  ) {
+    throw new Error(
+      "correction provider invocation does not continue the completed initial run",
+    );
+  }
 }
 
 function validateTrajectory(entries) {
@@ -574,6 +715,12 @@ function validateFailureInjection(value) {
   if (typeof value !== "boolean") {
     throw new TypeError("allowFailureInjection must be a boolean");
   }
+}
+
+function ledgerSchema(entries) {
+  return entries.at(-1)?.schema === ENTRY_SCHEMA_V2
+    ? LEDGER_SCHEMA_V2
+    : LEDGER_SCHEMA_V1;
 }
 
 function record(value) {

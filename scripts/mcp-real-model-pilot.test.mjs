@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import {
   cp,
   chmod,
@@ -8,26 +9,30 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import test from "node:test";
+import { dirname, join, resolve } from "node:path";
+import nodeTest from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   REAL_MODEL_PILOT_LIMITS,
+  REAL_MODEL_PILOT_PROPOSAL_LIMITS,
   assertRealModelPilotRuntime,
   captureRealModelPilotRuntime,
   validateMcpWriterTrajectory,
+  validateProposalSemantics,
 } from "./mcp-real-model-pilot-lib.mjs";
 import { loadBoundPilot } from "./mcp-real-model-pilot-bootstrap.mjs";
 import {
   assertPilotRuntime,
   capturePilotRuntime,
+  validatePilotRuntime,
 } from "./mcp-real-model-pilot-runtime.mjs";
 import { validateAdapterSelection } from "./mcp-real-model-pilot.mjs";
 import {
@@ -43,6 +48,11 @@ import {
   failAttemptPhase,
   loadAttemptLedger,
 } from "./formal-attempt-ledger.mjs";
+import {
+  validatePhaseFailureDocumentV2,
+  validateRecoveryObservationDocumentV2,
+} from "./mcp-real-model-pilot-failure.mjs";
+import { exportFailedAttempt } from "./mcp-real-model-pilot-failure-artifact.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const driver = join(root, "scripts/mcp-real-model-pilot-bootstrap.mjs");
@@ -50,10 +60,55 @@ const verifier = join(
   root,
   "scripts/mcp-real-model-pilot-verify-bootstrap.mjs",
 );
+const failureExporter = join(
+  root,
+  "scripts/mcp-real-model-pilot-failure-export.mjs",
+);
+const failureVerifier = join(
+  root,
+  "scripts/mcp-real-model-pilot-failure-verify.mjs",
+);
 const fixture = join(root, "examples/mcp-real-model-pilot");
 const sourceRevision = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], {
   encoding: "utf8",
 }).stdout.trim();
+const runtimeDependencies = [
+  "@covenant-org/timeline",
+  "@modelcontextprotocol/client",
+  "@modelcontextprotocol/server",
+  "ajv",
+  "ajv-formats",
+  "canonicalize",
+  "jsonc-parser",
+  "zod",
+];
+const shard = parseShard(process.env.TIMELINE_PILOT_TEST_SHARD);
+let testIndex = 0;
+
+function test(name, implementation) {
+  const index = testIndex;
+  testIndex += 1;
+  if (shard && index % shard.count !== shard.index) return;
+  nodeTest(name, implementation);
+}
+
+function parseShard(value) {
+  if (value === undefined) return undefined;
+  const match = /^(\d+)\/(\d+)$/u.exec(value);
+  if (!match) throw new Error("test shard must use <index>/<count>");
+  const selected = Number(match[1]);
+  const count = Number(match[2]);
+  if (
+    !Number.isSafeInteger(selected) ||
+    !Number.isSafeInteger(count) ||
+    selected < 1 ||
+    selected > count ||
+    count > 32
+  ) {
+    throw new Error("test shard is outside the supported range");
+  }
+  return { index: selected - 1, count };
+}
 
 test("bounded exact reads reject hostile and replaced inputs", async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-exact-read-"));
@@ -132,6 +187,82 @@ test("credential-free child environment strips ambient secrets", () => {
     false,
   );
   assert.equal(Object.hasOwn(environment, "NODE_OPTIONS"), false);
+});
+
+test("pilot support validation matches its request-bound limit", async () => {
+  const expected = {
+    tagCommit: "94e7af53c2224aa40762c2061ac96cab34950b71",
+    provisionalPublication: 1779957192000,
+    authoritativePublication: 1779957345000,
+    readinessRecorded: 1779957705698,
+    initialDifference: 513698,
+    correctedDifference: 360698,
+  };
+  const timestampOnly = "1779957345000 Unix milliseconds";
+  const evidence = await readFile(
+    join(fixture, "evidence/release-published.txt"),
+    "utf8",
+  );
+  assert.notEqual(evidence.indexOf(timestampOnly), -1);
+  assert.equal(
+    evidence.indexOf(timestampOnly),
+    evidence.lastIndexOf(timestampOnly),
+  );
+  assert.deepEqual(REAL_MODEL_PILOT_PROPOSAL_LIMITS, {
+    maxChanges: 4,
+    maxSupportsPerChange: 1,
+  });
+
+  const proposal = {
+    schema: "covenant.timeline.model-proposal.v1",
+    requestId: "covenant-release-correction-v1",
+    changes: [
+      {
+        type: "coordinate",
+        pointHandle: "point-publication",
+        bounds: { type: "exact", value: expected.authoritativePublication },
+        supports: [{ evidenceId: "release-published", quote: timestampOnly }],
+        revision: {
+          type: "supersede",
+          assertionHandle: "assertion-provisional-publication",
+        },
+      },
+    ],
+    query: {
+      type: "difference",
+      targetHandle: "difference-readiness-minus-publication",
+      knowledgeCut: { type: "current" },
+    },
+  };
+
+  assert.doesNotThrow(() =>
+    validateProposalSemantics("correction", proposal, expected),
+  );
+
+  const wrongEvidence = structuredClone(proposal);
+  wrongEvidence.changes[0].supports[0].evidenceId = "readiness-recorded";
+  assert.throws(
+    () => validateProposalSemantics("correction", wrongEvidence, expected),
+    /model proposal support uses unexpected evidence/u,
+  );
+
+  const missingCoordinate = structuredClone(proposal);
+  missingCoordinate.changes[0].supports[0].quote =
+    "GitHub authoritatively reports";
+  assert.throws(
+    () => validateProposalSemantics("correction", missingCoordinate, expected),
+    /model proposal support quote does not contain the expected coordinate/u,
+  );
+
+  const multipleSupports = structuredClone(proposal);
+  multipleSupports.changes[0].supports.push({
+    evidenceId: "release-published",
+    quote: "This replaces the provisional creation-time proxy.",
+  });
+  assert.throws(
+    () => validateProposalSemantics("correction", multipleSupports, expected),
+    /model proposal change must contain exactly one support/u,
+  );
 });
 
 test("MCP child does not inherit ambient Node preload hooks", async () => {
@@ -315,7 +446,10 @@ test("a completed phase cannot be overwritten by a losing failure path", async (
       baseRevision: 0,
       baseRunDigest: digest,
     });
-    const resumed = await loadAttemptLedger(temporary, timeline);
+    const [resumed, losingFailure] = await Promise.all([
+      loadAttemptLedger(temporary, timeline),
+      loadAttemptLedger(temporary, timeline),
+    ]);
     const completion = {
       phase: "initial",
       invocation,
@@ -328,17 +462,20 @@ test("a completed phase cannot be overwritten by a losing failure path", async (
       resultRunDigest: digest,
     };
 
-    await completeAttemptPhase(resumed, completion);
-    await assert.rejects(completeAttemptPhase(original, completion), {
-      code: "EEXIST",
-    });
+    const completed = await completeAttemptPhase(resumed, completion);
+    const converged = await completeAttemptPhase(original, completion);
+    assert.equal(converged.recordDigest, completed.recordDigest);
     await assert.rejects(
-      failAttemptPhase(original, {
+      failAttemptPhase(losingFailure, {
         phase: "initial",
         invocation,
         requestDigest: digest,
+        adapterExecutionDigest: digest,
+        failureBundleDigest: digest,
+        failureStage: "proposal-semantics",
+        failureCode: "proposal.semantics",
       }),
-      { code: "EEXIST" },
+      /attempt ledger entry changed under concurrency/u,
     );
 
     assert.deepEqual(
@@ -1184,9 +1321,13 @@ test("rejects a model coordinate that disagrees with normalized evidence", async
   const state = join(temporary, "state");
   const config = join(temporary, "config.json");
   const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
   try {
     await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
-    await writeFile(adapter, fixtureAdapter({ wrongInitialCoordinate: true }));
+    await writeFile(
+      adapter,
+      fixtureAdapter({ wrongInitialCoordinate: true, counterPath: counter }),
+    );
     const result = run([
       "start",
       "--input",
@@ -1201,10 +1342,7 @@ test("rejects a model coordinate that disagrees with normalized evidence", async
       adapter,
     ]);
     assert.notEqual(result.status, 0);
-    assert.match(
-      result.stderr,
-      /coordinate does not match normalized evidence/,
-    );
+    assert.match(result.stderr, /proposal-semantics \(proposal\.semantics\)/);
     const timeline = await loadTimeline();
     const runId = "pilot.covenant-release-correction";
     const stored = JSON.parse(
@@ -1229,7 +1367,260 @@ test("rejects a model coordinate that disagrees with normalized evidence", async
         ["phase-failed", "initial"],
       ],
     );
+    await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "proposal-semantics",
+      code: "proposal.semantics",
+    });
     const repeated = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      join(temporary, "artifact"),
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.notEqual(repeated.status, 0);
+    assert.match(repeated.stderr, /proposal-semantics/);
+    assert.equal((await readStateAttemptEntries(state)).length, 3);
+    assert.equal(await providerInvocationCount(counter), 1);
+    await assert.rejects(lstat(join(temporary, "artifact")), /ENOENT/u);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+for (const failureCase of [
+  {
+    mode: "schema",
+    stage: "proposal-schema",
+    code: "proposal.schema",
+    stdout: Buffer.from("{}\n"),
+  },
+  {
+    mode: "null-json",
+    stage: "proposal-schema",
+    code: "proposal.schema",
+    stdout: Buffer.from("null\n"),
+  },
+  {
+    mode: "malformed-json",
+    stage: "adapter-output",
+    code: "adapter.invalid-json",
+    stdout: Buffer.from("{\n"),
+  },
+  {
+    mode: "invalid-framing",
+    stage: "adapter-output",
+    code: "adapter.invalid-framing",
+    stdout: Buffer.from("{}\n{}\n"),
+  },
+  {
+    mode: "error-envelope",
+    stage: "adapter-output",
+    code: "adapter.error-envelope",
+    stdout: Buffer.from(
+      '{"schema":"covenant.timeline.model-eval.adapter-error.v1","error":{"message":"private-envelope-secret"}}\n',
+    ),
+  },
+  {
+    mode: "invalid-utf8",
+    stage: "adapter-output",
+    code: "adapter.invalid-utf8",
+    stdout: Buffer.from([0xff, 0x0a]),
+  },
+  {
+    mode: "nonzero-exit",
+    stage: "adapter-execution",
+    code: "adapter.nonzero-exit",
+    stdout: Buffer.from("private-provider-stdout\n"),
+  },
+  {
+    mode: "exact-stdout-boundary",
+    stage: "adapter-output",
+    code: "adapter.invalid-json",
+    stdout: Buffer.alloc(REAL_MODEL_PILOT_LIMITS.adapterBytes, 0x61),
+  },
+  {
+    mode: "exact-stderr-boundary",
+    stage: "proposal-schema",
+    code: "proposal.schema",
+    stdout: Buffer.from("{}\n"),
+    stderr: Buffer.alloc(REAL_MODEL_PILOT_LIMITS.adapterBytes, 0x62),
+  },
+  {
+    mode: "oversized-stdout",
+    stage: "adapter-output",
+    code: "adapter.output-limit",
+    stdout: Buffer.alloc(REAL_MODEL_PILOT_LIMITS.adapterBytes, 0x61),
+    stdoutTruncated: true,
+  },
+  {
+    mode: "oversized-stderr",
+    stage: "adapter-output",
+    code: "adapter.output-limit",
+    stdout: Buffer.from("{}\n"),
+    stderr: Buffer.alloc(REAL_MODEL_PILOT_LIMITS.adapterBytes, 0x62),
+    stderrTruncated: true,
+  },
+  {
+    mode: "aggregate-output-limit",
+    stage: "adapter-output",
+    code: "adapter.output-limit",
+    executionError: "enobufs",
+    assertStreamTruncation: false,
+    captureShapeNondeterministic: true,
+  },
+]) {
+  test(`retains a terminal ${failureCase.mode} adapter failure`, async () => {
+    const temporary = await mkdtemp(
+      join(tmpdir(), `timeline-pilot-${failureCase.mode}-`),
+    );
+    const state = join(temporary, "state");
+    const config = join(temporary, "config.json");
+    const adapter = join(temporary, "adapter.mjs");
+    const counter = join(temporary, "provider-invocations.txt");
+    const output = join(temporary, "artifact");
+    try {
+      await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+      await writeFile(adapter, rawFailureAdapter(failureCase.mode, counter));
+      const startArguments = [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ];
+      const failed = run(startArguments);
+      assert.notEqual(failed.status, 0);
+      assert.match(
+        failed.stderr,
+        new RegExp(
+          `${failureCase.stage} \\(${failureCase.code.replace(".", "\\.")}\\)`,
+        ),
+      );
+      assert.doesNotMatch(
+        failed.stderr,
+        /private-(?:envelope-secret|provider-(?:stdout|stderr))|must-not-reach-adapter/u,
+      );
+      const retained = await assertFailedPhaseEvidence({
+        state,
+        phase: "initial",
+        stage: failureCase.stage,
+        code: failureCase.code,
+      });
+      if (failureCase.stdout) {
+        assert.deepEqual(
+          Buffer.from(retained.capture.execution.stdout.base64, "base64"),
+          failureCase.stdout,
+        );
+      }
+      if (!failureCase.captureShapeNondeterministic) {
+        if (failureCase.assertStreamTruncation !== false) {
+          assert.equal(
+            retained.capture.execution.stdout.truncated,
+            failureCase.stdoutTruncated ?? false,
+          );
+        }
+      }
+      if (failureCase.stderr) {
+        assert.deepEqual(
+          Buffer.from(retained.capture.execution.stderr.base64, "base64"),
+          failureCase.stderr,
+        );
+      }
+      if (!failureCase.captureShapeNondeterministic) {
+        if (failureCase.assertStreamTruncation !== false) {
+          assert.equal(
+            retained.capture.execution.stderr.truncated,
+            failureCase.stderrTruncated ?? false,
+          );
+        }
+      }
+      assert.equal(
+        retained.capture.execution.error?.code ?? null,
+        failureCase.executionError ?? null,
+      );
+      if (failureCase.mode === "invalid-utf8") {
+        assert.equal(
+          retained.capture.execution.stdout.base64,
+          failureCase.stdout.toString("base64"),
+        );
+        assert.equal(Object.hasOwn(retained.failure.failure, "detail"), false);
+      }
+      if (failureCase.mode === "nonzero-exit") {
+        assert.equal(retained.capture.execution.status, 23);
+        assert.match(
+          Buffer.from(
+            retained.capture.execution.stderr.base64,
+            "base64",
+          ).toString("utf8"),
+          /private-provider-stderr/,
+        );
+      }
+      if (failureCase.mode.startsWith("oversized-")) {
+        const stream = failureCase.mode.endsWith("stdout")
+          ? retained.capture.execution.stdout
+          : retained.capture.execution.stderr;
+        assert.equal(stream.byteLength, REAL_MODEL_PILOT_LIMITS.adapterBytes);
+      }
+      assert.equal(await providerInvocationCount(counter), 1);
+      const stored = retained.failure.mcpAudit;
+      assert.equal(stored.revision, 2);
+      assert.deepEqual(
+        stored.admissions.map(({ kind }) => kind),
+        ["direct-event", "direct-event"],
+      );
+
+      const repeated = run([
+        "resume",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--out",
+        output,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ]);
+      assert.notEqual(repeated.status, 0);
+      assert.equal(await providerInvocationCount(counter), 1);
+      await assert.rejects(lstat(output), /ENOENT/u);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+}
+
+test("exports and verifies a credential-safe failed-attempt receipt", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-failure-export-"));
+  const state = join(temporary, "state");
+  const output = join(temporary, "failed-attempt");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, rawFailureAdapter("error-envelope", counter));
+    const failed = run([
       "start",
       "--input",
       fixture,
@@ -1242,8 +1633,1485 @@ test("rejects a model coordinate that disagrees with normalized evidence", async
       process.execPath,
       adapter,
     ]);
+    assert.notEqual(failed.status, 0);
+    assert.equal(await providerInvocationCount(counter), 1);
+
+    const exported = spawnSync(
+      process.execPath,
+      [failureExporter, state, output],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.equal(exported.status, 0, exported.stderr);
+    await assert.rejects(lstat(join(output, "artifact.json")), /ENOENT/u);
+    const capture = JSON.parse(
+      await readFile(join(output, "adapter-execution.json"), "utf8"),
+    );
+    assert.equal(capture.execution.stdout.disclosure, "omitted");
+    assert.equal(Object.hasOwn(capture.execution.stdout, "base64"), false);
+    assert.equal(Object.hasOwn(capture.execution.stderr, "base64"), false);
+    const publicBytes = Buffer.concat(
+      await Promise.all(
+        (await readdir(output)).map((name) => readFile(join(output, name))),
+      ),
+    ).toString("utf8");
+    assert.equal(publicBytes.includes("private-envelope-secret"), false);
+    assert.equal(publicBytes.includes("OPENAI_API_KEY"), false);
+
+    const verified = spawnSync(process.execPath, [failureVerifier, output], {
+      encoding: "utf8",
+      env: credentialFreeEnvironment(),
+    });
+    assert.equal(verified.status, 0, verified.stderr);
+    assert.deepEqual(JSON.parse(verified.stdout), {
+      verified: true,
+      schema: "covenant.timeline.real-model-pilot.failed-attempt.v2",
+      phase: "initial",
+      failure: {
+        stage: "adapter-output",
+        code: "adapter.error-envelope",
+      },
+      rawAdapterStreams: "committed-not-disclosed",
+    });
+
+    const racedOutput = join(temporary, "raced-failed-attempt");
+    await assert.rejects(
+      exportFailedAttempt({
+        state,
+        output: racedOutput,
+        injectFailure(point) {
+          if (point !== "after-failed-attempt-staging-sync") return;
+          mkdirSync(racedOutput, { mode: 0o700 });
+          writeFileSync(join(racedOutput, "external-owner"), "preserve\n", {
+            mode: 0o600,
+          });
+        },
+      }),
+      /output already exists/u,
+    );
+    assert.equal(
+      await readFile(join(racedOutput, "external-owner"), "utf8"),
+      "preserve\n",
+    );
+
+    const crashOutput = join(temporary, "crash-recovered-failed-attempt");
+    const crashRunner = join(temporary, "failure-export-crash.mjs");
+    await writeFile(
+      crashRunner,
+      `import { exportFailedAttempt } from ${JSON.stringify(
+        pathToFileURL(
+          join(root, "scripts/mcp-real-model-pilot-failure-artifact.mjs"),
+        ).href,
+      )};
+await exportFailedAttempt({
+  state: process.argv[2],
+  output: process.argv[3],
+  injectFailure(point) {
+    if (point === "after-failed-attempt-destination-reserve") process.exit(71);
+  },
+});
+`,
+    );
+    const crashed = spawnSync(
+      process.execPath,
+      [crashRunner, state, crashOutput],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.equal(crashed.status, 71, crashed.stderr);
+    assert.equal(
+      (await lstat(join(crashOutput, ".publication-incomplete.json"))).isFile(),
+      true,
+    );
+    await exportFailedAttempt({ state, output: crashOutput });
+    const recoveredVerification = spawnSync(
+      process.execPath,
+      [failureVerifier, crashOutput],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.equal(recoveredVerification.status, 0, recoveredVerification.stderr);
+
+    const occupied = join(temporary, "occupied-failed-attempt");
+    await mkdir(occupied);
+    const occupiedExport = spawnSync(
+      process.execPath,
+      [failureExporter, state, occupied],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.notEqual(occupiedExport.status, 0);
+    assert.equal((await lstat(occupied)).isDirectory(), true);
+    assert.deepEqual(await readdir(occupied), []);
+    if (process.platform !== "win32") {
+      const linkedTarget = join(temporary, "linked-target");
+      const linkedOutput = join(temporary, "linked-failed-attempt");
+      await mkdir(linkedTarget);
+      await symlink(linkedTarget, linkedOutput);
+      const linkedExport = spawnSync(
+        process.execPath,
+        [failureExporter, state, linkedOutput],
+        {
+          encoding: "utf8",
+          env: credentialFreeEnvironment(),
+        },
+      );
+      assert.notEqual(linkedExport.status, 0);
+      assert.equal((await lstat(linkedOutput)).isSymbolicLink(), true);
+      assert.deepEqual(await readdir(linkedTarget), []);
+    }
+
+    const timeline = await loadTimeline();
+    const metadataTampered = join(
+      temporary,
+      "failed-attempt-metadata-tampered",
+    );
+    await cp(output, metadataTampered, { recursive: true });
+    const artifactPath = join(metadataTampered, "failed-attempt.json");
+    const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
+    artifact.binding.source.revision = "0".repeat(40);
+    artifact.source.revision = "0".repeat(40);
+    artifact.failure.code = "adapter.invalid-json";
+    const artifactBytes = Buffer.from(`${timeline.canonicalJson(artifact)}\n`);
+    await writeFile(artifactPath, artifactBytes);
+    await rewriteManifestEntry(
+      metadataTampered,
+      "failed-attempt.json",
+      artifactBytes,
+    );
+    const metadataRejected = spawnSync(
+      process.execPath,
+      [failureVerifier, metadataTampered],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.notEqual(metadataRejected.status, 0);
+
+    const streamTampered = join(temporary, "failed-attempt-stream-tampered");
+    await cp(output, streamTampered, { recursive: true });
+    const capturePath = join(streamTampered, "adapter-execution.json");
+    const captureDocument = JSON.parse(await readFile(capturePath, "utf8"));
+    captureDocument.execution.stdout.truncated = true;
+    const captureBytes = Buffer.from(
+      `${timeline.canonicalJson(captureDocument)}\n`,
+    );
+    await writeFile(capturePath, captureBytes);
+    await rewriteManifestEntry(
+      streamTampered,
+      "adapter-execution.json",
+      captureBytes,
+    );
+    const streamRejected = spawnSync(
+      process.execPath,
+      [failureVerifier, streamTampered],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.notEqual(streamRejected.status, 0);
+
+    const tampered = join(temporary, "failed-attempt-tampered");
+    await cp(output, tampered, { recursive: true });
+    const failurePath = join(tampered, "phase-failure.json");
+    const failure = JSON.parse(await readFile(failurePath, "utf8"));
+    failure.failure.code = "adapter.invalid-json";
+    await writeFile(failurePath, `${timeline.canonicalJson(failure)}\n`);
+    const rejected = spawnSync(process.execPath, [failureVerifier, tampered], {
+      encoding: "utf8",
+      env: credentialFreeEnvironment(),
+    });
+    assert.notEqual(rejected.status, 0);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("rejects tampered failed-attempt evidence without another provider call", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-failure-tamper-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(
+      adapter,
+      fixtureAdapter({ wrongInitialCoordinate: true, counterPath: counter }),
+    );
+    const failed = run([
+      "start",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.notEqual(failed.status, 0);
+    assert.equal(await providerInvocationCount(counter), 1);
+    const timeline = await loadTimeline();
+
+    for (const [name, mutate] of [
+      [
+        "raw-stream",
+        async (copy) => {
+          const path = join(copy, "initial-adapter-execution.json");
+          const document = JSON.parse(await readFile(path, "utf8"));
+          document.execution.stdout.base64 =
+            Buffer.from("{}\n").toString("base64");
+          await writeFile(path, `${timeline.canonicalJson(document)}\n`);
+        },
+      ],
+      [
+        "failure-code",
+        async (copy) => {
+          const path = join(copy, "initial-failure.json");
+          const document = JSON.parse(await readFile(path, "utf8"));
+          document.failure.code = "proposal.schema";
+          await writeFile(path, `${timeline.canonicalJson(document)}\n`);
+        },
+      ],
+      [
+        "ledger-binding",
+        async (copy) => {
+          const path = join(copy, "attempt-ledger/002.json");
+          const entry = JSON.parse(await readFile(path, "utf8"));
+          entry.failureBundleDigest = `sha256:${"0".repeat(64)}`;
+          const { recordDigest: _recordDigest, ...unsigned } = entry;
+          entry.recordDigest = timeline.contentDigest(unsigned);
+          await writeFile(path, `${timeline.canonicalJson(entry)}\n`);
+        },
+      ],
+      [
+        "noncanonical",
+        async (copy) => {
+          const path = join(copy, "initial-failure.json");
+          await writeFile(path, `${await readFile(path, "utf8")}\n`);
+        },
+      ],
+      [
+        "symlink",
+        async (copy) => {
+          const path = join(copy, "initial-failure.json");
+          await rm(path);
+          await symlink(join(state, "initial-failure.json"), path);
+        },
+      ],
+    ]) {
+      const copy = join(temporary, `state-${name}`);
+      await cp(state, copy, { recursive: true });
+      await mutate(copy);
+      const output = join(temporary, `artifact-${name}`);
+      const resumed = run([
+        "resume",
+        "--input",
+        fixture,
+        "--state",
+        copy,
+        "--config",
+        config,
+        "--out",
+        output,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ]);
+      assert.notEqual(resumed.status, 0, name);
+      assert.equal(await providerInvocationCount(counter), 1, name);
+      await assert.rejects(lstat(output), /ENOENT/u);
+    }
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+for (const failurePoint of [
+  "after-initial-adapter-execution-install",
+  "before-initial-failure-completion",
+  "after-initial-phase-failed-ledger-install",
+]) {
+  test(`${failurePoint} recovers as a terminal failure without retry`, async () => {
+    const temporary = await mkdtemp(join(tmpdir(), "timeline-failure-crash-"));
+    const state = join(temporary, "state");
+    const config = join(temporary, "config.json");
+    const adapter = join(temporary, "adapter.mjs");
+    const counter = join(temporary, "provider-invocations.txt");
+    const output = join(temporary, "artifact");
+    try {
+      await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+      await writeFile(
+        adapter,
+        fixtureAdapter({ wrongInitialCoordinate: true, counterPath: counter }),
+      );
+      const interrupted = run(
+        [
+          "start",
+          "--input",
+          fixture,
+          "--state",
+          state,
+          "--config",
+          config,
+          "--allow-dirty",
+          "--",
+          process.execPath,
+          adapter,
+        ],
+        { failurePoint },
+      );
+      assert.notEqual(interrupted.status, 0);
+      assert.equal(await providerInvocationCount(counter), 1);
+
+      const recovered = run([
+        "resume",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--out",
+        output,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ]);
+      assert.notEqual(recovered.status, 0);
+      assert.match(recovered.stderr, /proposal-semantics/);
+      assert.equal(await providerInvocationCount(counter), 1);
+      const entries = await readStateAttemptEntries(state);
+      assert.deepEqual(
+        entries.map(({ kind }) => kind),
+        ["attempt-opened", "provider-invocation-reserved", "phase-failed"],
+      );
+      await assertFailedPhaseEvidence({
+        state,
+        phase: "initial",
+        stage: "proposal-semantics",
+        code: "proposal.semantics",
+      });
+      await assert.rejects(lstat(output), /ENOENT/u);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+}
+
+test("a crash before admission is fenced and closed without model admission", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-before-admit-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "before-initial-admission" },
+    );
+    assert.notEqual(interrupted.status, 0);
+    assert.equal(await providerInvocationCount(counter), 1);
+
+    const resumed = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.notEqual(resumed.status, 0);
+    assert.match(
+      resumed.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/,
+    );
+    assert.equal(await providerInvocationCount(counter), 1);
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    assert.equal(retained.failure.mcpAudit.admissions.length, 3);
+    assert.equal(
+      retained.failure.mcpAudit.admissions.at(-1).kind,
+      "direct-event",
+    );
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-recovery-fence");
+    assert.equal(observation.invocation.role, "model");
+    const timeline = await loadTimeline();
+    const openObservation = structuredClone(observation);
+    openObservation.invocation.detail = "uncontrolled";
+    assert.throws(
+      () => validateRecoveryObservationDocumentV2(openObservation, timeline),
+      /recovery observation is invalid/u,
+    );
+    const openFailure = structuredClone(retained.failure);
+    openFailure.observerInvocation.detail = "uncontrolled";
+    assert.throws(
+      () => validatePhaseFailureDocumentV2(openFailure, timeline),
+      /phase failure bundle is invalid/u,
+    );
+    await assert.rejects(lstat(output), /ENOENT/u);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("recovery CAS-fences a live admission owner before terminalizing", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-live-admit-owner-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  const barrier = join(temporary, "admission-barrier");
+  let originalRun;
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const startArguments = [
+      "start",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    originalRun = runAsync(startArguments, {
+      environment: {
+        TIMELINE_PILOT_TEST_PAUSE: "before-initial-admission",
+        TIMELINE_PILOT_TEST_BARRIER: barrier,
+      },
+    });
+    await waitForFile(`${barrier}.ready`);
+
+    const concurrent = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.notEqual(concurrent.status, 0);
+    assert.match(
+      concurrent.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+    );
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    assert.equal(retained.failure.mcpAudit.admissions.length, 3);
+    assert.equal(
+      retained.failure.mcpAudit.admissions.at(-1).kind,
+      "direct-event",
+    );
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-recovery-fence");
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved", "phase-failed"],
+    );
+
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    const original = await originalRun;
+    assert.notEqual(original.status, 0);
+    await assert.rejects(lstat(join(state, "initial-result.json")), /ENOENT/u);
+
+    const repeated = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
     assert.notEqual(repeated.status, 0);
-    assert.equal((await readStateAttemptEntries(state)).length, 3);
+    assert.match(
+      repeated.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+    );
+    assert.equal(await providerInvocationCount(counter), 1);
+    await assert.rejects(lstat(output), /ENOENT/u);
+  } finally {
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    }).catch((error) => {
+      if (error?.code !== "EEXIST") throw error;
+    });
+    await originalRun?.catch(() => {});
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("recovery persists a live preview before fencing its admission", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-live-preview-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  const barrier = join(temporary, "preview-barrier");
+  let originalRun;
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const startArguments = [
+      "start",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    originalRun = runAsync(startArguments, {
+      environment: {
+        TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-preview",
+        TIMELINE_PILOT_TEST_BARRIER: barrier,
+      },
+    });
+    await waitForFile(`${barrier}.ready`);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const concurrent = run(resumeArguments);
+    assert.notEqual(concurrent.status, 0);
+    assert.match(
+      concurrent.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+    );
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    assert.match(
+      retained.failure.proposalReadyDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.match(
+      retained.failure.phaseDecisionDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.equal(retained.failure.mcpAudit.admissions.length, 3);
+    assert.equal(
+      retained.failure.mcpAudit.admissions.every(
+        ({ kind }) => kind === "direct-event",
+      ),
+      true,
+    );
+    const timeline = await loadTimeline();
+    const ready = JSON.parse(
+      await readFile(join(state, "initial-proposal-ready.json"), "utf8"),
+    );
+    const decision = JSON.parse(
+      await readFile(join(state, "initial-decision.json"), "utf8"),
+    );
+    assert.equal(
+      retained.failure.proposalReadyDigest,
+      timeline.contentDigest(ready),
+    );
+    assert.equal(
+      retained.failure.phaseDecisionDigest,
+      timeline.contentDigest(decision),
+    );
+    assert.equal(decision.decision, "recovery-terminal");
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-recovery-fence");
+
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    const original = await originalRun;
+    assert.notEqual(original.status, 0);
+    await assert.rejects(lstat(join(state, "initial-result.json")), /ENOENT/u);
+
+    const repeated = run(resumeArguments);
+    assert.notEqual(repeated.status, 0);
+    assert.match(
+      repeated.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+    );
+    assert.equal(await providerInvocationCount(counter), 1);
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved", "phase-failed"],
+    );
+    await assert.rejects(lstat(output), /ENOENT/u);
+  } finally {
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    }).catch((error) => {
+      if (error?.code !== "EEXIST") throw error;
+    });
+    await originalRun?.catch(() => {});
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("concurrent recoveries converge on one reconstructed proposal", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-concurrent-reconstruction-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const barriers = [
+    join(temporary, "recovery-one"),
+    join(temporary, "recovery-two"),
+  ];
+  let recoveryRuns = [];
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "after-initial-proposal-preview" },
+    );
+    assert.notEqual(interrupted.status, 0);
+
+    const resumeArguments = (suffix) => [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      join(temporary, `artifact-${suffix}`),
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    recoveryRuns = barriers.map((barrier, index) =>
+      runAsync(resumeArguments(index + 1), {
+        environment: {
+          TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-reconstruction",
+          TIMELINE_PILOT_TEST_BARRIER: barrier,
+        },
+      }),
+    );
+    await Promise.all(
+      barriers.map((barrier) => waitForFile(`${barrier}.ready`)),
+    );
+    await Promise.all(
+      barriers.map((barrier) =>
+        writeFile(`${barrier}.release`, "release\n", {
+          flag: "wx",
+          mode: 0o600,
+        }),
+      ),
+    );
+
+    const results = await Promise.all(recoveryRuns);
+    for (const result of results) {
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+      );
+    }
+    assert.equal(await providerInvocationCount(counter), 1);
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    const timeline = await loadTimeline();
+    const ready = JSON.parse(
+      await readFile(join(state, "initial-proposal-ready.json"), "utf8"),
+    );
+    assert.equal(
+      retained.failure.proposalReadyDigest,
+      timeline.contentDigest(ready),
+    );
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved", "phase-failed"],
+    );
+  } finally {
+    await Promise.all(
+      barriers.map((barrier) =>
+        writeFile(`${barrier}.release`, "release\n", {
+          flag: "wx",
+          mode: 0o600,
+        }).catch((error) => {
+          if (error?.code !== "EEXIST") throw error;
+        }),
+      ),
+    );
+    await Promise.allSettled(recoveryRuns);
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a recovery preview failure stays nonterminal while the original is live", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-live-reconstruction-failure-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  const barrier = join(temporary, "preview-barrier");
+  let originalRun;
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    originalRun = runAsync(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      {
+        environment: {
+          TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-preview",
+          TIMELINE_PILOT_TEST_BARRIER: barrier,
+        },
+      },
+    );
+    await waitForFile(`${barrier}.ready`);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const recovery = run(resumeArguments, {
+      failurePoint: "during-initial-proposal-reconstruction",
+    });
+    assert.notEqual(recovery.status, 0);
+    assert.match(recovery.stderr, /injected proposal reconstruction failure/u);
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved"],
+    );
+    await assert.rejects(lstat(join(state, "initial-failure.json")), /ENOENT/u);
+    await assert.rejects(
+      lstat(join(state, "initial-decision.json")),
+      /ENOENT/u,
+    );
+
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    const original = await originalRun;
+    assert.equal(original.status, 0, original.stderr);
+    const completed = run(resumeArguments);
+    assert.equal(completed.status, 0, completed.stderr);
+    assert.equal(JSON.parse(completed.stdout).verified, true);
+    assert.equal(await providerInvocationCount(counter), 2);
+  } finally {
+    await writeFile(`${barrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    }).catch((error) => {
+      if (error?.code !== "EEXIST") throw error;
+    });
+    await originalRun?.catch(() => {});
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("an original admission can win a live reconstruction race", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-live-reconstruction-win-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  const previewBarrier = join(temporary, "preview-barrier");
+  const recoveryBarrier = join(temporary, "recovery-barrier");
+  let originalRun;
+  let recoveryRun;
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const startArguments = [
+      "start",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    originalRun = runAsync(startArguments, {
+      environment: {
+        TIMELINE_PILOT_TEST_PAUSE: "after-initial-proposal-preview",
+        TIMELINE_PILOT_TEST_BARRIER: previewBarrier,
+      },
+    });
+    await waitForFile(`${previewBarrier}.ready`);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    recoveryRun = runAsync(resumeArguments, {
+      environment: {
+        TIMELINE_PILOT_TEST_PAUSE: "before-initial-proposal-reconstruction",
+        TIMELINE_PILOT_TEST_BARRIER: recoveryBarrier,
+      },
+    });
+    await waitForFile(`${recoveryBarrier}.ready`);
+
+    await writeFile(`${previewBarrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    await waitForFile(join(state, "initial-result.json"));
+    await writeFile(`${recoveryBarrier}.release`, "release\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+
+    const [original, recovered] = await Promise.all([originalRun, recoveryRun]);
+    assert.equal(original.status, 0, original.stderr);
+    assert.equal(recovered.status, 0, recovered.stderr);
+    assert.equal(await providerInvocationCount(counter), 2);
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-admission");
+    assert.match(observation.proposalReadyDigest, /^sha256:[0-9a-f]{64}$/u);
+    const decision = JSON.parse(
+      await readFile(join(state, "initial-decision.json"), "utf8"),
+    );
+    assert.equal(decision.decision, "admission-authorized");
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      [
+        "attempt-opened",
+        "provider-invocation-reserved",
+        "phase-completed",
+        "provider-invocation-reserved",
+        "phase-completed",
+      ],
+    );
+    assert.equal(JSON.parse(recovered.stdout).verified, true);
+  } finally {
+    for (const barrier of [previewBarrier, recoveryBarrier]) {
+      await writeFile(`${barrier}.release`, "release\n", {
+        flag: "wx",
+        mode: 0o600,
+      }).catch((error) => {
+        if (error?.code !== "EEXIST") throw error;
+      });
+    }
+    await Promise.allSettled([originalRun, recoveryRun].filter(Boolean));
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a crash after admission completes from the exact MCP state", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-after-admit-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "after-initial-admission" },
+    );
+    assert.notEqual(interrupted.status, 0);
+    assert.equal(await providerInvocationCount(counter), 1);
+
+    const resumed = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(await providerInvocationCount(counter), 2);
+    const calls = (await readFile(counter, "utf8")).trim().split("\n");
+    assert.equal(calls.filter((id) => id.includes("initial")).length, 1);
+    assert.equal(calls.filter((id) => id.includes("correction")).length, 1);
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-admission");
+    assert.equal(observation.invocation.role, "model");
+    const audit = JSON.parse(
+      await readFile(join(output, "audit.json"), "utf8"),
+    );
+    assert.equal(audit.admissions.length, 4);
+    assert.deepEqual(
+      audit.admissions.map(({ kind }) => kind),
+      ["direct-event", "direct-event", "model-proposal", "model-proposal"],
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("recovery retains a deterministic post-admission verification failure", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-post-admission-failure-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "after-initial-admission" },
+    );
+    assert.notEqual(interrupted.status, 0);
+    assert.equal(await providerInvocationCount(counter), 1);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const failed = run(resumeArguments, {
+      failurePoint: "during-initial-post-admission-verification",
+    });
+    assert.notEqual(failed.status, 0);
+    assert.match(
+      failed.stderr,
+      /post-admission-verification \(proposal\.post-admission\)/u,
+    );
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "post-admission-verification",
+      code: "proposal.post-admission",
+    });
+    assert.equal(retained.failure.mcpAudit.admissions.length, 3);
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-admission");
+    assert.equal(await providerInvocationCount(counter), 1);
+
+    const repeated = run(resumeArguments);
+    assert.notEqual(repeated.status, 0);
+    assert.match(
+      repeated.stderr,
+      /post-admission-verification \(proposal\.post-admission\)/u,
+    );
+    assert.equal(await providerInvocationCount(counter), 1);
+    await assert.rejects(lstat(output), /ENOENT/u);
+
+    const timeline = await loadTimeline();
+    const decisionTamperedState = join(temporary, "decision-tampered-state");
+    await cp(state, decisionTamperedState, { recursive: true });
+    const decisionPath = join(decisionTamperedState, "initial-decision.json");
+    const decision = JSON.parse(await readFile(decisionPath, "utf8"));
+    decision.decision = "recovery-terminal";
+    await writeFile(decisionPath, `${timeline.canonicalJson(decision)}\n`);
+    const privateFailurePath = join(
+      decisionTamperedState,
+      "initial-failure.json",
+    );
+    const privateFailure = JSON.parse(
+      await readFile(privateFailurePath, "utf8"),
+    );
+    privateFailure.phaseDecisionDigest = timeline.contentDigest(decision);
+    await writeFile(
+      privateFailurePath,
+      `${timeline.canonicalJson(privateFailure)}\n`,
+    );
+    const terminalPath = join(decisionTamperedState, "attempt-ledger/002.json");
+    const terminal = JSON.parse(await readFile(terminalPath, "utf8"));
+    terminal.failureBundleDigest = timeline.contentDigest(privateFailure);
+    const { recordDigest: _recordDigest, ...unsignedTerminal } = terminal;
+    terminal.recordDigest = timeline.contentDigest(unsignedTerminal);
+    await writeFile(terminalPath, `${timeline.canonicalJson(terminal)}\n`);
+    const decisionRejected = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      decisionTamperedState,
+      "--config",
+      config,
+      "--out",
+      join(temporary, "decision-tampered-artifact"),
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.notEqual(decisionRejected.status, 0);
+    assert.match(
+      decisionRejected.stderr,
+      /failed phase evidence binding changed/u,
+    );
+    assert.equal(await providerInvocationCount(counter), 1);
+
+    const receipt = join(temporary, "failed-receipt");
+    await exportFailedAttempt({ state, output: receipt });
+    const verified = spawnSync(process.execPath, [failureVerifier, receipt], {
+      encoding: "utf8",
+      env: credentialFreeEnvironment(),
+    });
+    assert.equal(verified.status, 0, verified.stderr);
+
+    const candidateTampered = join(temporary, "candidate-tampered-receipt");
+    await cp(receipt, candidateTampered, { recursive: true });
+    const readyPath = join(candidateTampered, "proposal-ready.json");
+    const ready = JSON.parse(await readFile(readyPath, "utf8"));
+    ready.candidate.events[0].id = "event-tampered-candidate";
+    await rewriteArtifactReference({
+      directory: candidateTampered,
+      field: "proposalReady",
+      path: "proposal-ready.json",
+      document: ready,
+      timeline,
+    });
+    const candidateRejected = spawnSync(
+      process.execPath,
+      [failureVerifier, candidateTampered],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.notEqual(candidateRejected.status, 0);
+
+    const recoveryTampered = join(temporary, "recovery-tampered-receipt");
+    await cp(receipt, recoveryTampered, { recursive: true });
+    const recoveryPath = join(recoveryTampered, "recovery-observation.json");
+    const recovery = JSON.parse(await readFile(recoveryPath, "utf8"));
+    recovery.disposition = "exact-base";
+    await rewriteArtifactReference({
+      directory: recoveryTampered,
+      field: "recoveryObservation",
+      path: "recovery-observation.json",
+      document: recovery,
+      timeline,
+    });
+    const recoveryRejected = spawnSync(
+      process.execPath,
+      [failureVerifier, recoveryTampered],
+      {
+        encoding: "utf8",
+        env: credentialFreeEnvironment(),
+      },
+    );
+    assert.notEqual(recoveryRejected.status, 0);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a lost admission response recovers the exact admitted state", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-lost-admit-response-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "after-initial-admission-response-lost" },
+    );
+    assert.notEqual(interrupted.status, 0);
+    assert.equal(await providerInvocationCount(counter), 1);
+    await assert.rejects(lstat(join(state, "initial-failure.json")), /ENOENT/u);
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved"],
+    );
+
+    const resumed = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(await providerInvocationCount(counter), 2);
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-admission");
+    assert.equal(JSON.parse(resumed.stdout).verified, true);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("recovery quarantines a valid but unexpected MCP mutation", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-diverged-mcp-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "before-initial-admission" },
+    );
+    assert.notEqual(interrupted.status, 0);
+    const capture = JSON.parse(
+      await readFile(join(state, "initial-adapter-execution.json"), "utf8"),
+    );
+    const { FileMcpRunStore } =
+      await import("../packages/mcp-server/dist/store.js");
+    const store = new FileMcpRunStore(join(state, "mcp"));
+    await store.append(
+      capture.baseRun.contract.id,
+      {
+        id: "event-unexpected-recovery-mutation",
+        type: "point.declared",
+        point: {
+          id: "unexpected-recovery-point",
+          contextId: "actual",
+          axisId: "unix-milliseconds",
+        },
+      },
+      capture.baseAudit.runDigest,
+      {
+        authorityId: capture.admissionPolicy.authorityId,
+        policyRef: capture.admissionPolicy.policyRef,
+        policyDigest: capture.binding.admissionPolicyDigest,
+      },
+    );
+
+    const resumed = run([
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      join(temporary, "artifact"),
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.notEqual(resumed.status, 0);
+    assert.match(
+      resumed.stderr,
+      /admission-recovery \(proposal\.mcp-state-diverged\)/,
+    );
+    assert.equal(await providerInvocationCount(counter), 1);
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "admission-recovery",
+      code: "proposal.mcp-state-diverged",
+    });
+    assert.equal(retained.failure.mcpAudit.admissions.length, 3);
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "state-diverged");
+    assert.equal(observation.invocation.role, "model");
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("concurrent failure recovery installs one terminal outcome", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-failure-race-"));
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(
+      adapter,
+      fixtureAdapter({ wrongInitialCoordinate: true, counterPath: counter }),
+    );
+    const interrupted = run(
+      [
+        "start",
+        "--input",
+        fixture,
+        "--state",
+        state,
+        "--config",
+        config,
+        "--allow-dirty",
+        "--",
+        process.execPath,
+        adapter,
+      ],
+      { failurePoint: "before-initial-failure-completion" },
+    );
+    assert.notEqual(interrupted.status, 0);
+    const resumeArguments = (suffix) => [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      join(temporary, `artifact-${suffix}`),
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const results = await Promise.all([
+      runAsync(resumeArguments("one")),
+      runAsync(resumeArguments("two")),
+    ]);
+    for (const result of results) {
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /proposal-semantics/);
+    }
+    assert.equal(await providerInvocationCount(counter), 1);
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      ["attempt-opened", "provider-invocation-reserved", "phase-failed"],
+    );
+    await assertFailedPhaseEvidence({
+      state,
+      phase: "initial",
+      stage: "proposal-semantics",
+      code: "proposal.semantics",
+    });
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -1293,7 +3161,7 @@ test("a failed correction attempt cannot invoke the provider again", async () =>
     ];
     const failed = run(resumeArguments);
     assert.notEqual(failed.status, 0);
-    assert.match(failed.stderr, /fixture correction failure/);
+    assert.match(failed.stderr, /adapter-execution \(adapter\.nonzero-exit\)/);
     assert.equal(
       (await readFile(counter, "utf8")).trim().split("\n").length,
       2,
@@ -1311,17 +3179,128 @@ test("a failed correction attempt cannot invoke the provider again", async () =>
         ["phase-failed", "correction"],
       ],
     );
+    const retainedFailure = await assertFailedPhaseEvidence({
+      state,
+      phase: "correction",
+      stage: "adapter-execution",
+      code: "adapter.nonzero-exit",
+    });
+    assert.match(
+      Buffer.from(
+        retainedFailure.capture.execution.stderr.base64,
+        "base64",
+      ).toString("utf8"),
+      /fixture correction failure/,
+    );
+    assert.doesNotMatch(failed.stderr, /fixture correction failure/);
+    assert.deepEqual(
+      retainedFailure.failure.mcpAudit.admissions.map(({ kind }) => kind),
+      ["direct-event", "direct-event", "model-proposal"],
+    );
 
     const repeated = run(resumeArguments);
     assert.notEqual(repeated.status, 0);
     assert.match(
       repeated.stderr,
-      /correction was attempted but does not have a completed result bundle/,
+      /adapter-execution \(adapter\.nonzero-exit\)/,
     );
     assert.equal(
       (await readFile(counter, "utf8")).trim().split("\n").length,
       2,
     );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("recovery reconstructs and fences a captured correction", async () => {
+  const temporary = await mkdtemp(
+    join(tmpdir(), "timeline-correction-recovery-"),
+  );
+  const state = join(temporary, "state");
+  const config = join(temporary, "config.json");
+  const adapter = join(temporary, "adapter.mjs");
+  const counter = join(temporary, "provider-invocations.txt");
+  const output = join(temporary, "artifact");
+  try {
+    await writeFile(config, `${JSON.stringify(modelConfig())}\n`);
+    await writeFile(adapter, fixtureAdapter({ counterPath: counter }));
+    const started = run([
+      "start",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ]);
+    assert.equal(started.status, 0, started.stderr);
+
+    const resumeArguments = [
+      "resume",
+      "--input",
+      fixture,
+      "--state",
+      state,
+      "--config",
+      config,
+      "--out",
+      output,
+      "--allow-dirty",
+      "--",
+      process.execPath,
+      adapter,
+    ];
+    const interrupted = run(resumeArguments, {
+      failurePoint: "after-correction-adapter-execution-install",
+    });
+    assert.notEqual(interrupted.status, 0);
+    assert.equal(await providerInvocationCount(counter), 2);
+
+    const recovered = run(resumeArguments);
+    assert.notEqual(recovered.status, 0);
+    assert.match(
+      recovered.stderr,
+      /admission-recovery \(proposal\.interrupted-before-admission\)/u,
+    );
+    assert.equal(await providerInvocationCount(counter), 2);
+    const retained = await assertFailedPhaseEvidence({
+      state,
+      phase: "correction",
+      stage: "admission-recovery",
+      code: "proposal.interrupted-before-admission",
+    });
+    assert.match(
+      retained.failure.proposalReadyDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.match(
+      retained.failure.phaseDecisionDigest,
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    assert.deepEqual(
+      retained.failure.mcpAudit.admissions.map(({ kind }) => kind),
+      ["direct-event", "direct-event", "model-proposal", "direct-event"],
+    );
+    const decision = JSON.parse(
+      await readFile(join(state, "correction-decision.json"), "utf8"),
+    );
+    assert.equal(decision.decision, "recovery-terminal");
+    assert.deepEqual(
+      (await readStateAttemptEntries(state)).map(({ kind }) => kind),
+      [
+        "attempt-opened",
+        "provider-invocation-reserved",
+        "phase-completed",
+        "provider-invocation-reserved",
+        "phase-failed",
+      ],
+    );
+    await assert.rejects(lstat(output), /ENOENT/u);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -1422,7 +3401,7 @@ test("pilot state inside the source checkout is rejected before creation", async
   }
 });
 
-test("a pre-sync phase result cannot authorize another provider call", async () => {
+test("a pre-sync phase result recovers from the exact admitted MCP state", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-presync-"));
   const state = join(temporary, "state");
   const output = join(temporary, "artifact");
@@ -1470,8 +3449,16 @@ test("a pre-sync phase result cannot authorize another provider call", async () 
       process.execPath,
       adapter,
     ]);
-    assert.notEqual(resumed.status, 0);
-    assert.equal(await providerInvocationCount(counter), 1);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(await providerInvocationCount(counter), 2);
+    const calls = (await readFile(counter, "utf8")).trim().split("\n");
+    assert.equal(calls.filter((id) => id.includes("initial")).length, 1);
+    assert.equal(calls.filter((id) => id.includes("correction")).length, 1);
+    const observation = JSON.parse(
+      await readFile(join(state, "initial-recovery-observation.json"), "utf8"),
+    );
+    assert.equal(observation.disposition, "exact-admission");
+    assert.equal(JSON.parse(resumed.stdout).verified, true);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -1957,12 +3944,322 @@ test("runtime binding detects changed compiled bytes", async () => {
       profile: "development-unbound-adapter",
       root: temporary,
     });
+    assert.ok(
+      binding.identity.files.some(
+        ({ path }) => path === "scripts/mcp-real-model-pilot-recovery.mjs",
+      ),
+    );
+    for (const path of [
+      "scripts/mcp-real-model-pilot-phase-decision.mjs",
+      "scripts/model-eval-output-schema.mjs",
+    ]) {
+      assert.ok(binding.identity.files.some((file) => file.path === path));
+    }
+    assert.ok(
+      binding.identity.packages.some(({ name }) => name === "typescript"),
+    );
+    assert.ok(
+      binding.identity.resolutions.some(
+        ({ from, specifier }) =>
+          from === "application" && specifier === "typescript",
+      ),
+    );
     const compiled = join(temporary, "packages/prototype/dist/index.js");
     await writeFile(compiled, `${await readFile(compiled, "utf8")}\n`);
     await assert.rejects(
       assertRealModelPilotRuntime(binding, timeline, { root: temporary }),
       /runtime identity changed/,
     );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("runtime binding rejects malformed rehashed identities", async () => {
+  const timeline = await loadTimeline();
+  const binding = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  assert.equal(
+    binding.identity.schema,
+    "covenant.timeline.real-model-pilot.runtime.v2",
+  );
+  assert.equal(validatePilotRuntime(binding), binding);
+  const cases = [
+    (identity) => {
+      identity.node.executableByteLength = 0;
+    },
+    (identity) => {
+      identity.files.push(structuredClone(identity.files[0]));
+    },
+    (identity) => {
+      identity.files[0].path = "../runtime-escape.mjs";
+    },
+    (identity) => {
+      identity.files = identity.files.filter(
+        ({ path }) => path !== "scripts/mcp-real-model-pilot.mjs",
+      );
+    },
+    (identity) => {
+      identity.packages[0].id = "npm:forged@1.0.0#deadbeef";
+    },
+    (identity) => {
+      const digest = `sha256:${"f".repeat(64)}`;
+      identity.packages.push({
+        id: `npm:unreachable-runtime@1.0.0#${digest.slice(7)}`,
+        name: "unreachable-runtime",
+        version: "1.0.0",
+        digest,
+        fileCount: 1,
+        byteLength: 1,
+      });
+    },
+    (identity) => {
+      identity.resolutions[0].to = "npm:missing@1.0.0#deadbeef";
+    },
+  ];
+  for (const mutate of cases) {
+    const invalid = structuredClone(binding);
+    mutate(invalid.identity);
+    invalid.digest = timeline.contentDigest(invalid.identity);
+    assert.throws(
+      () => validatePilotRuntime(invalid),
+      /runtime binding is invalid/u,
+    );
+  }
+});
+
+test("runtime binding validates the published v1 dependency baseline", async () => {
+  const timeline = await loadTimeline();
+  const current = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  const legacy = structuredClone(current);
+  legacy.identity.schema = "covenant.timeline.real-model-pilot.runtime.v1";
+  legacy.identity.resolutions = legacy.identity.resolutions.filter(
+    ({ from, specifier }) =>
+      from !== "application" || specifier !== "typescript",
+  );
+  const reachable = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of legacy.identity.resolutions) {
+      if (edge.from !== "application" && !reachable.has(edge.from)) continue;
+      if (reachable.has(edge.to)) continue;
+      reachable.add(edge.to);
+      changed = true;
+    }
+  }
+  legacy.identity.packages = legacy.identity.packages.filter(({ id }) =>
+    reachable.has(id),
+  );
+  legacy.identity.resolutions = legacy.identity.resolutions.filter(
+    ({ from, to }) =>
+      reachable.has(to) && (from === "application" || reachable.has(from)),
+  );
+  legacy.digest = timeline.contentDigest(legacy.identity);
+
+  assert.equal(validatePilotRuntime(legacy), legacy);
+});
+
+test("runtime binding rejects a missing required application dependency", async () => {
+  const timeline = await loadTimeline();
+  const binding = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  const invalid = structuredClone(binding);
+  invalid.identity.resolutions = invalid.identity.resolutions.filter(
+    ({ from, specifier }) =>
+      from !== "application" || specifier !== "@covenant-org/timeline",
+  );
+  const reachable = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of invalid.identity.resolutions) {
+      if (edge.from !== "application" && !reachable.has(edge.from)) continue;
+      if (reachable.has(edge.to)) continue;
+      reachable.add(edge.to);
+      changed = true;
+    }
+  }
+  invalid.identity.packages = invalid.identity.packages.filter(({ id }) =>
+    reachable.has(id),
+  );
+  invalid.identity.resolutions = invalid.identity.resolutions.filter(
+    ({ from, to }) =>
+      reachable.has(to) && (from === "application" || reachable.has(from)),
+  );
+  invalid.digest = timeline.contentDigest(invalid.identity);
+
+  assert.throws(
+    () => validatePilotRuntime(invalid),
+    /runtime binding is invalid/u,
+  );
+  await assert.rejects(
+    assertPilotRuntime(invalid),
+    /runtime binding is invalid/u,
+  );
+});
+
+test("runtime binding rejects unbound module-loading syntax", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-closure-"));
+  try {
+    await copyRuntimeRoot(temporary);
+    const sourcePath = join(temporary, "scripts/strict-json.mjs");
+    const source = await readFile(sourcePath, "utf8");
+    const cases = [
+      {
+        name: "compact ESM import",
+        source:
+          'import{missing}from"./runtime-closure-bypass.mjs"; void missing;',
+        error: /imports unbound local module/u,
+      },
+      {
+        name: "createRequire loader",
+        source: [
+          'import{createRequire as makeRequire}from"node:module";',
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /imports unbound local module/u,
+      },
+      {
+        name: "namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /imports unbound local module/u,
+      },
+      {
+        name: "computed namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          'const localLoader = Module["createRequire"](import.meta.url);',
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "destructured namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          "const { createRequire: makeRequire } = Module;",
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "aliased namespace createRequire loader",
+        source: [
+          'import * as Module from "node:module";',
+          "const makeRequire = Module.createRequire;",
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "aliased named createRequire loader",
+        source: [
+          'import { createRequire } from "node:module";',
+          "const makeRequire = createRequire;",
+          "const localLoader = makeRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported createRequire binding/u,
+      },
+      {
+        name: "process built-in module loader",
+        source: [
+          'const Module = process.getBuiltinModule("node:module");',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported built-in module loading/u,
+      },
+      {
+        name: "destructured process built-in module loader",
+        source: [
+          "const { getBuiltinModule } = process;",
+          'const Module = getBuiltinModule("node:module");',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported built-in module loading/u,
+      },
+      {
+        name: "dynamic node module loader",
+        source: [
+          'const { createRequire } = await import("node:module");',
+          "const localLoader = createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported dynamic node:module import/u,
+      },
+      {
+        name: "named Module export loader",
+        source: [
+          'import { Module } from "node:module";',
+          "const localLoader = Module.createRequire(import.meta.url);",
+          'localLoader("./runtime-closure-bypass.mjs");',
+        ].join("\n"),
+        error: /unsupported node:module import/u,
+      },
+      {
+        name: "dynamic eval loader",
+        source: "await eval('import(\"./runtime-closure-bypass.mjs\")');",
+        error: /unsupported dynamic code construction/u,
+      },
+      {
+        name: "Function constructor loader",
+        source:
+          "await Function('return import(\"./runtime-closure-bypass.mjs\")')();",
+        error: /unsupported dynamic code construction/u,
+      },
+      {
+        name: "exported CommonJS loader",
+        source: [
+          'import { createRequire } from "node:module";',
+          "export const localLoader = createRequire(import.meta.url);",
+        ].join("\n"),
+        error: /exports a CommonJS loader/u,
+      },
+      {
+        name: "computed CommonJS require",
+        source: [
+          'import{createRequire as makeRequire}from"node:module";',
+          "const localLoader = makeRequire(import.meta.url);",
+          'const localPath = "./runtime-closure-bypass.mjs";',
+          "localLoader(localPath);",
+        ].join("\n"),
+        error: /computed CommonJS require/u,
+      },
+      {
+        name: "computed dynamic import",
+        source: [
+          'const localPath = "./runtime-closure-bypass.mjs";',
+          "await import(localPath);",
+        ].join("\n"),
+        error: /unsupported computed dynamic import/u,
+      },
+    ];
+
+    for (const item of cases) {
+      await writeFile(sourcePath, `${source}\n${item.source}\n`);
+      await assert.rejects(
+        capturePilotRuntime({
+          profile: "development-unbound-adapter",
+          root: temporary,
+        }),
+        item.error,
+        item.name,
+      );
+    }
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -1996,6 +4293,7 @@ test("runtime binding follows the resolved workspace package target", async (t) 
     });
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
     await symlink(first, link, "dir");
+    await linkRuntimeDependencies(resolutionRoot);
     const binding = await capturePilotRuntime({
       profile: "development-unbound-adapter",
       root: runtimeRoot,
@@ -2015,7 +4313,30 @@ test("runtime binding follows the resolved workspace package target", async (t) 
   }
 });
 
-test("runtime binding detects changed transitive dependency bytes", async () => {
+test("runtime binding does not borrow a missing dependency from the checkout", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-isolated-"));
+  try {
+    const runtimeRoot = join(temporary, "runtime");
+    const resolutionRoot = join(temporary, "resolution");
+    await copyRuntimeRoot(runtimeRoot);
+    await mkdir(resolutionRoot, { recursive: true });
+    await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    await linkRuntimeDependencies(resolutionRoot, { skip: ["zod"] });
+
+    await assert.rejects(
+      capturePilotRuntime({
+        profile: "development-unbound-adapter",
+        root: runtimeRoot,
+        resolutionRoot,
+      }),
+      /(?:Cannot find module 'zod'|could not resolve runtime package zod)/u,
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("runtime binding detects changed source-derived dependency bytes", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-dependency-"));
   try {
     const runtimeRoot = join(temporary, "runtime");
@@ -2028,12 +4349,23 @@ test("runtime binding detects changed transitive dependency bytes", async () => 
       "export const value = 1;\n",
     );
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    await linkRuntimeDependencies(resolutionRoot);
+    const sourcePath = join(runtimeRoot, "scripts/strict-json.mjs");
+    await writeFile(
+      sourcePath,
+      `${await readFile(sourcePath, "utf8")}\nimport "example-runtime";\n`,
+    );
     const binding = await capturePilotRuntime({
       profile: "development-unbound-adapter",
       root: runtimeRoot,
       resolutionRoot,
-      dependencies: ["example-runtime"],
     });
+    assert.ok(
+      binding.identity.resolutions.some(
+        ({ from, specifier }) =>
+          from === "application" && specifier === "example-runtime",
+      ),
+    );
     await writeFile(join(dependency, "index.js"), "export const value = 2;\n");
 
     await assert.rejects(
@@ -2081,6 +4413,7 @@ test("bootstrap rejects a runtime mutation during dynamic loading", async () => 
       "export const value = 1;\n",
     );
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    await linkRuntimeDependencies(resolutionRoot);
     const runtimeOptions = {
       profile: "development-unbound-adapter",
       root: runtimeRoot,
@@ -2145,6 +4478,42 @@ async function copyRuntimeRoot(destination) {
   ]);
 }
 
+async function linkRuntimeDependencies(destination, { skip = [] } = {}) {
+  const skipped = new Set(skip);
+  for (const dependency of runtimeDependencies) {
+    if (skipped.has(dependency)) continue;
+    const target = join(destination, "node_modules", dependency);
+    try {
+      await lstat(target);
+      continue;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await mkdir(dirname(target), { recursive: true });
+    const source = await resolveRuntimeDependency(dependency);
+    await symlink(
+      source,
+      target,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  }
+}
+
+async function resolveRuntimeDependency(dependency) {
+  for (const base of [
+    root,
+    join(root, "packages/mcp-server"),
+    join(root, "packages/prototype"),
+  ]) {
+    try {
+      return await realpath(join(base, "node_modules", dependency));
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error(`test runtime dependency is not installed: ${dependency}`);
+}
+
 async function fakePackage(rootPath, relativePath, name, source) {
   const directory = join(rootPath, relativePath);
   await mkdir(directory, { recursive: true });
@@ -2159,7 +4528,7 @@ async function fakePackage(rootPath, relativePath, name, source) {
 }
 
 function run(args, { failurePoint, environment = {} } = {}) {
-  return spawnSync(process.execPath, [driver, ...args], {
+  const result = spawnSync(process.execPath, [driver, ...args], {
     cwd: root,
     encoding: "utf8",
     env: {
@@ -2170,15 +4539,18 @@ function run(args, { failurePoint, environment = {} } = {}) {
     },
     timeout: 120_000,
   });
+  if (result.error) throw result.error;
+  return result;
 }
 
-function runAsync(args) {
+function runAsync(args, { environment = {} } = {}) {
   return new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, [driver, ...args], {
       cwd: root,
       env: {
         ...process.env,
         TIMELINE_PILOT_SENTINEL_SECRET: "must-not-reach-adapter",
+        ...environment,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -2197,6 +4569,19 @@ function runAsync(args) {
       resolveResult({ status, signal, stdout, stderr });
     });
   });
+}
+
+async function waitForFile(file) {
+  for (let attempt = 0; attempt < 6_000; attempt += 1) {
+    try {
+      await lstat(file);
+      return;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  }
+  throw new Error(`timed out waiting for ${file}`);
 }
 
 function verify(directory, cwd, { requireRuntimeMatch = false } = {}) {
@@ -2309,6 +4694,43 @@ process.stdout.write(JSON.stringify(proposal) + "\\n");
 `;
 }
 
+function rawFailureAdapter(mode, counterPath) {
+  const behavior = {
+    schema: 'process.stdout.write("{}\\n");',
+    "null-json": 'process.stdout.write("null\\n");',
+    "malformed-json": 'process.stdout.write("{\\n");',
+    "invalid-framing": 'process.stdout.write("{}\\n{}\\n");',
+    "error-envelope":
+      'process.stdout.write(JSON.stringify({ schema: "covenant.timeline.model-eval.adapter-error.v1", error: { message: "private-envelope-secret" } }) + "\\n");',
+    "invalid-utf8": "process.stdout.write(Buffer.from([0xff, 0x0a]));",
+    "nonzero-exit": `
+process.stdout.write("private-provider-stdout\\n");
+process.stderr.write("private-provider-stderr\\n");
+process.exitCode = 23;`,
+    "exact-stdout-boundary": `process.stdout.write(Buffer.alloc(${REAL_MODEL_PILOT_LIMITS.adapterBytes}, 0x61));`,
+    "exact-stderr-boundary": `
+process.stdout.write("{}\\n");
+process.stderr.write(Buffer.alloc(${REAL_MODEL_PILOT_LIMITS.adapterBytes}, 0x62));`,
+    "oversized-stdout": `process.stdout.write(Buffer.alloc(${REAL_MODEL_PILOT_LIMITS.adapterBytes + 64 * 1024}, 0x61));`,
+    "oversized-stderr": `
+process.stdout.write("{}\\n");
+process.stderr.write(Buffer.alloc(${REAL_MODEL_PILOT_LIMITS.adapterBytes + 64 * 1024}, 0x62));`,
+    "aggregate-output-limit": `
+process.stdout.write(Buffer.alloc(${REAL_MODEL_PILOT_LIMITS.adapterBytes + 128 * 1024}, 0x61));
+process.stderr.write(Buffer.alloc(${REAL_MODEL_PILOT_LIMITS.adapterBytes + 128 * 1024}, 0x62));`,
+  }[mode];
+  if (!behavior) throw new Error("unknown raw adapter failure mode");
+  return `
+import { appendFileSync, readFileSync } from "node:fs";
+const request = JSON.parse(readFileSync(0, "utf8"));
+if (process.env.TIMELINE_PILOT_SENTINEL_SECRET) {
+  throw new Error("must-not-reach-adapter");
+}
+appendFileSync(${JSON.stringify(counterPath)}, request.requestId + "\\n");
+${behavior}
+`;
+}
+
 function credentialFreeEnvironment() {
   const environment = {};
   for (const name of [
@@ -2338,6 +4760,25 @@ async function rewriteManifestEntry(directory, path, bytes) {
   await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
 }
 
+async function rewriteArtifactReference({
+  directory,
+  field,
+  path,
+  document,
+  timeline,
+}) {
+  const documentBytes = Buffer.from(`${timeline.canonicalJson(document)}\n`);
+  await writeFile(join(directory, path), documentBytes);
+  await rewriteManifestEntry(directory, path, documentBytes);
+
+  const artifactPath = join(directory, "failed-attempt.json");
+  const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
+  artifact[field].digest = timeline.contentDigest(document);
+  const artifactBytes = Buffer.from(`${timeline.canonicalJson(artifact)}\n`);
+  await writeFile(artifactPath, artifactBytes);
+  await rewriteManifestEntry(directory, "failed-attempt.json", artifactBytes);
+}
+
 async function readStateAttemptEntries(state) {
   const directory = join(state, "attempt-ledger");
   const names = (await readdir(directory)).sort();
@@ -2346,6 +4787,64 @@ async function readStateAttemptEntries(state) {
       JSON.parse(await readFile(join(directory, name), "utf8")),
     ),
   );
+}
+
+async function assertFailedPhaseEvidence({ state, phase, stage, code }) {
+  const timeline = await loadTimeline();
+  const capturePath = join(state, `${phase}-adapter-execution.json`);
+  const failurePath = join(state, `${phase}-failure.json`);
+  const captureText = await readFile(capturePath, "utf8");
+  const failureText = await readFile(failurePath, "utf8");
+  const capture = JSON.parse(captureText);
+  const failure = JSON.parse(failureText);
+  assert.equal(captureText, `${timeline.canonicalJson(capture)}\n`);
+  assert.equal(failureText, `${timeline.canonicalJson(failure)}\n`);
+  assert.equal(capture.phase, phase);
+  assert.equal(failure.phase, phase);
+  assert.equal(failure.failure.stage, stage);
+  assert.equal(failure.failure.code, code);
+  assert.equal(failure.adapterExecutionDigest, timeline.contentDigest(capture));
+  assert.equal(
+    capture.schema,
+    "covenant.timeline.real-model-pilot.adapter-execution.v2",
+  );
+  assert.equal(
+    failure.schema,
+    "covenant.timeline.real-model-pilot.phase-failure.v2",
+  );
+  assert.deepEqual(Object.keys(failure.failure).sort(), ["code", "stage"]);
+  assert.equal(
+    capture.redactedRequest.input.evidence.every(
+      (entry) => !Object.hasOwn(entry, "text"),
+    ),
+    true,
+  );
+  assert.equal(typeof capture.redactedRequest.prompt.digest, "string");
+  for (const stream of [capture.execution.stdout, capture.execution.stderr]) {
+    const bytes = Buffer.from(stream.base64, "base64");
+    assert.equal(bytes.byteLength, stream.byteLength);
+    assert.equal(sha256(bytes), stream.digest);
+  }
+  const entries = await readStateAttemptEntries(state);
+  const terminal = entries.at(-1);
+  assert.equal(terminal.kind, "phase-failed");
+  assert.equal(
+    terminal.schema,
+    "covenant.timeline.formal-attempt-ledger.entry.v2",
+  );
+  assert.equal(terminal.failureStage, stage);
+  assert.equal(terminal.failureCode, code);
+  assert.equal(
+    terminal.adapterExecutionDigest,
+    timeline.contentDigest(capture),
+  );
+  assert.equal(terminal.failureBundleDigest, timeline.contentDigest(failure));
+  if (process.platform !== "win32") {
+    assert.equal((await lstat(capturePath)).mode & 0o777, 0o600);
+    assert.equal((await lstat(failurePath)).mode & 0o777, 0o600);
+  }
+  await assert.rejects(lstat(join(state, `${phase}-result.json`)), /ENOENT/u);
+  return { capture, failure, terminal };
 }
 
 async function providerInvocationCount(path) {

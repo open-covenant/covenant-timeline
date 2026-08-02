@@ -12,6 +12,7 @@ import {
   createModelEvalValidators,
   digestFile,
 } from "./model-interface-eval.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import {
   readSourceState,
   runtimeStateDigest,
@@ -532,10 +533,7 @@ async function main() {
   process.stdout.write(`${canonicalJson(gate)}\n`);
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

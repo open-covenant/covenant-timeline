@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   canonicalJson,
   parseRunDocumentV0Alpha3,
@@ -16,6 +14,7 @@ import {
   loadBenchmarkCases,
   readJsonLines,
 } from "./model-interface-eval.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import {
   projectedStateSignature,
   scoreModelInterfaceEval,
@@ -385,10 +384,7 @@ async function main() {
   process.stdout.write(`${canonicalJson(diagnostics)}\n`);
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

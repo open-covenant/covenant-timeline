@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { pathToFileURL } from "node:url";
 import { TextDecoder } from "node:util";
 import {
   canonicalJson,
   contentDigest,
 } from "../packages/prototype/dist/index.js";
 import { createOpenAIResponseFormat } from "./openai-responses-model-eval-schema.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
@@ -676,9 +676,7 @@ export async function runAdapter({
   return 0;
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  pathToFileURL(process.argv[1]).href === import.meta.url;
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   process.exitCode = await runAdapter();

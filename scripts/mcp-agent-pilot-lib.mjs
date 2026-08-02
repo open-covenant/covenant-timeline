@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { lstat, open, readFile, realpath, writeFile } from "node:fs/promises";
 import {
@@ -23,6 +23,15 @@ export const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
 );
+
+export function isMain(moduleUrl, entry = process.argv[1]) {
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
 
 export const MCP_AGENT_PILOT_LIMITS = Object.freeze({
   maxArtifactBytes: 64 * 1024,

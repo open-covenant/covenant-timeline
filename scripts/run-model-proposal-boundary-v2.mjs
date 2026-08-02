@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { claimModelProposalBoundaryV2Attempt } from "./evaluate-model-proposal-boundary-v2.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { runModelProposalEval } from "./run-model-proposal-eval.mjs";
 
 export async function runModelProposalBoundaryV2Attempt(
@@ -84,10 +83,7 @@ async function main() {
   );
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

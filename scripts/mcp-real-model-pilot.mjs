@@ -23,7 +23,6 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { fileURLToPath } from "node:url";
 import { connectMcpClient } from "./mcp-agent-pilot.mjs";
 import {
   assertAttemptLedgerBinding,
@@ -37,6 +36,7 @@ import {
 import {
   decodeUtf8,
   credentialFreeEnvironment,
+  isMain,
   loadMcpClient,
   readBoundedExactFile,
   repositoryRoot,
@@ -3334,9 +3334,7 @@ function parseArguments(argv) {
   return options;
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   try {

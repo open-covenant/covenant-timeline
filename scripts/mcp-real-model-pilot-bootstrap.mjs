@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   assertPilotRuntime,
   capturePilotRuntime,
 } from "./mcp-real-model-pilot-runtime.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 
 function parseArguments(argv) {
   const separator = argv.indexOf("--");
@@ -73,10 +72,7 @@ export async function loadBoundPilot(
   return implementation;
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
       `mcp-real-model-pilot: ${error instanceof Error ? error.message : "failed"}\n`,

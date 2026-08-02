@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { mcpReleaseEvidenceProfile } from "./release-evidence-profiles.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -926,10 +927,7 @@ function git(args) {
   });
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   const result = await checkReleaseEvidence();
   if (result.errors.length > 0) {
     console.error(result.errors.join("\n"));

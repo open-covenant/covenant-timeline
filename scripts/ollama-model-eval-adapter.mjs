@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { pathToFileURL } from "node:url";
 import { TextDecoder } from "node:util";
 import {
   canonicalJson,
   contentDigest,
 } from "../packages/prototype/dist/index.js";
 import { createModelEvalOutputSchema } from "./model-eval-output-schema.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 export const OLLAMA_TAGS_ENDPOINT = "http://127.0.0.1:11434/api/tags";
@@ -772,9 +772,7 @@ export async function runAdapter({
   return 0;
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  pathToFileURL(process.argv[1]).href === import.meta.url;
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   process.exitCode = await runAdapter();

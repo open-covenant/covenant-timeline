@@ -150,6 +150,9 @@
   payloads under normalized metadata and a stable top-level directory.
 - Resolve root-script entrypoint identity through canonical filesystem paths so
   symlinked and aliased invocations cannot silently exit without running.
+- Treat the removal of a publisher's staging hard link as a stable exact read
+  when the inode, size, contents, and modification time are unchanged, allowing
+  concurrent recovery processes to converge without accepting file mutation.
 - Describe MCP input semantics in tool discovery, cap each catalog page at
   eight runs, bind cursors to a catalog generation, cap reference-store
   configuration at its advertised ceilings, and make the source checkout a

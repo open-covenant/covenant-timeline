@@ -261,14 +261,8 @@ export async function readBoundedExactFile(
     ]);
     if (
       offset !== expectedSize ||
-      after.dev !== before.dev ||
-      after.ino !== before.ino ||
-      after.size !== before.size ||
-      after.mtimeNs !== before.mtimeNs ||
-      after.ctimeNs !== before.ctimeNs ||
-      !current.isFile() ||
-      current.dev !== before.dev ||
-      current.ino !== before.ino
+      !sameExactFileVersion(before, after) ||
+      !sameExactFileVersion(before, current)
     ) {
       throw new Error(
         `${label} exceeds its byte limit or changed while reading`,
@@ -301,14 +295,8 @@ export async function readBoundedExactFile(
       lstat(absolute, { bigint: true }),
     ]);
     if (
-      validated.dev !== before.dev ||
-      validated.ino !== before.ino ||
-      validated.size !== before.size ||
-      validated.mtimeNs !== before.mtimeNs ||
-      validated.ctimeNs !== before.ctimeNs ||
-      !validatedPath.isFile() ||
-      validatedPath.dev !== before.dev ||
-      validatedPath.ino !== before.ino
+      !sameExactFileVersion(before, validated) ||
+      !sameExactFileVersion(before, validatedPath)
     ) {
       throw new Error(`${label} changed while being validated`);
     }
@@ -327,6 +315,34 @@ export async function readBoundedExactFile(
   } finally {
     await handle.close();
   }
+}
+
+function sameExactFileVersion(before, candidate) {
+  if (
+    !candidate.isFile() ||
+    candidate.dev !== before.dev ||
+    candidate.ino !== before.ino ||
+    candidate.size !== before.size ||
+    candidate.mtimeNs !== before.mtimeNs ||
+    candidate.mode !== before.mode ||
+    candidate.uid !== before.uid ||
+    candidate.gid !== before.gid
+  ) {
+    return false;
+  }
+  if (
+    candidate.ctimeNs === before.ctimeNs &&
+    candidate.nlink === before.nlink
+  ) {
+    return true;
+  }
+
+  // Atomic publishers expose a hard link, then remove their staging link.
+  return (
+    before.nlink === 2n &&
+    candidate.nlink === 1n &&
+    candidate.ctimeNs >= before.ctimeNs
+  );
 }
 
 export function credentialFreeEnvironment(source = process.env) {

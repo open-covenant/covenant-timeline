@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import {
   cp,
   chmod,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -147,9 +148,38 @@ test("bounded exact reads reject hostile and replaced inputs", async (t) => {
     );
 
     if (process.platform === "win32") {
-      t.diagnostic("symlink and FIFO checks are POSIX-only");
+      t.diagnostic(
+        "hard-link cleanup, symlink, and FIFO checks are POSIX-only",
+      );
       return;
     }
+    const staged = join(temporary, "staged.json");
+    const published = join(temporary, "published.json");
+    await writeFile(staged, "published\n");
+    await link(staged, published);
+    const publishedBytes = await readBoundedExactFile(
+      published,
+      64,
+      "published input",
+      {
+        async validate() {
+          await rm(staged);
+        },
+      },
+    );
+    assert.equal(publishedBytes.toString("utf8"), "published\n");
+
+    const remoded = join(temporary, "remoded.json");
+    await writeFile(remoded, "same\n", { mode: 0o600 });
+    await assert.rejects(
+      readBoundedExactFile(remoded, 64, "remoded input", {
+        async validate() {
+          await chmod(remoded, 0o640);
+        },
+      }),
+      /changed while being validated/u,
+    );
+
     const target = join(temporary, "target.json");
     const linked = join(temporary, "linked.json");
     await writeFile(target, "{}\n");

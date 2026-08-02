@@ -24,7 +24,7 @@ Generate a deterministic admitted correction-and-replay artifact before
 connecting a client:
 
 ```sh
-pnpm mcp:demo > timeline-demo.json
+pnpm --silent mcp:demo > timeline-demo.json
 ```
 
 The artifact contains the embedded evidence and admission policy, the portable

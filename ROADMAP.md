@@ -120,8 +120,11 @@ invocation and was not retried. Its v1 terminal record did not retain the
 rejected adapter output. The source implementation tests bounded raw
 adapter-stream retention, closed failure classifications, phase-decision
 binding, compare-and-swap recovery fencing, and redacted portable receipts. No
-public formal failure has exercised that contract, and no later contract can
-retroactively repair the earlier state.
+later contract can retroactively repair the earlier state. A separate
+[credential-preflight exercise](https://github.com/open-covenant/covenant-timeline/releases/tag/failure-receipt-exercise-v2-2026-08-02)
+now exercises v2 retention, export, and offline verification. The credential
+absence and pre-request exit are maintainer-observed procedural evidence from
+the bound adapter control flow, not claims proved by the portable receipt.
 
 [Published successful attempt 2](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02)
 repeated the complete source-built path from the merged revision and verified

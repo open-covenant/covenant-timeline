@@ -124,6 +124,40 @@ and an intervening replication failed during correction. This is not evidence
 of independent operation, live delayed-evidence handling, model accuracy, or
 general reliability.
 
+## Published failure-receipt exercise
+
+The
+[failure-receipt exercise](https://github.com/open-covenant/covenant-timeline/releases/tag/failure-receipt-exercise-v2-2026-08-02)
+ran on 2026-08-02 from the merged runtime v3 source. It invoked the exact
+source-bound OpenAI adapter with `OPENAI_API_KEY` explicitly absent, as observed
+by the maintainer. Under the bound adapter control flow, that condition rejects
+the invocation before the provider-request path.
+
+| Field                                 | Result                                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| Source                                | `f65e1e73010285f1c0119ded92c72c5bce7e9ead`                                    |
+| Invocation condition                  | Provider credential absent; maintainer-observed                               |
+| Failure                               | `adapter-output` / `adapter.error-envelope`                                   |
+| Runtime identity                      | v3; `sha256:a2722370908de44f2bec63c02314150a7820ba6fa7e9f630505843eed8d33652` |
+| Portable verification                 | `verified: true`; raw adapter streams committed but undisclosed               |
+| Archive SHA-256                       | `2cc39aeac313d4894f2840f94163b06a957f43e145eeb4471d010acba9334711`            |
+| Provider requests and model inference | None; maintainer-observed and supported by bound control flow                 |
+
+The annotated tag resolves to the recorded source revision. Two separate
+maintainer archive builds were byte-identical. The archive uses normalized
+owner, group, mode, timestamp, path, and gzip metadata. Its five files passed
+the exporter, fresh-download checksum, credential and private-path scan, and
+offline verifier.
+
+The portable verifier checks the source and runtime bindings, input and policy
+digests, attempt trajectory, closed failure classification, and raw-stream
+commitments. Because the raw streams are not disclosed, it does not reconstruct
+the credential-preflight detail from those bytes. The missing credential and
+absence of a provider request are procedural evidence supported by the bound
+adapter control flow. This exercise demonstrates the failure-retention path;
+it is not evidence of provider-failure behavior, model execution, or workflow
+reliability.
+
 ## Formal run
 
 Use a clean committed checkout. Generate a source-bound OpenAI proposal

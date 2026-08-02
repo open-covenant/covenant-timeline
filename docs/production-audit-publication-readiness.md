@@ -3,13 +3,13 @@
 Date: 2026-08-02
 
 Implementation revision:
-`36b70989fb47494479e701efd5c2d8e30cfb3933`. The audit text is finalized in a
-following documentation-only commit.
+`f65e1e73010285f1c0119ded92c72c5bce7e9ead`. Later changes covered by this
+audit are limited to documentation and CI trigger configuration.
 
 ## Verification
 
 `pnpm verify` passed from a clean checkout at the implementation revision. The
-run included 93 formal workflow and recovery tests, the model-interface and
+run included 94 formal workflow and recovery tests, the model-interface and
 model-proposal suites, schema and conformance checks, release and release
 evidence validation, lint, type checking, package coverage, SBOM generation,
 and installed-artifact checks for both the core and MCP packages. Both the full
@@ -24,6 +24,9 @@ and in eight consecutive stress repetitions. Exact file reads accept only the
 publisher cleanup transition from two hard links to one when the inode, size,
 contents, modification time, mode, owner, and group remain unchanged; file
 replacement, content mutation, and permission mutation still fail closed.
+The one-command MCP demo also produced canonical JSON with no build output,
+matched the clean installed package byte for byte, reloaded the admitted run
+from disk, and verified its historical and corrected receipts.
 
 ## Decision
 
@@ -38,9 +41,12 @@ successful artifacts support the narrower composition claim. They were run by
 the same maintainer against the same staged scenario, with a failed replication
 between them, so they do not establish general reliability. The failed
 replication exposed missing rejection-output retention in the v1 formal-attempt
-record; that state cannot be repaired retroactively. Publication also remains
-blocked on releasing and registry-verifying the exact proposal-aware core and
-MCP packages.
+record; that state cannot be repaired retroactively. The v2 retention path is
+now publicly exercised by a maintainer-operated credential preflight. The
+portable evidence verifies the retained failure path; credential absence and
+the pre-request exit are procedural evidence from maintainer observation and
+bound control flow. Publication remains blocked on releasing and
+registry-verifying the exact proposal-aware core and MCP packages.
 
 This audit uses a narrower release claim:
 
@@ -58,15 +64,15 @@ extraction.
 
 ## Release gates
 
-| Gate                                 | Status             | Evidence or remaining requirement                                                                                                                                                                                                                                   |
-| ------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Installable proposal-aware core      | Blocked            | A new core alpha containing the proposal compiler, verified from an empty directory                                                                                                                                                                                 |
-| Installable MCP surface              | Blocked            | Registry-only install against the released core, restart/correction/proposal smoke, and release evidence                                                                                                                                                            |
-| Production proposal boundary         | Failed             | The preregistered v2 gate returned `kill`; free-form model proposals cannot be the default ingestion path                                                                                                                                                           |
-| Retained composed-workflow artifact  | Demonstrated twice | [Attempt 1](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01) and [attempt 2](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02); not reliability evidence |
-| Failed-attempt evidence retention    | Source tested      | Source retains bounded adapter output, closed rejection codes, phase-decision binding, compare-and-swap recovery-fence state, and a redacted receipt; public exercise remains open                                                                                  |
-| Independent operation                | Open               | A qualifying external operator owns evidence, admission, persistence, and workflow execution                                                                                                                                                                        |
-| Cross-language temporal verification | Partial            | A repository-maintained Python profile verifies consistency and bounds receipts; relation cases and independent maintenance remain open                                                                                                                             |
+| Gate                                 | Status             | Evidence or remaining requirement                                                                                                                                                                                                                                        |
+| ------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Installable proposal-aware core      | Blocked            | A new core alpha containing the proposal compiler, verified from an empty directory                                                                                                                                                                                      |
+| Installable MCP surface              | Blocked            | Registry-only install against the released core, restart/correction/proposal smoke, and release evidence                                                                                                                                                                 |
+| Production proposal boundary         | Failed             | The preregistered v2 gate returned `kill`; free-form model proposals cannot be the default ingestion path                                                                                                                                                                |
+| Retained composed-workflow artifact  | Demonstrated twice | [Attempt 1](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01) and [attempt 2](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02); not reliability evidence      |
+| Failed-attempt evidence retention    | Publicly exercised | [Credential-preflight exercise](https://github.com/open-covenant/covenant-timeline/releases/tag/failure-receipt-exercise-v2-2026-08-02) verifies v2 retention and export; the pre-request exit is procedural evidence from maintainer observation and bound control flow |
+| Independent operation                | Open               | A qualifying external operator owns evidence, admission, persistence, and workflow execution                                                                                                                                                                             |
+| Cross-language temporal verification | Partial            | A repository-maintained Python profile verifies consistency and bounds receipts; relation cases and independent maintenance remain open                                                                                                                                  |
 
 ## P0 findings
 
@@ -177,11 +183,16 @@ own bytes why the correction failed.
 
 This does not invalidate either published successful attempt. The intervening
 failure prevents the two completed artifacts from being presented as evidence
-of general reliability and leaves failed-attempt demonstration open for a
-future run. The current v2 source
-retains bounded raw output before parsing, binds a closed rejection code and
-the observed MCP state into the terminal ledger entry, and exports a redacted
-portable receipt. It cannot retroactively repair the missing v1 output.
+of general reliability, and its own failure reason remains unauditable. The
+current v2 source retains bounded raw output before parsing, binds a closed
+rejection code and the observed MCP state into the terminal ledger entry, and
+exports a redacted portable receipt. A public
+[credential-preflight exercise](https://github.com/open-covenant/covenant-timeline/releases/tag/failure-receipt-exercise-v2-2026-08-02)
+now verifies that path from a fresh download. The maintainer observed the
+credential-free invocation, and the bound adapter control flow exits before
+its provider-request path. The receipt does not independently prove either
+procedural detail. This is path evidence, not evidence of provider-failure
+behavior, and it cannot retroactively repair the missing v1 output.
 
 The current candidate emits runtime identity v3. That identity requires
 the complete versioned file inventory and every formal application dependency,
@@ -213,8 +224,6 @@ but not a second conforming implementation or independent interoperability.
 
 - Ordinary onboarding must use one exact core version and one exact MCP
   version, not a mix of registry packages and source-only features.
-- A clean-machine command must leave behind the complete portable artifact it
-  verifies.
 - The release shadow audit should be mirrored by a content-addressed public-run
   manifest and continuously reverified.
 - Calendar and time-zone normalization remains a host profile. Software
@@ -240,11 +249,11 @@ These are not blockers for an honest engineering-alpha release:
 
 An engineering-alpha post is supportable only when all of these are true:
 
-Items 3 and 4 pass. Item 5 has two existence demonstrations, not evidence of
-general reliability. Item 6 is implemented in source but remains open as public
-evidence from a formal v2 failure. Item 7 remains a constraint on the final
-post. Items 1 and 2 remain blocked on the deferred npm publication and
-registry-only verification.
+Items 3, 4, and 6 pass. Item 5 has two existence demonstrations, not evidence
+of general reliability. Item 6 is a maintainer-operated exercise classified
+procedurally as credential preflight, not a provider or model failure. Item 7
+remains a constraint on the final post. Items 1 and 2 remain blocked on the
+deferred npm publication and registry-only verification.
 
 1. A new user can install the exact core and MCP versions from npm in an empty
    directory.
@@ -258,10 +267,10 @@ registry-only verification.
    normalized by the maintainer, explicit host admission, separate process
    phases, a staged correction, historical replay, and network-independent
    verification.
-6. A future failed formal attempt demonstrates the v2 path by durably binding
+6. A public failed formal exercise demonstrates the v2 path by durably binding
    rejected adapter output and a stable rejection reason before its terminal
-   ledger entry, without enabling a provider retry, then publishes its redacted
-   receipt.
+   ledger entry, without enabling a provider retry, then publishes and verifies
+   its redacted receipt.
 7. The post reports both negative model gates and does not claim a
    model-accuracy advantage, independent adoption, or independent
    cross-language conformance.

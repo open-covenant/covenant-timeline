@@ -138,6 +138,11 @@
   runtime v1 evidence baseline.
 - Version the formal pilot runtime identity to v3 for the expanded MCP module
   inventory while preserving exact validation of the published v2 runtime.
+- Publish a deterministic credential-preflight failure receipt from the merged
+  runtime v3 source, with an annotated tag, normalized archive metadata,
+  checksum, and fresh-download offline verification. The maintainer deliberately
+  omitted the provider credential; the pre-request exit is procedural evidence
+  from the bound adapter control flow, not a property proved by the receipt.
 
 #### Changed
 

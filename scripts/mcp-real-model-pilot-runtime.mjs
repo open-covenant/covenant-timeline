@@ -3,8 +3,7 @@ import { constants as fsConstants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { decodeUtf8, readBoundedExactFile } from "./mcp-agent-pilot-lib.mjs";
 
 export const pilotRepositoryRoot = resolve(
@@ -22,6 +21,10 @@ const limits = {
   packageManifestBytes: 1024 * 1024,
 };
 const profiles = new Set(["formal-openai", "development-unbound-adapter"]);
+const schemas = {
+  legacy: "covenant.timeline.real-model-pilot.runtime.v1",
+  current: "covenant.timeline.real-model-pilot.runtime.v2",
+};
 const fixedDirectories = [
   "packages/prototype/dist",
   "packages/mcp-server/dist",
@@ -59,9 +62,65 @@ const applicationDependencies = [
   "ajv-formats",
   "canonicalize",
   "jsonc-parser",
-  "typescript",
   "zod",
 ];
+const measurementDependencies = ["typescript"];
+const legacyFixedFiles = [
+  "packages/prototype/package.json",
+  "packages/mcp-server/package.json",
+  "schemas/mcp-real-model-pilot.v1.schema.json",
+  "schemas/v0alpha3/common.schema.json",
+  "scripts/formal-attempt-ledger.mjs",
+  "scripts/mcp-agent-pilot-lib.mjs",
+  "scripts/mcp-agent-pilot.mjs",
+  "scripts/mcp-real-model-pilot-bootstrap.mjs",
+  "scripts/mcp-real-model-pilot-lib.mjs",
+  "scripts/mcp-real-model-pilot-runtime.mjs",
+  "scripts/mcp-real-model-pilot-verify-bootstrap.mjs",
+  "scripts/mcp-real-model-pilot-verify.mjs",
+  "scripts/mcp-real-model-pilot.mjs",
+  "scripts/openai-responses-model-eval-adapter.mjs",
+  "scripts/openai-responses-model-eval-schema.mjs",
+  "scripts/strict-json.mjs",
+];
+const currentCompiledFiles = [
+  "packages/mcp-server/dist/cli.js",
+  "packages/mcp-server/dist/constants.js",
+  "packages/mcp-server/dist/errors.js",
+  "packages/mcp-server/dist/index.js",
+  "packages/mcp-server/dist/model-admission.js",
+  "packages/mcp-server/dist/schemas.js",
+  "packages/mcp-server/dist/server.js",
+  "packages/mcp-server/dist/store.js",
+  "packages/mcp-server/dist/types.js",
+  "packages/prototype/dist/archive.js",
+  "packages/prototype/dist/cli.js",
+  "packages/prototype/dist/contract.js",
+  "packages/prototype/dist/document.js",
+  "packages/prototype/dist/identity.js",
+  "packages/prototype/dist/index.js",
+  "packages/prototype/dist/json.js",
+  "packages/prototype/dist/limits.js",
+  "packages/prototype/dist/profiles/github.js",
+  "packages/prototype/dist/profiles/index.js",
+  "packages/prototype/dist/report.js",
+  "packages/prototype/dist/run.js",
+  "packages/prototype/dist/v0alpha2/contract.js",
+  "packages/prototype/dist/v0alpha2/document.js",
+  "packages/prototype/dist/v0alpha2/index.js",
+  "packages/prototype/dist/v0alpha2/migrate.js",
+  "packages/prototype/dist/v0alpha2/report.js",
+  "packages/prototype/dist/v0alpha2/run.js",
+  "packages/prototype/dist/v0alpha2/validation.js",
+  "packages/prototype/dist/v0alpha3/document.js",
+  "packages/prototype/dist/v0alpha3/index.js",
+  "packages/prototype/dist/v0alpha3/kernel.js",
+  "packages/prototype/dist/v0alpha3/model-proposal.js",
+  "packages/prototype/dist/v0alpha3/types.js",
+];
+const legacyRequiredFiles = [...legacyFixedFiles, ...currentCompiledFiles];
+const currentRequiredFiles = [...fixedFiles, ...currentCompiledFiles].sort();
+const parserCache = new Map();
 export async function capturePilotRuntime({
   profile = "formal-openai",
   root = pilotRepositoryRoot,
@@ -92,30 +151,83 @@ export async function capturePilotRuntime({
   if (
     paths.length === 0 ||
     paths.length > limits.fixedFiles ||
-    new Set(paths).size !== paths.length
+    new Set(paths).size !== paths.length ||
+    !equal(paths, currentRequiredFiles)
   ) {
-    throw new Error("real-model pilot runtime file set is invalid");
+    throw new Error(
+      "real-model pilot runtime file inventory changed; define a new runtime schema",
+    );
   }
-  const importedDependencies = await assertRelativeImportClosure(root, paths);
-  const files = await Promise.all(
-    paths.map(async (path) => ({
-      path,
-      ...(await digestFile(
-        join(root, path),
-        limits.fileBytes,
-        `runtime file ${path}`,
-      )),
-    })),
+  const captured = await Promise.all(
+    paths.map((path) => captureRuntimeFile(root, path)),
   );
-  const closure = await resolvedPackageClosure(resolutionRoot, [
+  const files = captured.map(({ path, digest, byteLength }) => ({
+    path,
+    digest,
+    byteLength,
+  }));
+  const sources = new Map(
+    captured
+      .filter(({ path }) => /\.(?:js|mjs)$/u.test(path))
+      .map(({ path, bytes }) => [
+        path,
+        decodeUtf8(bytes, `runtime source ${path}`),
+      ]),
+  );
+  const requestedDependencies = [
     ...new Set([
       ...applicationDependencies,
-      ...importedDependencies,
+      ...measurementDependencies,
       ...dependencies,
     ]),
-  ]);
+  ];
+  const parserRoot = await resolveApplicationPackage(
+    "typescript",
+    pilotRepositoryRoot,
+  );
+  const overrides = new Map([["typescript", parserRoot]]);
+  let closure = await resolvedPackageClosure(
+    resolutionRoot,
+    requestedDependencies,
+    overrides,
+  );
+  const parserPackage = applicationPackage(closure, "typescript");
+  const parser = await loadMeasuredTypeScript(parserRoot, parserPackage);
+  const importedDependencies = assertRelativeImportClosure(
+    root,
+    paths,
+    sources,
+    parser,
+  );
+  const allDependencies = [
+    ...new Set([...requestedDependencies, ...importedDependencies]),
+  ];
+  if (
+    profile === "formal-openai" &&
+    allDependencies.some(
+      (dependency) =>
+        !applicationDependencies.includes(dependency) &&
+        !measurementDependencies.includes(dependency),
+    )
+  ) {
+    throw new Error(
+      "formal runtime imports a package outside its versioned dependency inventory",
+    );
+  }
+  if (allDependencies.length !== requestedDependencies.length) {
+    closure = await resolvedPackageClosure(
+      resolutionRoot,
+      allDependencies,
+      overrides,
+    );
+  }
+  assertPackageUnchanged(
+    parserPackage,
+    await digestPackage(parserRoot),
+    "TypeScript parser",
+  );
   const identity = {
-    schema: "covenant.timeline.real-model-pilot.runtime.v1",
+    schema: schemas.current,
     profile,
     node: {
       version: node.version,
@@ -133,20 +245,86 @@ export async function capturePilotRuntime({
   return { identity, digest: contentDigest(identity) };
 }
 
-async function assertRelativeImportClosure(root, paths) {
-  const included = new Set(paths);
-  const sources = new Map();
-  for (const path of paths) {
-    if (!/\.(?:js|mjs)$/u.test(path)) continue;
-    const bytes = await readBoundedExactFile(
-      join(root, path),
-      limits.fileBytes,
-      `runtime source ${path}`,
-    );
-    sources.set(path, decodeUtf8(bytes, `runtime source ${path}`));
+async function captureRuntimeFile(root, path) {
+  const bytes = await readBoundedExactFile(
+    join(root, path),
+    limits.fileBytes,
+    `runtime file ${path}`,
+    { root, scope: "the runtime root" },
+  );
+  return {
+    path,
+    bytes,
+    digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+    byteLength: bytes.byteLength,
+  };
+}
+
+function applicationPackage(closure, specifier) {
+  const edge = closure.resolutions.find(
+    (resolution) =>
+      resolution.from === "application" && resolution.specifier === specifier,
+  );
+  const item = edge
+    ? closure.packages.find((candidate) => candidate.id === edge.to)
+    : undefined;
+  if (!item) {
+    throw new Error(`runtime package ${specifier} is not in the closure`);
   }
+  return item;
+}
+
+async function loadMeasuredTypeScript(root, measured) {
+  const cached = parserCache.get(root);
+  if (cached) {
+    assertPackageUnchanged(cached.measured, measured, "TypeScript parser");
+    return cached.module;
+  }
+  const manifest = await readPackageManifest(root);
+  if (
+    manifest.name !== "typescript" ||
+    typeof manifest.main !== "string" ||
+    manifest.main.length === 0
+  ) {
+    throw new Error("TypeScript parser package has no stable entry point");
+  }
+  const entry = await realpath(join(root, manifest.main));
+  const contained = relative(root, entry);
+  if (
+    contained === "" ||
+    contained === ".." ||
+    contained.startsWith(`..${sep}`) ||
+    resolve(root, contained) !== entry
+  ) {
+    throw new Error("TypeScript parser entry escapes its measured package");
+  }
+  const loaded = await import(pathToFileURL(entry).href);
+  const module = loaded.default ?? loaded;
+  if (
+    typeof module.createProgram !== "function" ||
+    typeof module.createSourceFile !== "function" ||
+    typeof module.flattenDiagnosticMessageText !== "function"
+  ) {
+    throw new Error("TypeScript parser entry is invalid");
+  }
+  parserCache.set(root, { measured, module });
+  return module;
+}
+
+function assertPackageUnchanged(before, after, label) {
+  if (
+    before.digest !== after.digest ||
+    before.fileCount !== after.fileCount ||
+    before.byteLength !== after.byteLength
+  ) {
+    throw new Error(`${label} changed after it was measured`);
+  }
+}
+
+function assertRelativeImportClosure(root, paths, sources, ts) {
+  const included = new Set(paths);
   const dependencies = new Set();
-  for (const [path, specifiers] of runtimeModuleSpecifiers(sources)) {
+  for (const [path, specifiers] of runtimeModuleSpecifiers(sources, ts)) {
     for (const specifier of specifiers) {
       if (isRelativeSpecifier(specifier)) {
         const target = relative(
@@ -188,7 +366,7 @@ function packageRootForSpecifier(specifier) {
   return root;
 }
 
-function runtimeModuleSpecifiers(sources) {
+function runtimeModuleSpecifiers(sources, ts) {
   const options = {
     allowJs: true,
     checkJs: false,
@@ -237,45 +415,47 @@ function runtimeModuleSpecifiers(sources) {
         `runtime source ${path} is not valid JavaScript: ${detail}`,
       );
     }
-    result.set(path, moduleSpecifiersForSource(sourceFile, checker));
+    result.set(path, moduleSpecifiersForSource(sourceFile, checker, ts));
   }
   return result;
 }
 
-function moduleSpecifiersForSource(sourceFile, checker) {
+function moduleSpecifiersForSource(sourceFile, checker, ts) {
   const specifiers = new Set();
-  assertLoaderImportForms(sourceFile);
-  assertNoDynamicCodeConstruction(sourceFile);
+  assertLoaderImportForms(sourceFile, ts);
+  assertNoDynamicCodeConstruction(sourceFile, ts);
   const createRequireBindings = importedBindings(
     sourceFile,
     checker,
     "node:module",
     "createRequire",
+    ts,
   );
   const pathToFileUrlBindings = importedBindings(
     sourceFile,
     checker,
     "node:url",
     "pathToFileURL",
+    ts,
   );
   const loaderBindings = new Set();
   const loaderDeclarations = new Set();
   const createRequireInitializers = new Set();
 
-  assertImportedBindingUses(sourceFile, createRequireBindings, checker);
-  assertImportedBindingUses(sourceFile, pathToFileUrlBindings, checker);
-  assertNoBuiltinLoaderConstruction(sourceFile);
+  assertImportedBindingUses(sourceFile, createRequireBindings, checker, ts);
+  assertImportedBindingUses(sourceFile, pathToFileUrlBindings, checker, ts);
+  assertNoBuiltinLoaderConstruction(sourceFile, ts);
 
   visit(sourceFile, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
       !node.initializer ||
       !ts.isCallExpression(node.initializer) ||
-      !isImportedCall(node.initializer, createRequireBindings, checker)
+      !isImportedCall(node.initializer, createRequireBindings, checker, ts)
     ) {
       return;
     }
-    if (!ts.isIdentifier(node.name) || !isConstDeclaration(node)) {
+    if (!ts.isIdentifier(node.name) || !isConstDeclaration(node, ts)) {
       throw new Error(
         `runtime source ${sourceFile.fileName} uses an unsupported createRequire binding`,
       );
@@ -289,7 +469,7 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     loaderBindings.add(symbol);
     loaderDeclarations.add(node.name);
     createRequireInitializers.add(node.initializer);
-    if (hasExportModifier(node.parent.parent)) {
+    if (hasExportModifier(node.parent.parent, ts)) {
       throw new Error(
         `runtime source ${sourceFile.fileName} exports a CommonJS loader`,
       );
@@ -301,14 +481,14 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     if (
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
-      !isConstDeclaration(node) ||
+      !isConstDeclaration(node, ts) ||
       !node.initializer ||
       !ts.isCallExpression(node.initializer) ||
-      !isLoaderResolveCall(node.initializer, loaderBindings, checker)
+      !isLoaderResolveCall(node.initializer, loaderBindings, checker, ts)
     ) {
       return;
     }
-    const specifier = soleLiteralArgument(node.initializer);
+    const specifier = soleLiteralArgument(node.initializer, ts);
     if (!specifier || isRelativeSpecifier(specifier)) return;
     const symbol = checker.getSymbolAtLocation(node.name);
     if (symbol) {
@@ -322,7 +502,7 @@ function moduleSpecifiersForSource(sourceFile, checker) {
       ts.isImportDeclaration(node) ||
       (ts.isExportDeclaration(node) && node.moduleSpecifier)
     ) {
-      const specifier = literalText(node.moduleSpecifier);
+      const specifier = literalText(node.moduleSpecifier, ts);
       if (specifier === undefined) {
         throw new Error(
           `runtime source ${sourceFile.fileName} contains a non-literal module declaration`,
@@ -335,7 +515,7 @@ function moduleSpecifiersForSource(sourceFile, checker) {
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword
     ) {
-      const specifier = soleLiteralArgument(node);
+      const specifier = soleLiteralArgument(node, ts);
       if (specifier !== undefined) {
         if (isLoaderModuleSpecifier(specifier)) {
           throw new Error(
@@ -347,12 +527,20 @@ function moduleSpecifiersForSource(sourceFile, checker) {
       }
       if (
         node.arguments.length === 1 &&
-        isResolvedPackageUrl(
+        (isResolvedPackageUrl(
           node.arguments[0],
           pathToFileUrlBindings,
           resolvedPackages,
           checker,
-        )
+          ts,
+        ) ||
+          isMeasuredParserUrl(
+            node,
+            sourceFile,
+            pathToFileUrlBindings,
+            checker,
+            ts,
+          ))
       ) {
         return;
       }
@@ -362,7 +550,7 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     }
     if (
       ts.isCallExpression(node) &&
-      isImportedCall(node, createRequireBindings, checker) &&
+      isImportedCall(node, createRequireBindings, checker, ts) &&
       !createRequireInitializers.has(node)
     ) {
       throw new Error(
@@ -372,7 +560,7 @@ function moduleSpecifiersForSource(sourceFile, checker) {
     if (!ts.isCallExpression(node)) return;
     const loader = checker.getSymbolAtLocation(node.expression);
     if (loaderBindings.has(loader)) {
-      const specifier = soleLiteralArgument(node);
+      const specifier = soleLiteralArgument(node, ts);
       if (specifier === undefined) {
         throw new Error(
           `runtime source ${sourceFile.fileName} contains a computed CommonJS require`,
@@ -414,12 +602,12 @@ function moduleSpecifiersForSource(sourceFile, checker) {
   return specifiers;
 }
 
-function assertLoaderImportForms(sourceFile) {
+function assertLoaderImportForms(sourceFile, ts) {
   for (const statement of sourceFile.statements) {
     if (
       ts.isExportDeclaration(statement) &&
       statement.moduleSpecifier &&
-      isLoaderModuleSpecifier(literalText(statement.moduleSpecifier))
+      isLoaderModuleSpecifier(literalText(statement.moduleSpecifier, ts))
     ) {
       throw new Error(
         `runtime source ${sourceFile.fileName} contains an unsupported node:module re-export`,
@@ -427,7 +615,7 @@ function assertLoaderImportForms(sourceFile) {
     }
     if (
       !ts.isImportDeclaration(statement) ||
-      !isLoaderModuleSpecifier(literalText(statement.moduleSpecifier))
+      !isLoaderModuleSpecifier(literalText(statement.moduleSpecifier, ts))
     ) {
       continue;
     }
@@ -458,7 +646,7 @@ function isLoaderModuleSpecifier(specifier) {
   return specifier === "node:module" || specifier === "module";
 }
 
-function assertNoDynamicCodeConstruction(sourceFile) {
+function assertNoDynamicCodeConstruction(sourceFile, ts) {
   const constructors = new Set([
     "AsyncFunction",
     "AsyncGeneratorFunction",
@@ -470,12 +658,12 @@ function assertNoDynamicCodeConstruction(sourceFile) {
     const named = ts.isIdentifier(node) && constructors.has(node.text);
     const computed =
       ts.isElementAccessExpression(node) &&
-      constructors.has(literalText(node.argumentExpression));
+      constructors.has(literalText(node.argumentExpression, ts));
     const constructorAccess =
       (ts.isPropertyAccessExpression(node) &&
         node.name.text === "constructor") ||
       (ts.isElementAccessExpression(node) &&
-        literalText(node.argumentExpression) === "constructor");
+        literalText(node.argumentExpression, ts) === "constructor");
     if (named || computed || constructorAccess) {
       throw new Error(
         `runtime source ${sourceFile.fileName} uses unsupported dynamic code construction`,
@@ -484,13 +672,13 @@ function assertNoDynamicCodeConstruction(sourceFile) {
   });
 }
 
-function importedBindings(sourceFile, checker, moduleName, importedName) {
+function importedBindings(sourceFile, checker, moduleName, importedName, ts) {
   const direct = new Set();
   const objects = new Set();
   for (const statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement) ||
-      literalText(statement.moduleSpecifier) !== moduleName ||
+      literalText(statement.moduleSpecifier, ts) !== moduleName ||
       !statement.importClause
     ) {
       continue;
@@ -518,7 +706,7 @@ function importedBindings(sourceFile, checker, moduleName, importedName) {
   return { direct, importedName, objects };
 }
 
-function isImportedCall(call, bindings, checker) {
+function isImportedCall(call, bindings, checker, ts) {
   if (ts.isIdentifier(call.expression)) {
     return bindings.direct.has(checker.getSymbolAtLocation(call.expression));
   }
@@ -533,12 +721,12 @@ function isImportedCall(call, bindings, checker) {
   return false;
 }
 
-function assertImportedBindingUses(sourceFile, bindings, checker) {
+function assertImportedBindingUses(sourceFile, bindings, checker, ts) {
   visit(sourceFile, (node) => {
     if (!ts.isIdentifier(node)) return;
     const symbol = checker.getSymbolAtLocation(node);
     if (!bindings.direct.has(symbol) && !bindings.objects.has(symbol)) return;
-    if (isImportBinding(node)) return;
+    if (isImportBinding(node, ts)) return;
 
     const parent = node.parent;
     if (
@@ -567,7 +755,7 @@ function assertImportedBindingUses(sourceFile, bindings, checker) {
   });
 }
 
-function isImportBinding(node) {
+function isImportBinding(node, ts) {
   const parent = node.parent;
   return (
     (ts.isImportClause(parent) && parent.name === node) ||
@@ -576,12 +764,12 @@ function isImportBinding(node) {
   );
 }
 
-function assertNoBuiltinLoaderConstruction(sourceFile) {
+function assertNoBuiltinLoaderConstruction(sourceFile, ts) {
   visit(sourceFile, (node) => {
     const named = ts.isIdentifier(node) && node.text === "getBuiltinModule";
     const computed =
       ts.isElementAccessExpression(node) &&
-      literalText(node.argumentExpression) === "getBuiltinModule";
+      literalText(node.argumentExpression, ts) === "getBuiltinModule";
     if (named || computed) {
       throw new Error(
         `runtime source ${sourceFile.fileName} uses unsupported built-in module loading`,
@@ -590,7 +778,7 @@ function assertNoBuiltinLoaderConstruction(sourceFile) {
   });
 }
 
-function isLoaderResolveCall(call, bindings, checker) {
+function isLoaderResolveCall(call, bindings, checker, ts) {
   return (
     ts.isPropertyAccessExpression(call.expression) &&
     call.expression.name.text === "resolve" &&
@@ -603,12 +791,18 @@ function isResolvedPackageUrl(
   pathToFileUrlBindings,
   resolvedPackages,
   checker,
+  ts,
 ) {
   if (
     !ts.isPropertyAccessExpression(expression) ||
     expression.name.text !== "href" ||
     !ts.isCallExpression(expression.expression) ||
-    !isImportedCall(expression.expression, pathToFileUrlBindings, checker) ||
+    !isImportedCall(
+      expression.expression,
+      pathToFileUrlBindings,
+      checker,
+      ts,
+    ) ||
     expression.expression.arguments.length !== 1
   ) {
     return false;
@@ -620,26 +814,61 @@ function isResolvedPackageUrl(
   );
 }
 
-function soleLiteralArgument(call) {
-  if (call.arguments.length !== 1) return undefined;
-  return literalText(call.arguments[0]);
+function isMeasuredParserUrl(
+  call,
+  sourceFile,
+  pathToFileUrlBindings,
+  checker,
+  ts,
+) {
+  if (sourceFile.fileName !== "scripts/mcp-real-model-pilot-runtime.mjs") {
+    return false;
+  }
+  const [expression] = call.arguments;
+  if (
+    !ts.isPropertyAccessExpression(expression) ||
+    expression.name.text !== "href" ||
+    !ts.isCallExpression(expression.expression) ||
+    !isImportedCall(
+      expression.expression,
+      pathToFileUrlBindings,
+      checker,
+      ts,
+    ) ||
+    expression.expression.arguments.length !== 1 ||
+    !ts.isIdentifier(expression.expression.arguments[0]) ||
+    expression.expression.arguments[0].text !== "entry"
+  ) {
+    return false;
+  }
+  for (let node = call.parent; node; node = node.parent) {
+    if (ts.isFunctionDeclaration(node)) {
+      return node.name?.text === "loadMeasuredTypeScript";
+    }
+  }
+  return false;
 }
 
-function literalText(node) {
+function soleLiteralArgument(call, ts) {
+  if (call.arguments.length !== 1) return undefined;
+  return literalText(call.arguments[0], ts);
+}
+
+function literalText(node, ts) {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
     return node.text;
   }
   return undefined;
 }
 
-function isConstDeclaration(declaration) {
+function isConstDeclaration(declaration, ts) {
   return (
     ts.isVariableDeclarationList(declaration.parent) &&
     (declaration.parent.flags & ts.NodeFlags.Const) !== 0
   );
 }
 
-function hasExportModifier(node) {
+function hasExportModifier(node, ts) {
   return node.modifiers?.some(
     (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
   );
@@ -689,7 +918,7 @@ function validRuntimeIdentity(identity) {
   if (
     !record(identity) ||
     keys(identity) !== "files,node,packages,profile,resolutions,schema" ||
-    identity.schema !== "covenant.timeline.real-model-pilot.runtime.v1" ||
+    !Object.values(schemas).includes(identity.schema) ||
     !profiles.has(identity.profile) ||
     !validNodeIdentity(identity.node) ||
     !Array.isArray(identity.files) ||
@@ -717,6 +946,13 @@ function validRuntimeIdentity(identity) {
       return false;
     }
     filePaths.add(file.path);
+  }
+  if (
+    identity.schema === schemas.current
+      ? !setEqual(filePaths, new Set(currentRequiredFiles))
+      : legacyRequiredFiles.some((path) => !filePaths.has(path))
+  ) {
+    return false;
   }
   const packages = new Map();
   let packageFiles = 0;
@@ -769,6 +1005,20 @@ function validRuntimeIdentity(identity) {
       applicationRoots.add(edge.specifier);
       pending.push(edge.to);
     }
+  }
+  const requiredDependencies = [
+    ...applicationDependencies,
+    ...(identity.schema === schemas.current ? measurementDependencies : []),
+  ];
+  for (const dependency of requiredDependencies) {
+    if (!applicationRoots.has(dependency)) return false;
+  }
+  if (
+    identity.schema === schemas.current &&
+    identity.profile === "formal-openai" &&
+    applicationRoots.size !== requiredDependencies.length
+  ) {
+    return false;
   }
   while (pending.length > 0) {
     const id = pending.shift();
@@ -835,6 +1085,12 @@ function keys(value) {
   return Object.keys(value).sort().join(",");
 }
 
+function setEqual(left, right) {
+  return (
+    left.size === right.size && [...left].every((value) => right.has(value))
+  );
+}
+
 async function comparePilotRuntime(expected, options) {
   validatePilotRuntime(expected);
   const dependencies = expected.identity.resolutions
@@ -888,13 +1144,19 @@ function packageKey(item) {
   return `${item.name}@${item.version}`;
 }
 
-async function resolvedPackageClosure(root, dependencies) {
+async function resolvedPackageClosure(
+  root,
+  dependencies,
+  overrides = new Map(),
+) {
   const roots = new Map();
   const pending = [];
   const unresolvedEdges = [];
 
   for (const specifier of [...dependencies].sort()) {
-    const target = await resolveApplicationPackage(specifier, root);
+    const target =
+      overrides.get(specifier) ??
+      (await resolveApplicationPackage(specifier, root));
     unresolvedEdges.push({ from: "application", specifier, target });
     await enqueue(target);
   }
@@ -989,14 +1251,11 @@ async function resolvedPackageClosure(root, dependencies) {
 }
 
 async function resolveApplicationPackage(specifier, root) {
-  const importers = new Set([
+  const importers = [
     join(root, "package.json"),
     join(root, "packages/mcp-server/package.json"),
     join(root, "packages/prototype/package.json"),
-    join(pilotRepositoryRoot, "package.json"),
-    join(pilotRepositoryRoot, "packages/mcp-server/package.json"),
-    join(pilotRepositoryRoot, "packages/prototype/package.json"),
-  ]);
+  ];
   let failure;
   for (const importer of importers) {
     try {
@@ -1005,11 +1264,7 @@ async function resolveApplicationPackage(specifier, root) {
       failure = error;
     }
   }
-  try {
-    return await resolvePackage(specifier, import.meta.url);
-  } catch {
-    throw failure;
-  }
+  throw failure;
 }
 
 async function resolvePackageFrom(specifier, importer) {

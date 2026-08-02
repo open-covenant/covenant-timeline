@@ -121,12 +121,14 @@ node scripts/mcp-real-model-pilot-bootstrap.mjs resume \
 
 The formal path rejects a dirty checkout, a model configuration bound to a
 different source revision, and any adapter other than the source-bound OpenAI
-Responses adapter. A built-in-only bootstrap records the Node executable,
-compiled core and MCP server JavaScript, pilot and verifier scripts, resolved
-workspace targets, and the manifest-derived transitive runtime package closure
-before importing the pilot. It rechecks that identity after loading the phase
-implementation. Start, resume, export, and retained operator verification
-require those bytes and resolution edges to remain unchanged.
+Responses adapter. The bootstrap and runtime measurer are trusted code. Before
+importing the pilot, they record the Node executable, compiled core and MCP
+server JavaScript, pilot and verifier scripts, resolved workspace targets, and
+the transitive runtime package closure. The external parser package is hashed
+before its exact entry point is loaded, then hashed again after the source scan.
+The complete identity is checked again after the phase implementation loads.
+Start, resume, export, and retained operator verification require those bytes
+and resolution edges to remain unchanged.
 
 Each phase writes and synchronizes an exclusive attempt-ledger entry before it
 invokes the model adapter. A provider response that later fails validation is a
@@ -148,11 +150,16 @@ the driver also installs an immutable phase decision bound to the captured
 proposal. Recovery first observes MCP state through the read-only model role.
 If admission already won, it completes post-admission verification without
 another provider or admission call. If the base state remains unchanged,
-recovery appends a deterministic fence event with an exact run-digest compare
-and swap. The fence and model admission cannot both win: a successful fence
-closes the phase as interrupted, while a successful candidate admission is
-recovered from its exact state. Unexpected valid state is quarantined as
-divergent.
+recovery reconstructs the proposal-ready receipt by parsing the retained raw
+response and running the same read-only preview. It does not call the provider
+again. Only after that receipt is durable does recovery append a deterministic
+fence event with an exact run-digest compare and swap. The fence and model
+admission cannot both win: a successful fence closes the phase as interrupted,
+while a successful candidate admission is recovered from its exact state.
+Unexpected valid state is quarantined as divergent. A reconstruction or
+preview error remains resumable because another live process may still own the
+original admission; it is not converted into terminal evidence without a
+durable phase decision.
 
 If a synchronized result, failure bundle, or raw adapter capture already exists,
 `resume` validates those bytes and completes the missing ledger entry without
@@ -299,10 +306,15 @@ every receipt, and reports `runtimeMatched: false` when its local runtime
 differs.
 
 The package closure follows declared dependencies and hashes their package
-trees. It does not discover undeclared dynamic loads or native and operating
-system resources outside those trees. The built-in-only bootstrap is the
-measurement trust anchor; its own bytes are included in the fixed runtime
-manifest.
+trees. Runtime identity v2 freezes the formal file and application-dependency
+inventory. Its TypeScript parser package is measured before it is loaded and
+measured again after the source scan; the captured source bytes, rather than a
+second filesystem read, are scanned. Runtime v1 remains valid for the published
+attempt-1 artifact under its 49-file, eight-root baseline. The source scanner is
+an integrity guard for the supported loading forms, not an adversarial module
+loader or sandbox. The closure does not claim to discover arbitrary dynamic
+code, native resources, or operating-system resources outside the recorded
+package trees.
 
 `content-manifest.json` binds every primary artifact file by byte length and
 SHA-256 digest. It excludes itself and the derived `verification.json` report to

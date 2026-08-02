@@ -135,6 +135,13 @@ retains bounded raw output before parsing, binds a closed rejection code and
 the observed MCP state into the terminal ledger entry, and exports a redacted
 portable receipt. It cannot retroactively repair the missing v1 output.
 
+The current candidate also emits runtime identity v2. That identity requires
+the complete versioned file inventory and every formal application dependency,
+scans the same source buffers it hashes, resolves application packages only
+from the selected runtime root, and measures the external parser before and
+after use. The verifier retains a separate runtime v1 baseline for the
+published attempt-1 artifact instead of silently changing v1 semantics.
+
 ### Independent adoption cannot be self-issued
 
 A maintainer-operated run can demonstrate the product path but cannot count as

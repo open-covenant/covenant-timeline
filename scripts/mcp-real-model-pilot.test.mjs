@@ -9,13 +9,14 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -71,6 +72,16 @@ const fixture = join(root, "examples/mcp-real-model-pilot");
 const sourceRevision = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], {
   encoding: "utf8",
 }).stdout.trim();
+const runtimeDependencies = [
+  "@covenant-org/timeline",
+  "@modelcontextprotocol/client",
+  "@modelcontextprotocol/server",
+  "ajv",
+  "ajv-formats",
+  "canonicalize",
+  "jsonc-parser",
+  "zod",
+];
 
 test("bounded exact reads reject hostile and replaced inputs", async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-exact-read-"));
@@ -3942,6 +3953,10 @@ test("runtime binding rejects malformed rehashed identities", async () => {
   const binding = await capturePilotRuntime({
     profile: "development-unbound-adapter",
   });
+  assert.equal(
+    binding.identity.schema,
+    "covenant.timeline.real-model-pilot.runtime.v2",
+  );
   assert.equal(validatePilotRuntime(binding), binding);
   const cases = [
     (identity) => {
@@ -3952,6 +3967,11 @@ test("runtime binding rejects malformed rehashed identities", async () => {
     },
     (identity) => {
       identity.files[0].path = "../runtime-escape.mjs";
+    },
+    (identity) => {
+      identity.files = identity.files.filter(
+        ({ path }) => path !== "scripts/mcp-real-model-pilot.mjs",
+      );
     },
     (identity) => {
       identity.packages[0].id = "npm:forged@1.0.0#deadbeef";
@@ -3980,6 +4000,40 @@ test("runtime binding rejects malformed rehashed identities", async () => {
       /runtime binding is invalid/u,
     );
   }
+});
+
+test("runtime binding validates the published v1 dependency baseline", async () => {
+  const timeline = await loadTimeline();
+  const current = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  const legacy = structuredClone(current);
+  legacy.identity.schema = "covenant.timeline.real-model-pilot.runtime.v1";
+  legacy.identity.resolutions = legacy.identity.resolutions.filter(
+    ({ from, specifier }) =>
+      from !== "application" || specifier !== "typescript",
+  );
+  const reachable = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of legacy.identity.resolutions) {
+      if (edge.from !== "application" && !reachable.has(edge.from)) continue;
+      if (reachable.has(edge.to)) continue;
+      reachable.add(edge.to);
+      changed = true;
+    }
+  }
+  legacy.identity.packages = legacy.identity.packages.filter(({ id }) =>
+    reachable.has(id),
+  );
+  legacy.identity.resolutions = legacy.identity.resolutions.filter(
+    ({ from, to }) =>
+      reachable.has(to) && (from === "application" || reachable.has(from)),
+  );
+  legacy.digest = timeline.contentDigest(legacy.identity);
+
+  assert.equal(validatePilotRuntime(legacy), legacy);
 });
 
 test("runtime binding rejects a missing required application dependency", async () => {
@@ -4012,10 +4066,13 @@ test("runtime binding rejects a missing required application dependency", async 
   );
   invalid.digest = timeline.contentDigest(invalid.identity);
 
-  assert.equal(validatePilotRuntime(invalid), invalid);
+  assert.throws(
+    () => validatePilotRuntime(invalid),
+    /runtime binding is invalid/u,
+  );
   await assert.rejects(
     assertPilotRuntime(invalid),
-    /runtime identity changed/u,
+    /runtime binding is invalid/u,
   );
 });
 
@@ -4209,6 +4266,7 @@ test("runtime binding follows the resolved workspace package target", async (t) 
     });
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
     await symlink(first, link, "dir");
+    await linkRuntimeDependencies(resolutionRoot);
     const binding = await capturePilotRuntime({
       profile: "development-unbound-adapter",
       root: runtimeRoot,
@@ -4228,6 +4286,29 @@ test("runtime binding follows the resolved workspace package target", async (t) 
   }
 });
 
+test("runtime binding does not borrow a missing dependency from the checkout", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-isolated-"));
+  try {
+    const runtimeRoot = join(temporary, "runtime");
+    const resolutionRoot = join(temporary, "resolution");
+    await copyRuntimeRoot(runtimeRoot);
+    await mkdir(resolutionRoot, { recursive: true });
+    await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    await linkRuntimeDependencies(resolutionRoot, { skip: ["zod"] });
+
+    await assert.rejects(
+      capturePilotRuntime({
+        profile: "development-unbound-adapter",
+        root: runtimeRoot,
+        resolutionRoot,
+      }),
+      /(?:Cannot find module 'zod'|could not resolve runtime package zod)/u,
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("runtime binding detects changed source-derived dependency bytes", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-pilot-dependency-"));
   try {
@@ -4241,6 +4322,7 @@ test("runtime binding detects changed source-derived dependency bytes", async ()
       "export const value = 1;\n",
     );
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    await linkRuntimeDependencies(resolutionRoot);
     const sourcePath = join(runtimeRoot, "scripts/strict-json.mjs");
     await writeFile(
       sourcePath,
@@ -4304,6 +4386,7 @@ test("bootstrap rejects a runtime mutation during dynamic loading", async () => 
       "export const value = 1;\n",
     );
     await writeFile(join(resolutionRoot, "package.json"), '{"private":true}\n');
+    await linkRuntimeDependencies(resolutionRoot);
     const runtimeOptions = {
       profile: "development-unbound-adapter",
       root: runtimeRoot,
@@ -4366,6 +4449,42 @@ async function copyRuntimeRoot(destination) {
       { recursive: true },
     ),
   ]);
+}
+
+async function linkRuntimeDependencies(destination, { skip = [] } = {}) {
+  const skipped = new Set(skip);
+  for (const dependency of runtimeDependencies) {
+    if (skipped.has(dependency)) continue;
+    const target = join(destination, "node_modules", dependency);
+    try {
+      await lstat(target);
+      continue;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await mkdir(dirname(target), { recursive: true });
+    const source = await resolveRuntimeDependency(dependency);
+    await symlink(
+      source,
+      target,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  }
+}
+
+async function resolveRuntimeDependency(dependency) {
+  for (const base of [
+    root,
+    join(root, "packages/mcp-server"),
+    join(root, "packages/prototype"),
+  ]) {
+    try {
+      return await realpath(join(base, "node_modules", dependency));
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error(`test runtime dependency is not installed: ${dependency}`);
 }
 
 async function fakePackage(rootPath, relativePath, name, source) {

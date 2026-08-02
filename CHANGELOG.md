@@ -125,6 +125,10 @@
 - Fence pre-admission recovery with an MCP-state compare-and-swap so recovery
   and candidate admission cannot both win. Failed attempts cannot produce a
   successful artifact or invoke the provider again.
+- Add a strict runtime v2 identity with a versioned file and dependency
+  inventory, same-buffer source scanning, isolated package resolution, and a
+  parser measured before and after use. Preserve validation of the published
+  runtime v1 evidence baseline.
 
 #### Changed
 

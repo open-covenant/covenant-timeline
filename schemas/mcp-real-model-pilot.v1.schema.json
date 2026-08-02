@@ -238,7 +238,10 @@
       ],
       "properties": {
         "schema": {
-          "const": "covenant.timeline.real-model-pilot.runtime.v1"
+          "enum": [
+            "covenant.timeline.real-model-pilot.runtime.v1",
+            "covenant.timeline.real-model-pilot.runtime.v2"
+          ]
         },
         "profile": {
           "enum": ["formal-openai", "development-unbound-adapter"]

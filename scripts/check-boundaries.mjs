@@ -30,7 +30,8 @@ const textExtensions = new Set([
   ".yml",
 ]);
 const canonicalMailmap =
-  "Mizuki <kamiyo-ai@users.noreply.github.com> <covenant@users.noreply.github.com>\n";
+  "mizuki0x <197570892+mizuki0x@users.noreply.github.com> <covenant@users.noreply.github.com>\n" +
+  "mizuki0x <197570892+mizuki0x@users.noreply.github.com> <kamiyo-ai@users.noreply.github.com>\n";
 
 const failures = [];
 const generatedSegments = new Set([

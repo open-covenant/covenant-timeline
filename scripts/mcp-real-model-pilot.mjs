@@ -2898,7 +2898,7 @@ async function pauseForTest(options, point) {
     flag: "wx",
     mode: 0o600,
   });
-  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+  for (let attempt = 0; attempt < 12_000; attempt += 1) {
     if (await pathExists(`${marker}.release`)) return;
     await new Promise((resolveWait) => setTimeout(resolveWait, 10));
   }

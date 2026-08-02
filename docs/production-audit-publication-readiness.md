@@ -3,7 +3,8 @@
 Date: 2026-08-02
 
 Implementation revision:
-`3d42ad29914329c691718b868fea1d30d1dc4049`. The audit text is finalized in a
+`3d42ad29914329c691718b868fea1d30d1dc4049`. Cross-platform test correction:
+`ab759060a075e33fb681cd0cd249c17c86da3741`. The audit text is finalized in a
 following documentation-only commit.
 
 ## Verification

@@ -92,6 +92,8 @@
 
 #### Security
 
+- Keep the maintainer mailmap on the neutral Covenant alias and fail repository
+  verification if that canonical mapping changes.
 - Stop strict JSON diagnostics at the first parse issue to prevent adversarial
   error amplification.
 - Distinguish local-model output-token exhaustion from other provider failures

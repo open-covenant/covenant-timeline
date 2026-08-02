@@ -537,7 +537,7 @@ function mcpRecord() {
       storeEnvelope: "covenant.timeline.mcp-run.v0alpha2",
       runtimePins: {
         "@covenant-org/timeline": "0.0.0-alpha.3",
-        "@modelcontextprotocol/server": "2.0.0-beta.5",
+        "@modelcontextprotocol/server": "2.0.0",
         zod: "4.4.3",
       },
     },

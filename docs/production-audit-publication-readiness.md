@@ -3,7 +3,7 @@
 Date: 2026-08-02
 
 Implementation revision:
-`1ecda75228b20243041a858ec7270764391103cf`. The audit text is finalized in a
+`118a678a5e076a3d836ecd541c1a3505d2ff8b70`. The audit text is finalized in a
 following documentation-only commit.
 
 ## Verification

@@ -120,7 +120,14 @@ export function assertAttemptLedgerBinding(ledger, expected) {
     ledger.timeline.canonicalJson(actual) !==
     ledger.timeline.canonicalJson(expected)
   ) {
-    throw new Error("attempt ledger binding does not match this execution");
+    const changed = Object.keys(expected).filter(
+      (key) =>
+        ledger.timeline.canonicalJson(actual[key]) !==
+        ledger.timeline.canonicalJson(expected[key]),
+    );
+    throw new Error(
+      `attempt ledger binding does not match this execution: ${changed.join(", ")}`,
+    );
   }
 }
 

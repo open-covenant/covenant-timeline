@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertMcpArchiveEntries,
   parseMcpTarListings,
@@ -116,6 +116,7 @@ try {
       "LICENSE",
       "README.md",
       "dist/cli.js",
+      "dist/demo.js",
       "dist/index.js",
       "dist/index.js.map",
       "dist/index.d.ts",
@@ -169,6 +170,67 @@ try {
     );
   }
 
+  const demoText = run(executable, ["--demo"], {
+    cwd: installDirectory,
+  }).trim();
+  const repeatedDemoText = run(executable, ["--demo"], {
+    cwd: installDirectory,
+  }).trim();
+  if (demoText !== repeatedDemoText) {
+    throw new Error("installed MCP demo is not deterministic");
+  }
+  const demo = JSON.parse(demoText);
+  const timeline = await import(
+    pathToFileURL(
+      join(
+        installDirectory,
+        "node_modules",
+        "@covenant-org",
+        "timeline",
+        "dist",
+        "index.js",
+      ),
+    ).href
+  );
+  const mcp = await import(
+    pathToFileURL(join(installed, "dist/index.js")).href
+  );
+  const demoEnvelope = mcp.parseMcpRunEnvelopeV0Alpha2(demo.timeline);
+  if (
+    demo.schema !== "covenant.timeline.mcp-demo.v1" ||
+    demo.scenario !== "late-security-review-correction" ||
+    demo.reloadedFromDisk !== true ||
+    demoEnvelope.revision !== 5 ||
+    demoEnvelope.admissions.length !== 5 ||
+    demoEnvelope.admissions.some(
+      ({ policyDigest }) =>
+        policyDigest !== timeline.contentDigest(demo.admissionPolicy),
+    )
+  ) {
+    throw new Error("installed MCP correction demo changed");
+  }
+  for (const [cut, expected] of [
+    [demo.before, -100],
+    [demo.after, 100],
+  ]) {
+    const query = timeline.parseQueryV0Alpha3(cut.query, demoEnvelope.run);
+    const result = cut.conclusion?.result;
+    if (
+      cut.verified !== true ||
+      result?.type !== "difference.bounds" ||
+      result.status !== "bounded" ||
+      result.minimum !== expected ||
+      result.maximum !== expected ||
+      !timeline.verifyTemporalConclusionV0Alpha3(
+        demoEnvelope.run,
+        query,
+        cut.conclusion,
+      )
+    ) {
+      throw new Error("installed MCP demo receipt did not verify");
+    }
+  }
+
   const fixture = await loadCorrectionFixture();
   await writeFile(
     join(installDirectory, "fixture.json"),
@@ -207,7 +269,7 @@ try {
   }
 
   console.log(
-    `MCP package check passed (${mcpArchive}, workspace Timeline ${coreVersion}, installed stdio restart, correction replay, read-only proposal preview, admitted batch audit, and proof verification)`,
+    `MCP package check passed (${mcpArchive}, workspace Timeline ${coreVersion}, deterministic installed demo, stdio restart, correction replay, read-only proposal preview, admitted batch audit, and proof verification)`,
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

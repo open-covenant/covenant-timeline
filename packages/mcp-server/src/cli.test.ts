@@ -9,6 +9,14 @@ describe("timeline-mcp CLI", () => {
       message: "--data-dir must be absolute",
     },
     {
+      args: ["--demo", "--data-dir", "/tmp/timeline"],
+      message: "--demo cannot be combined with --data-dir or --role",
+    },
+    {
+      args: ["--demo", "--role", "model"],
+      message: "--demo cannot be combined with --data-dir or --role",
+    },
+    {
       args: ["--data-dir", "/tmp/timeline", "--role", "combined"],
       message: "--role must be model or operator",
     },

@@ -24,6 +24,23 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
+## Run the correction demo
+
+Create, persist, reload, and verify a complete admitted Timeline before
+connecting an agent:
+
+```sh
+node packages/mcp-server/dist/cli.js --demo > timeline-demo.json
+```
+
+The resulting canonical JSON includes the fixed evidence records and their
+digests, the exact admission policy, the portable run, its complete admission
+audit, and two proof-carrying conclusions. The first cut places security review
+100 seconds before deployment. A later admitted correction supersedes that
+record and places the review 100 seconds after deployment. Both conclusions
+remain independently verifiable. Repeating the command produces byte-identical
+output.
+
 Use absolute paths in your MCP client configuration. This starts the read-only
 model role:
 

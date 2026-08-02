@@ -105,6 +105,9 @@
 
 #### Added
 
+- Add a one-command installed MCP correction demo that persists and reloads a
+  fully admitted run, emits the exact evidence and policy bindings, preserves
+  the pre-correction and corrected cuts, and verifies both proof receipts.
 - Add the local stdio server with persistent local storage, clean-process
   restart recovery, correction replay, read-only model proposal previews,
   explicit operator admission, and verified temporal conclusions. The package
@@ -133,6 +136,8 @@
   inventory, same-buffer source scanning, isolated package resolution, and a
   parser measured before and after use. Preserve validation of the published
   runtime v1 evidence baseline.
+- Version the formal pilot runtime identity to v3 for the expanded MCP module
+  inventory while preserving exact validation of the published v2 runtime.
 
 #### Changed
 

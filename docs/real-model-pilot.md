@@ -348,15 +348,15 @@ every receipt, and reports `runtimeMatched: false` when its local runtime
 differs.
 
 The package closure follows declared dependencies and hashes their package
-trees. Runtime identity v2 freezes the formal file and application-dependency
-inventory. Its TypeScript parser package is measured before it is loaded and
-measured again after the source scan; the captured source bytes, rather than a
-second filesystem read, are scanned. Runtime v1 remains valid for the published
-attempt-1 artifact under its 49-file, eight-root baseline. The source scanner is
-an integrity guard for the supported loading forms, not an adversarial module
-loader or sandbox. The closure does not claim to discover arbitrary dynamic
-code, native resources, or operating-system resources outside the recorded
-package trees.
+trees. Runtime identity v3 freezes the current formal file and
+application-dependency inventory. Its TypeScript parser package is measured
+before it is loaded and measured again after the source scan; the captured
+source bytes, rather than a second filesystem read, are scanned. Runtime v2
+remains valid for published attempt 2, and runtime v1 remains valid for attempt
+1 under its 49-file, eight-root baseline. The source scanner is an integrity
+guard for the supported loading forms, not an adversarial module loader or
+sandbox. The closure does not claim to discover arbitrary dynamic code, native
+resources, or operating-system resources outside the recorded package trees.
 
 `content-manifest.json` binds every primary artifact file by byte length and
 SHA-256 digest. It excludes itself and the derived `verification.json` report to

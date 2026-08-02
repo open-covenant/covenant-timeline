@@ -22,8 +22,9 @@ const limits = {
 };
 const profiles = new Set(["formal-openai", "development-unbound-adapter"]);
 const schemas = {
-  legacy: "covenant.timeline.real-model-pilot.runtime.v1",
-  current: "covenant.timeline.real-model-pilot.runtime.v2",
+  v1: "covenant.timeline.real-model-pilot.runtime.v1",
+  v2: "covenant.timeline.real-model-pilot.runtime.v2",
+  current: "covenant.timeline.real-model-pilot.runtime.v3",
 };
 const fixedDirectories = [
   "packages/prototype/dist",
@@ -83,7 +84,7 @@ const legacyFixedFiles = [
   "scripts/openai-responses-model-eval-schema.mjs",
   "scripts/strict-json.mjs",
 ];
-const currentCompiledFiles = [
+const v2CompiledFiles = [
   "packages/mcp-server/dist/cli.js",
   "packages/mcp-server/dist/constants.js",
   "packages/mcp-server/dist/errors.js",
@@ -118,7 +119,12 @@ const currentCompiledFiles = [
   "packages/prototype/dist/v0alpha3/model-proposal.js",
   "packages/prototype/dist/v0alpha3/types.js",
 ];
-const legacyRequiredFiles = [...legacyFixedFiles, ...currentCompiledFiles];
+const currentCompiledFiles = [
+  ...v2CompiledFiles,
+  "packages/mcp-server/dist/demo.js",
+];
+const v1RequiredFiles = [...legacyFixedFiles, ...v2CompiledFiles];
+const v2RequiredFiles = [...fixedFiles, ...v2CompiledFiles].sort();
 const currentRequiredFiles = [...fixedFiles, ...currentCompiledFiles].sort();
 const parserCache = new Map();
 export async function capturePilotRuntime({
@@ -947,10 +953,16 @@ function validRuntimeIdentity(identity) {
     }
     filePaths.add(file.path);
   }
-  if (
+  const exactFiles =
     identity.schema === schemas.current
-      ? !setEqual(filePaths, new Set(currentRequiredFiles))
-      : legacyRequiredFiles.some((path) => !filePaths.has(path))
+      ? currentRequiredFiles
+      : identity.schema === schemas.v2
+        ? v2RequiredFiles
+        : null;
+  if (
+    exactFiles
+      ? !setEqual(filePaths, new Set(exactFiles))
+      : v1RequiredFiles.some((path) => !filePaths.has(path))
   ) {
     return false;
   }
@@ -1008,13 +1020,13 @@ function validRuntimeIdentity(identity) {
   }
   const requiredDependencies = [
     ...applicationDependencies,
-    ...(identity.schema === schemas.current ? measurementDependencies : []),
+    ...(identity.schema === schemas.v1 ? [] : measurementDependencies),
   ];
   for (const dependency of requiredDependencies) {
     if (!applicationRoots.has(dependency)) return false;
   }
   if (
-    identity.schema === schemas.current &&
+    identity.schema !== schemas.v1 &&
     identity.profile === "formal-openai" &&
     applicationRoots.size !== requiredDependencies.length
   ) {

@@ -57,14 +57,25 @@ It retained two provider reservations, four explicit admission records, the
 historical and corrected conclusions, and three receipts that reproduced in a
 credential-free verifier. The run stages public historical evidence and is
 maintainer-operated; model execution is maintainer-attested. It is not
-independent adoption, a live delayed-evidence observation, or evidence of
-repeatability.
+independent adoption or a live delayed-evidence observation.
 
 A later maintainer replication terminated during correction after the provider
 invocation and was not retried. Its v1 terminal entry did not retain the rejected
 adapter output, so the failure reason is not independently auditable from that
 state. Future failure retention cannot retroactively repair the missing
-evidence. Unreleased source implements and tests bounded adapter-output
+evidence.
+
+[Published successful attempt 2](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02)
+then repeated the complete source-built path from the merged source revision.
+Its fresh-download verifier confirmed that the retained artifact contains two
+provider reservations, four admissions, the preserved 513,698 ms historical
+result, the corrected 360,698 ms result, and three receipts with an exact
+runtime match. Two executions by the same maintainer against the same staged
+scenario demonstrate composition twice; they do not establish independent
+operation, model accuracy, live delayed-evidence handling, or general
+reliability.
+
+The source implementation tests bounded adapter-output
 retention, a closed failure classification, recovery-state binding, and a
 redacted portable receipt. No public formal failure has exercised that contract.
 

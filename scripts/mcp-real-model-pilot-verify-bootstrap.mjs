@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   assertPilotRuntime,
   capturePilotRuntime,
 } from "./mcp-real-model-pilot-runtime.mjs";
-import { decodeUtf8, readBoundedExactFile } from "./mcp-agent-pilot-lib.mjs";
+import {
+  decodeUtf8,
+  isMain,
+  readBoundedExactFile,
+} from "./mcp-agent-pilot-lib.mjs";
 
 async function main() {
   const { directory, allowDirty, requireRuntimeMatch } = parseArguments(
@@ -54,10 +57,7 @@ function parseArguments(argv) {
   };
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
       `mcp-real-model-pilot-verify: ${error instanceof Error ? error.message : "verification failed"}\n`,

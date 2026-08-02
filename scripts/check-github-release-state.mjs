@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 
 export function validateGitHubReleaseState(
   value,
@@ -57,10 +56,7 @@ export function validateGitHubReleaseState(
   return errors;
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))
-) {
+if (isMain(import.meta.url)) {
   const [, , statePath, tag, prereleaseText, mode, ...expectedAssets] =
     process.argv;
   const usage =

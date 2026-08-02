@@ -11,8 +11,9 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -223,9 +224,7 @@ export async function main(
   }
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  pathToFileURL(process.argv[1]).href === import.meta.url;
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   process.exitCode = await main();

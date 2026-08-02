@@ -2,13 +2,13 @@
 
 import { opendir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { validateAttemptLedgerDocument } from "./formal-attempt-ledger.mjs";
 import {
   decodeUtf8,
   exactRecord,
+  isMain,
   loadTimeline,
   canonicalArtifactRoot,
   assertArtifactDirectory,
@@ -1566,9 +1566,7 @@ function withoutRuntimeMatch({ runtimeMatched: _runtimeMatched, ...value }) {
   return value;
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   const directory = process.argv[2];

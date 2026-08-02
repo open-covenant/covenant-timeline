@@ -14,6 +14,7 @@ import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { validateReleaseEvidenceFile } from "./check-release-evidence.mjs";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import {
   assertCoreArchiveEntries,
   coreArchiveFilesForVersion,
@@ -1795,10 +1796,7 @@ export function runCommand(executable, args, options = {}) {
   return result.stdout;
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   const manifestArgument = process.argv
     .slice(2)
     .find((value) => value !== "--");

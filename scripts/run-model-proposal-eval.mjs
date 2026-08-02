@@ -25,6 +25,7 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TextDecoder, promisify } from "node:util";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import {
@@ -1314,10 +1315,7 @@ async function main() {
   );
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

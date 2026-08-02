@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { exportFailedAttempt } from "./mcp-real-model-pilot-failure-artifact.mjs";
 
 export async function runFailureExport(state, output) {
@@ -13,9 +12,7 @@ export async function runFailureExport(state, output) {
   return exportFailedAttempt({ state, output });
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   try {

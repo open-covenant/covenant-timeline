@@ -3,8 +3,9 @@
 import { createHash } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { byteDigest, canonicalJson } from "../packages/prototype/dist/index.js";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import { parseStrictJson } from "./strict-json.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -138,10 +139,7 @@ async function main(args) {
   }
 }
 
-if (
-  process.argv[1] !== undefined &&
-  pathToFileURL(process.argv[1]).href === import.meta.url
-) {
+if (isMain(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

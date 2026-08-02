@@ -17,12 +17,12 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   assertInputDirectory,
   canonicalInputRoot,
   decodeUtf8,
   exactRecord,
+  isMain,
   loadMcpClient,
   loadTimeline,
   MCP_AGENT_PILOT_LIMITS,
@@ -687,9 +687,7 @@ function parseArguments(argv) {
   return { inputDirectory, outputDirectory };
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   runMcpAgentPilot(parseArguments(process.argv.slice(2)))

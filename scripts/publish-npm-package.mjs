@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 
 const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
 
@@ -151,9 +151,7 @@ function command(name) {
   return process.platform === "win32" ? `${name}.cmd` : name;
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   const [archive, packageName, version, distTag, ...unexpected] =

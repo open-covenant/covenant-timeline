@@ -22,6 +22,7 @@ import {
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { isMain } from "./mcp-agent-pilot-lib.mjs";
 import {
   canonicalJson,
   contentDigest,
@@ -1166,10 +1167,7 @@ async function main() {
   if (!options.output) process.stdout.write(`${canonicalJson(gate)}\n`);
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

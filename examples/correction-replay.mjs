@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { isMain } from "../scripts/mcp-agent-pilot-lib.mjs";
 import {
   canonicalJson,
   contentDigest,
@@ -85,9 +86,7 @@ export async function evaluateCorrectionReplay() {
   };
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  pathToFileURL(process.argv[1]).href === import.meta.url;
+const isEntrypoint = isMain(import.meta.url);
 
 if (isEntrypoint) {
   process.stdout.write(`${canonicalJson(await evaluateCorrectionReplay())}\n`);

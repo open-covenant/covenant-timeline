@@ -63,7 +63,7 @@ test("root entrypoints use the canonical main-module guard", async () => {
     if (file.endsWith(".test.mjs")) continue;
     const source = await readFile(file, "utf8");
     if (source.includes("process.argv[1]"))
-      rawGuards.push(relative(root, file));
+      rawGuards.push(relative(root, file).replaceAll("\\", "/"));
     if (source.includes("isMain(import.meta.url)")) guarded.push(file);
   }
 

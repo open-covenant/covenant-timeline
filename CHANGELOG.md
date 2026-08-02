@@ -143,6 +143,10 @@
 - Record separately that a later maintainer replication terminated during
   correction. Its v1 terminal entry did not retain the rejected adapter output,
   so it is not a successful artifact or evidence of repeatability.
+- Retain successful attempt 2 from the hardened merged source with two provider
+  reservations, four admission records, three verified receipts, an exact
+  runtime match after a fresh GitHub download, and the intervening failure still
+  reported separately.
 - Describe MCP input semantics in tool discovery, cap each catalog page at
   eight runs, bind cursors to a catalog generation, cap reference-store
   configuration at its advertised ceilings, and make the source checkout a

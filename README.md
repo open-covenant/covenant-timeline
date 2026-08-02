@@ -26,7 +26,7 @@ the default model-facing surface cannot write to the record.
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an agent to the source-built MCP server](#connect-an-agent-to-the-source-built-mcp-server) ·
 [Run the local restart-and-correction pilot](./examples/mcp-agent-pilot) ·
-[Inspect the public real-model pilot](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01) ·
+[Inspect the public real-model pilot evidence](./docs/real-model-pilot.md) ·
 [Use the library](#use-the-temporal-api) ·
 [Integrate a model](./docs/model-interface.md) ·
 [Review model results](./docs/model-evaluation.md) ·
@@ -211,17 +211,22 @@ evidence, portable run, queries, conclusions, environment, and an exact call
 transcript containing the admission records and audit digests, then verifies
 the artifact in a separate offline process.
 
-[A retained real-model pilot](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
-applied that path to staged public release evidence. Across separate host and
-MCP processes, it preserved the original 513,698 ms result at its historical
-record cut, admitted a correction, and verified the corrected 360,698 ms result
-without provider credentials.
+Two retained real-model pilots applied that path to staged public release
+evidence. Each crossed separate host and MCP processes, preserved the original
+513,698 ms result at its historical record cut, admitted a correction, and
+verified the corrected 360,698 ms result without provider credentials. The
+[first artifact](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-1-2026-08-01)
+and
+[second artifact](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02)
+are published with checksums; the second was also re-downloaded and verified
+against its exact recorded runtime.
 
-This is one maintainer-operated staged replay, not evidence of independent
-adoption, live delayed-evidence handling, model accuracy, or repeatability. A
-later replication failed during correction. The
-[pilot record](./docs/real-model-pilot.md) documents both attempts, their
-verification limits, and the current failed-attempt retention contract.
+These are two completed maintainer-operated historical staged replays with one
+failed replication between them. They do not establish independent adoption,
+live delayed-evidence handling, evidence authenticity, model accuracy, or a
+general reliability rate. The [pilot record](./docs/real-model-pilot.md)
+documents all three executions, their verification limits, and the current
+failed-attempt retention contract.
 
 ## Use the temporal API
 

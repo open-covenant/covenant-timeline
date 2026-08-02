@@ -67,20 +67,50 @@ This attempt demonstrates the composed source-built workflow. It remains a
 maintainer-attested historical staged replay, not independent adoption or a live
 observation of evidence arriving over time.
 
-## Subsequent replication
+## Intervening failed replication
 
-A later maintainer replication completed its initial phase but terminated
+An intervening maintainer replication completed its initial phase but terminated
 during correction after the provider invocation. It was not retried and was not
 exported as a successful artifact. The v1 terminal failure entry retained the
 invocation and request binding, but not the rejected adapter output or a
 content-bound rejection record. The retained state therefore cannot establish
 from its own bytes why the correction failed.
 
-This later failure does not invalidate published successful attempt 1. It does
-mean that the published artifact demonstrates one completed workflow, not
-repeatability or reliable model proposal generation. The current v2
-failure-retention contract cannot retroactively repair the missing evidence in
-that earlier state.
+This failure does not invalidate either successful artifact. It does show that
+completed executions cannot be presented as a reliability estimate, and the
+current v2 failure-retention contract cannot retroactively repair the missing
+evidence in that earlier state.
+
+## Published successful attempt 2
+
+Published successful attempt 2 completed on 2026-08-02 after the recovery and
+failure-retention hardening merged to `main`. It is retained in the
+[GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02).
+
+| Field                        | Result                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| Source                       | `a4879897fcaa754ab0df928db5c98f2df25e7cb3`                                  |
+| Recorded model configuration | GPT-5.6 Sol through the OpenAI Responses API; execution maintainer-attested |
+| Reservations and bundles     | 2 provider reservations, 2 synchronized phase-result bundles                |
+| Admission                    | 4 content-bound admission records                                           |
+| Results                      | 513,698 ms historical; 360,698 ms corrected                                 |
+| Retained verification        | `verified: true`; 3 receipts; exact operator runtime matched                |
+| Archive SHA-256              | `129bc141e18e500c62415ee41a4fa7448d29d6128c416f98603108ff4487afb6`          |
+
+The release tag resolves to the recorded source revision. GitHub reports the
+same SHA-256 digest as the sidecar. A fresh download, checksum validation, and
+extraction verified successfully without provider credentials and with
+`runtimeMatched: true` under the exact source-built runtime.
+
+The prepublication and post-download scans found no exact API-key bytes,
+credential patterns, personal identifiers, absolute home paths, or symbolic
+links in the artifact.
+
+Together, attempts 1 and 2 demonstrate two completed executions of the
+maintainer-operated historical staged workflow. The intervening failure remains
+part of the public record. These observations do not establish an operational
+success rate, independent adoption, live evidence arrival, or reliable model
+proposal generation.
 
 ## Formal run
 

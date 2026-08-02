@@ -3,14 +3,13 @@
 Date: 2026-08-02
 
 Implementation revision:
-`3d42ad29914329c691718b868fea1d30d1dc4049`. Cross-platform test correction:
-`ab759060a075e33fb681cd0cd249c17c86da3741`. The audit text is finalized in a
+`36b70989fb47494479e701efd5c2d8e30cfb3933`. The audit text is finalized in a
 following documentation-only commit.
 
 ## Verification
 
 `pnpm verify` passed from a clean checkout at the implementation revision. The
-run included 90 formal workflow and recovery tests, the model-interface and
+run included 93 formal workflow and recovery tests, the model-interface and
 model-proposal suites, schema and conformance checks, release and release
 evidence validation, lint, type checking, package coverage, SBOM generation,
 and installed-artifact checks for both the core and MCP packages. Both the full
@@ -20,6 +19,11 @@ secret, private-identifier, and absolute-user-path scan.
 Root-script entrypoint tests additionally exercised a directory alias and
 confirmed that all 27 executable ESM guards resolve canonical filesystem
 identity instead of silently treating an aliased invocation as an import.
+The concurrent recovery regression passed in the four-way formal-pilot suite
+and in eight consecutive stress repetitions. Exact file reads accept only the
+publisher cleanup transition from two hard links to one when the inode, size,
+contents, modification time, mode, owner, and group remain unchanged; file
+replacement, content mutation, and permission mutation still fail closed.
 
 ## Decision
 

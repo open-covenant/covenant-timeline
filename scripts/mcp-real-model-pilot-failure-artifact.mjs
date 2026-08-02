@@ -703,8 +703,10 @@ function validateCaptureRuntime(capture, timeline) {
     throw new Error("redacted adapter runtime is invalid");
   }
   if (
-    runtime.identity.schema !==
-      "covenant.timeline.real-model-pilot.runtime.v2" ||
+    ![
+      "covenant.timeline.real-model-pilot.runtime.v2",
+      "covenant.timeline.real-model-pilot.runtime.v3",
+    ].includes(runtime.identity.schema) ||
     !runtimeContainsRequiredFiles(runtime.identity)
   ) {
     throw new Error("redacted adapter runtime is incomplete");

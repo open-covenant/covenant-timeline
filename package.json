@@ -41,6 +41,7 @@
     "model-proposal:v2:gate": "pnpm build && node scripts/evaluate-model-proposal-boundary-v2.mjs",
     "model-proposal:v2:materialize": "pnpm build && node scripts/materialize-model-proposal-boundary-v2.mjs",
     "model-proposal:v2:run": "pnpm build && node scripts/run-model-proposal-boundary-v2.mjs",
+    "mcp:demo": "pnpm build && node packages/mcp-server/dist/cli.js --demo",
     "mcp:pack:check": "node scripts/check-mcp-package.mjs",
     "mcp:pilot": "pnpm build && node scripts/mcp-agent-pilot.mjs",
     "mcp:pilot:verify": "pnpm build && node scripts/mcp-agent-pilot-verify.mjs",

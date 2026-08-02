@@ -240,7 +240,8 @@
         "schema": {
           "enum": [
             "covenant.timeline.real-model-pilot.runtime.v1",
-            "covenant.timeline.real-model-pilot.runtime.v2"
+            "covenant.timeline.real-model-pilot.runtime.v2",
+            "covenant.timeline.real-model-pilot.runtime.v3"
           ]
         },
         "profile": {

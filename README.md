@@ -156,6 +156,18 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
+Before connecting an agent, produce a complete correction-and-replay artifact:
+
+```sh
+pnpm mcp:demo > timeline-demo.json
+```
+
+The output contains the evidence digests, exact admission policy, portable run,
+complete admission audit, and verified conclusions from before and after the
+late correction. The command writes the run to disk and reads it through a new
+store instance before reasoning. Repeating it produces identical canonical
+JSON.
+
 Add the model role to an MCP client using absolute paths:
 
 ```json

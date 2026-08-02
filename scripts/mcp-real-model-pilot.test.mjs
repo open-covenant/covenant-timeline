@@ -4012,7 +4012,7 @@ test("runtime binding rejects malformed rehashed identities", async () => {
   });
   assert.equal(
     binding.identity.schema,
-    "covenant.timeline.real-model-pilot.runtime.v2",
+    "covenant.timeline.real-model-pilot.runtime.v3",
   );
   assert.equal(validatePilotRuntime(binding), binding);
   const cases = [
@@ -4057,6 +4057,21 @@ test("runtime binding rejects malformed rehashed identities", async () => {
       /runtime binding is invalid/u,
     );
   }
+});
+
+test("runtime binding validates the published v2 file inventory", async () => {
+  const timeline = await loadTimeline();
+  const current = await capturePilotRuntime({
+    profile: "development-unbound-adapter",
+  });
+  const v2 = structuredClone(current);
+  v2.identity.schema = "covenant.timeline.real-model-pilot.runtime.v2";
+  v2.identity.files = v2.identity.files.filter(
+    ({ path }) => path !== "packages/mcp-server/dist/demo.js",
+  );
+  v2.digest = timeline.contentDigest(v2.identity);
+
+  assert.equal(validatePilotRuntime(v2), v2);
 });
 
 test("runtime binding validates the published v1 dependency baseline", async () => {

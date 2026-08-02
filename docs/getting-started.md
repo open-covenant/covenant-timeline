@@ -20,6 +20,17 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
+Generate a deterministic admitted correction-and-replay artifact before
+connecting a client:
+
+```sh
+pnpm mcp:demo > timeline-demo.json
+```
+
+The artifact contains the embedded evidence and admission policy, the portable
+run and admission audit reloaded from disk, and verifier-checked conclusions
+from before and after the correction.
+
 Configure the client with absolute paths:
 
 ```json

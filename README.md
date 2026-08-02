@@ -159,7 +159,7 @@ pnpm build
 Before connecting an agent, produce a complete correction-and-replay artifact:
 
 ```sh
-pnpm mcp:demo > timeline-demo.json
+pnpm --silent mcp:demo > timeline-demo.json
 ```
 
 The output contains the evidence digests, exact admission policy, portable run,

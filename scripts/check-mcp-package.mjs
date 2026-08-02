@@ -179,6 +179,14 @@ try {
   if (demoText !== repeatedDemoText) {
     throw new Error("installed MCP demo is not deterministic");
   }
+  const workspaceDemoText = run(command("pnpm"), ["--silent", "mcp:demo"], {
+    cwd: root,
+  }).trim();
+  if (workspaceDemoText !== demoText) {
+    throw new Error(
+      "workspace MCP demo did not emit only the installed canonical artifact",
+    );
+  }
   const demo = JSON.parse(demoText);
   const timeline = await import(
     pathToFileURL(

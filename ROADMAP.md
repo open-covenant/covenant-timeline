@@ -113,17 +113,23 @@ provide semantic memory search, civil-time normalization, or remote hosting.
 is retained publicly. It crossed separate host and MCP processes, admitted an
 initial proposal and a staged correction under an exact policy digest,
 preserved the historical result, and verified three receipts without provider
-credentials. This closes the one-artifact composition gate. It does not count
-as independent operation, live delayed-evidence observation, or evidence of
-repeatability.
+credentials.
 
 A later maintainer replication terminated during correction after the provider
 invocation and was not retried. Its v1 terminal record did not retain the
-rejected adapter output. Unreleased source implements and tests bounded raw
+rejected adapter output. The source implementation tests bounded raw
 adapter-stream retention, closed failure classifications, phase-decision
 binding, compare-and-swap recovery fencing, and redacted portable receipts. No
 public formal failure has exercised that contract, and no later contract can
 retroactively repair the earlier state.
+
+[Published successful attempt 2](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02)
+repeated the complete source-built path from the merged revision and verified
+again from a fresh download with an exact runtime match. The project now retains
+two completed examples of the composed workflow. Because they use the same
+maintainer and staged scenario, with an intervening failed replication, they do
+not establish independent operation, live delayed-evidence handling, model
+accuracy, or general reliability.
 
 Registry publication remains open for the alpha.1 MCP release candidate. It
 does not block source pilots, model evaluation, or independent implementation

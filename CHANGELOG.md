@@ -143,6 +143,13 @@
 - Record separately that a later maintainer replication terminated during
   correction. Its v1 terminal entry did not retain the rejected adapter output,
   so it is not a successful artifact or evidence of repeatability.
+- Retain published successful attempt 2 from the merged source revision, with
+  the same historical and corrected results, three credential-free verified
+  receipts, and an exact runtime match. Replace its initial archive after local
+  owner metadata was found in the tar headers, preserving the same 25 file
+  payloads under normalized metadata and a stable top-level directory.
+- Resolve root-script entrypoint identity through canonical filesystem paths so
+  symlinked and aliased invocations cannot silently exit without running.
 - Describe MCP input semantics in tool discovery, cap each catalog page at
   eight runs, bind cursors to a catalog generation, cap reference-store
   configuration at its advertised ceilings, and make the source checkout a

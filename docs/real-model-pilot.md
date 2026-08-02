@@ -67,20 +67,62 @@ This attempt demonstrates the composed source-built workflow. It remains a
 maintainer-attested historical staged replay, not independent adoption or a live
 observation of evidence arriving over time.
 
-## Subsequent replication
+## Intervening failed replication
 
-A later maintainer replication completed its initial phase but terminated
+An intervening maintainer replication completed its initial phase but terminated
 during correction after the provider invocation. It was not retried and was not
 exported as a successful artifact. The v1 terminal failure entry retained the
 invocation and request binding, but not the rejected adapter output or a
 content-bound rejection record. The retained state therefore cannot establish
 from its own bytes why the correction failed.
 
-This later failure does not invalidate published successful attempt 1. It does
-mean that the published artifact demonstrates one completed workflow, not
-repeatability or reliable model proposal generation. The current v2
-failure-retention contract cannot retroactively repair the missing evidence in
-that earlier state.
+This failure does not invalidate published successful attempt 1. Before attempt
+2, the public evidence demonstrated one completed workflow, not repeatability or
+reliable model proposal generation. The current v2 failure-retention contract
+cannot retroactively repair the missing evidence in that earlier state.
+
+## Published successful attempt 2
+
+Published successful attempt 2 completed on 2026-08-02 and is retained in the
+[GitHub prerelease](https://github.com/open-covenant/covenant-timeline/releases/tag/real-model-pilot-attempt-2-2026-08-02).
+
+| Field                        | Result                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| Source                       | `a4879897fcaa754ab0df928db5c98f2df25e7cb3`                                    |
+| Recorded model configuration | GPT-5.6 Sol through the OpenAI Responses API; execution maintainer-attested   |
+| Model configuration digest   | `sha256:b598dc7078558efded514cbea3dd7eaaa6f583a4145d8a5cfe850285ee7b6f65`     |
+| Reservations and bundles     | 2 provider reservations, 2 synchronized phase-result bundles                  |
+| Admission                    | 4 content-bound admission records                                             |
+| Results                      | 513,698 ms historical; 360,698 ms corrected                                   |
+| Retained verification        | `verified: true`; 3 receipts; `runtimeMatched: true`                          |
+| Runtime identity             | v2; `sha256:9438bd64a0dda445dc09026fe631f3715d8959dded22ea8806d90e7ce50f0297` |
+| Archive SHA-256              | `a138a38662a551d6190371ed67577fb91382e19cf935d6cc7173308843b84231`            |
+
+The successful artifact and attempt ledger retain their v1 schemas; the bound
+operator runtime uses runtime identity v2. The archive matches its SHA-256
+sidecar and GitHub asset digest. Its owner, group, and modification-time
+metadata are normalized. A fresh download, checksum verification, and
+extraction verified successfully without provider credentials from the
+recorded source revision, including an exact runtime match. The published 25
+files also passed exact API-key, credential-pattern, personal-identifier, and
+absolute-home-path scans.
+
+The archive was initially published with SHA-256
+`129bc141e18e500c62415ee41a4fa7448d29d6128c416f98603108ff4487afb6`.
+It was replaced after its tar headers were found to contain local owner and
+group names. All 25 extracted file payloads remained byte-identical under a
+stable top-level directory; the replacement changed only the archive container
+and normalized metadata.
+
+The attempt-2 release uses a lightweight tag and a mutable prerelease surface.
+Its evidence claim is pinned to the full source commit and current archive
+digest; it is not a signed or immutable-release claim.
+
+Attempts 1 and 2 demonstrate the composed source-built workflow twice. Both
+were run by the same maintainer against the same staged historical scenario,
+and an intervening replication failed during correction. This is not evidence
+of independent operation, live delayed-evidence handling, model accuracy, or
+general reliability.
 
 ## Formal run
 

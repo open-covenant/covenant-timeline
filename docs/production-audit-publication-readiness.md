@@ -2,8 +2,20 @@
 
 Date: 2026-08-02
 
-Audit revision: unreleased candidate based on `origin/main`; final source
-revision and verification result are recorded when the candidate is frozen.
+Implementation revision:
+`1ecda75228b20243041a858ec7270764391103cf`. The audit text is finalized in a
+following documentation-only commit.
+
+## Verification
+
+`pnpm verify` passed from a clean checkout at the implementation revision. The
+run included 90 formal workflow and recovery tests, the model-interface and
+model-proposal suites, schema and conformance checks, release and release
+evidence validation, lint, type checking, package coverage, SBOM generation,
+and installed-artifact checks for both the core and MCP packages. Both the full
+and production-only pnpm audits reported no known vulnerabilities at the high
+severity threshold. The tracked and untracked source tree also passed the
+secret, private-identifier, and absolute-user-path scan.
 
 ## Decision
 

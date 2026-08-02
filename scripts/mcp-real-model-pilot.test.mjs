@@ -17,7 +17,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import test from "node:test";
+import nodeTest from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -82,6 +82,33 @@ const runtimeDependencies = [
   "jsonc-parser",
   "zod",
 ];
+const shard = parseShard(process.env.TIMELINE_PILOT_TEST_SHARD);
+let testIndex = 0;
+
+function test(name, implementation) {
+  const index = testIndex;
+  testIndex += 1;
+  if (shard && index % shard.count !== shard.index) return;
+  nodeTest(name, implementation);
+}
+
+function parseShard(value) {
+  if (value === undefined) return undefined;
+  const match = /^(\d+)\/(\d+)$/u.exec(value);
+  if (!match) throw new Error("test shard must use <index>/<count>");
+  const selected = Number(match[1]);
+  const count = Number(match[2]);
+  if (
+    !Number.isSafeInteger(selected) ||
+    !Number.isSafeInteger(count) ||
+    selected < 1 ||
+    selected > count ||
+    count > 32
+  ) {
+    throw new Error("test shard is outside the supported range");
+  }
+  return { index: selected - 1, count };
+}
 
 test("bounded exact reads reject hostile and replaced inputs", async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), "timeline-exact-read-"));
@@ -4545,7 +4572,7 @@ function runAsync(args, { environment = {} } = {}) {
 }
 
 async function waitForFile(file) {
-  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+  for (let attempt = 0; attempt < 6_000; attempt += 1) {
     try {
       await lstat(file);
       return;

@@ -4501,7 +4501,7 @@ async function fakePackage(rootPath, relativePath, name, source) {
 }
 
 function run(args, { failurePoint, environment = {} } = {}) {
-  return spawnSync(process.execPath, [driver, ...args], {
+  const result = spawnSync(process.execPath, [driver, ...args], {
     cwd: root,
     encoding: "utf8",
     env: {
@@ -4512,6 +4512,8 @@ function run(args, { failurePoint, environment = {} } = {}) {
     },
     timeout: 120_000,
   });
+  if (result.error) throw result.error;
+  return result;
 }
 
 function runAsync(args, { environment = {} } = {}) {

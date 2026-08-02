@@ -14,14 +14,10 @@ from each one, and returns proof receipts that another process can check.
 npm install --save-exact @covenant-org/timeline@0.0.0-alpha.2
 ```
 
-The published `@covenant-org/timeline@0.0.0-alpha.2` package includes the Draft
-v0alpha3 temporal kernel. The `@covenant-org/timeline@0.0.0-alpha.3` core
-candidate adds the proposal compiler, and
-`@covenant-org/timeline-mcp@0.0.0-alpha.1` is currently available from source.
-
-In the MCP integration, records enter durable state only after a host admission
-decision. A model may inspect admitted state and preview a proposed change, but
-the default model-facing surface cannot write to the record.
+The optional local MCP integration is currently built from source. Records
+enter its durable state only after a host admission decision. A model may
+inspect admitted state and preview a proposed change, but the default
+model-facing surface cannot write to the record.
 
 [Run the correction demo](#see-a-correction-survive-replay) ·
 [Connect an agent to the source-built MCP server](#connect-an-agent-to-the-source-built-mcp-server) ·

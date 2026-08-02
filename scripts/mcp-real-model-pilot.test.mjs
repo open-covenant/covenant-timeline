@@ -4839,8 +4839,10 @@ async function assertFailedPhaseEvidence({ state, phase, stage, code }) {
     timeline.contentDigest(capture),
   );
   assert.equal(terminal.failureBundleDigest, timeline.contentDigest(failure));
-  assert.equal((await lstat(capturePath)).mode & 0o777, 0o600);
-  assert.equal((await lstat(failurePath)).mode & 0o777, 0o600);
+  if (process.platform !== "win32") {
+    assert.equal((await lstat(capturePath)).mode & 0o777, 0o600);
+    assert.equal((await lstat(failurePath)).mode & 0o777, 0o600);
+  }
   await assert.rejects(lstat(join(state, `${phase}-result.json`)), /ENOENT/u);
   return { capture, failure, terminal };
 }

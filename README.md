@@ -235,6 +235,15 @@ composed path twice. They do not establish independent adoption, live
 delayed-evidence handling, evidence authenticity, model accuracy, or general
 reliability.
 
+A separate
+[public failure-receipt exercise](https://github.com/open-covenant/covenant-timeline/releases/tag/failure-receipt-exercise-v2-2026-08-02)
+was operated by the maintainer with the source-bound adapter credential
+deliberately absent. The bound control flow exits before its provider-request
+path, and the exported v2 receipt verified from a fresh download. The receipt
+demonstrates failure retention and portable verification; credential absence
+and network inactivity remain procedural evidence, not properties proved by
+the receipt.
+
 ## Use the temporal API
 
 Timeline requires Node.js 22 or 24. The published

@@ -75,9 +75,13 @@ scenario demonstrate composition twice; they do not establish independent
 operation, model accuracy, live delayed-evidence handling, or general
 reliability.
 
-The source implementation tests bounded adapter-output
-retention, a closed failure classification, recovery-state binding, and a
-redacted portable receipt. No public formal failure has exercised that contract.
+The source implementation tests bounded adapter-output retention, a closed
+failure classification, recovery-state binding, and a redacted portable
+receipt. A public
+[credential-preflight exercise](https://github.com/open-covenant/covenant-timeline/releases/tag/failure-receipt-exercise-v2-2026-08-02)
+now exercises that v2 path. Its receipt verifies the retained failure. The
+maintainer-observed credential absence and pre-request exit follow the bound
+adapter control flow; they are not independently proved by the receipt.
 
 ## Product boundary
 
